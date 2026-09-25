@@ -2,15 +2,46 @@
 
 ## Trạng thái hiện tại
 
-- Cập nhật: 2026-09-25 10:19 (Asia/Ho_Chi_Minh).
-- Mục tiêu: Push bản rule pack và web localhost lên Git trước khi làm bước tiếp theo.
-- Trạng thái: Hoàn tất push tính năng; chấm logic tự động vẫn còn lại.
-- Kết quả: Commit tính năng `0e42266` đã push lên `origin/main`; `apk-audit serve` mở `http://127.0.0.1:8765`, lưu upload và report trong `out/web`.
-- Kiểm tra: 18/18 unittest đạt; rule pack hợp lệ với 10 luật; `git diff --cached --check` đạt trước commit.
-- Giới hạn: Engine AI/static semantic chưa nối; 10 luật logic vẫn UNKNOWN với engine none. Web chỉ xử lý một file mỗi lần, danh sách job trong bộ nhớ phiên server. Chưa thử APK thương mại.
-- Bước tiếp theo: Nối bộ chấm logic có evidence; sau đó cải thiện web theo nhu cầu sử dụng thực tế.
+- Cập nhật: 2026-09-25 10:46 (Asia/Ho_Chi_Minh).
+- Mục tiêu: Push các thay đổi UI và tiến độ audit lên Git trước bước tiếp theo.
+- Trạng thái: Hoàn tất; commit tính năng `7d9a5f3` đã push lên `origin/main`.
+- Kết quả: Đã đưa lên Git các ô tài liệu tùy chọn, font Poppins, cảnh báo rời trang và hiển thị 5 bước audit. Server localhost đang chạy tại 127.0.0.1:8765.
+- Kiểm tra: 22/22 unittest đạt trong phiên push; GitHub nhận commit `7d9a5f3`; node --check và staged diff --check đạt.
+- Giới hạn: Cảnh báo là hộp thoại chuẩn của trình duyệt, không tùy biến được nội dung; job chỉ ở bộ nhớ server nên khởi động lại server sẽ mất trạng thái. Engine chấm logic chưa nối; chưa thử APK thương mại.
+- Bước tiếp theo: Nối bộ chấm logic có evidence và kiểm trên APK thực tế.
 
 ## Lịch sử phiên
+
+### 2026-09-25 10:46 — Push UI và tiến độ audit (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Đưa các thay đổi web của hai phiên gần nhất lên Git trước bước tiếp theo.
+- Trạng thái: Hoàn tất sau khi commit nhật ký phiên này và push `origin/main`.
+- Đã làm: Xác nhận remote main không có commit mới; chạy test; chuẩn hóa khoảng trắng trong giấy phép font; commit mã và tài liệu `7d9a5f3`, push thành công.
+- File thay đổi: README.md, SESSION_LOG.md, apk_audit/pipeline.py, apk_audit/web.py, apk_audit/web_assets/{index.html,app.css,app.js,fonts/*}, tests/{test_integration.py,test_web.py}.
+- Kiểm tra và kết quả: 22/22 unittest đạt; `node --check` và `git diff --cached --check` đạt; GitHub nhận `7d9a5f3`. Kiểm tra trạng thái Git cuối phiên sau push nhật ký.
+- Việc còn lại / trở ngại: Không có cho yêu cầu push. Engine none vẫn trả UNKNOWN cho 10 luật logic.
+- Bước tiếp theo: Chờ yêu cầu triển khai bộ chấm logic có evidence.
+
+### 2026-09-25 10:39 — Cảnh báo rời trang và trạng thái audit (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Hiện xác nhận khi người dùng rời tab đang audit và cho biết pipeline đang ở bước nào.
+- Trạng thái: Hoàn tất trong phạm vi yêu cầu; chưa commit/push.
+- Đã làm: Thêm callback tiến độ cho `pipeline.run`; job API trả `stage`; web tô sáng 5 bước và cập nhật mô tả; dùng `beforeunload` để yêu cầu xác nhận; lưu job ID trong sessionStorage và lấy lại kết quả sau Reload; cập nhật README.
+- File thay đổi: README.md, SESSION_LOG.md, apk_audit/pipeline.py, apk_audit/web.py, apk_audit/web_assets/{index.html,app.css,app.js}, tests/{test_integration.py,test_web.py}.
+- Kiểm tra và kết quả: 22/22 unittest đạt; Chrome/CDP xác nhận dialog beforeunload và khôi phục báo cáo; HTTP smoke với APK mẫu hoàn tất; node --check và git diff --check đạt. Server localhost đang chạy ở 127.0.0.1:8765.
+- Việc còn lại / trở ngại: Job list nằm trong bộ nhớ server; engine none vẫn cho 10 UNKNOWN. Chưa thử APK thực tế của đối tác.
+- Bước tiếp theo: Tích hợp bộ chấm logic live với evidence.
+
+### 2026-09-25 10:32 — UI chọn file trước khi kiểm tra (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Tách bước chọn APK khỏi chạy kiểm tra, thêm ô ADS SCRIPTS/working file và dùng font Poppins.
+- Trạng thái: Hoàn tất trong phạm vi UI/input; chưa commit/push.
+- Đã làm: Thêm nút Bắt đầu kiểm tra; chọn/drag APK chỉ lưu trạng thái; hai ô tài liệu CSV/JSON chỉ gửi khi chọn đủ cặp; API nhận tài liệu và truyền vào `apk_audit.run`; nhúng Poppins và OFL cho chế độ offline; cập nhật README.
+- File thay đổi: README.md, SESSION_LOG.md, apk_audit/web.py, apk_audit/web_assets/{index.html,app.css,app.js,fonts/*}, tests/test_web.py.
+- Quyết định quan trọng: Thiếu một tài liệu thì bỏ qua cả hai; giới hạn 5 MiB/tài liệu; chỉ nạp JSON object hoặc CSV key,value theo parser hiện có. Engine none vẫn trả UNKNOWN dù có tài liệu.
+- Kiểm tra và kết quả: 20/20 unittest đạt; Chrome screenshot và CDP xác nhận chọn APK chưa có API request, bấm nút mới chạy; HTTP smoke với cặp tài liệu thành công; wheel chứa 4 font và giấy phép; git diff --check đạt.
+- Việc còn lại / trở ngại: Chưa có engine chấm logic nên tài liệu được truyền vào pipeline nhưng chưa tạo verdict tự động; chưa thử file ADS SCRIPTS/working thực tế.
+- Bước tiếp theo: Thử với tài liệu thật và nối bộ chấm logic ở phiên tiếp theo.
 
 ### 2026-09-25 10:19 — Push rule pack và web localhost (Asia/Ho_Chi_Minh)
 
