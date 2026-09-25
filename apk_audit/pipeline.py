@@ -59,7 +59,8 @@ def load_document(path):
 
 def run(target, *, rules=None, out=None, engine="none", only=None, cache_dir=None,
         refresh=False, refresh_rule=None, max_tool_calls=400, trace=False,
-        format="both", no_cache=False, ads_scripts=None, checklist=None, provider=None):
+        format="both", no_cache=False, ads_scripts=None, checklist=None, provider=None,
+        progress=None):
     started = time.monotonic()
     if type(max_tool_calls) is not int or max_tool_calls < 0:
         raise AuditError("max_tool_calls phải >= 0")
@@ -73,7 +74,11 @@ def run(target, *, rules=None, out=None, engine="none", only=None, cache_dir=Non
         raise AuditError(f"Không có rule: {refresh_rule}", 5)
     adapter = get_engine(engine) if isinstance(engine, str) else engine
     documents = {k:v for k,v in {"ads_scripts": load_document(ads_scripts), "checklist":load_document(checklist)}.items() if v is not None}
+    if progress:
+        progress("unpack")
     workspace, source = prepare(target, cache_dir, no_cache, provider)
+    if progress:
+        progress("facts")
     facts = build_facts(workspace, source, pack.extract).to_dict()
     identity = facts["workspace"]["content_sha256"][:12]
     output = Path(out or Path("out") / identity).resolve()
@@ -86,6 +91,8 @@ def run(target, *, rules=None, out=None, engine="none", only=None, cache_dir=Non
     cache = VerdictCache(cache_path(cache_dir))
     findings = []
     used = 0
+    if progress:
+        progress("rules")
     for rule in selected:
         if rule.mode == "static":
             try:
@@ -120,5 +127,7 @@ def run(target, *, rules=None, out=None, engine="none", only=None, cache_dir=Non
     summary = {status.lower():sum(f["status"] == status for f in findings) for status in ("PASS","FAIL","UNKNOWN","SKIPPED")}
     summary.update(total=len(findings), static=sum(f["mode"]=="static" for f in findings), agent=sum(f["mode"]=="agent" for f in findings), from_cache=sum(f["from_cache"] for f in findings), tool_calls=used, duration_seconds=time.monotonic()-started)
     report = {"schema_version":2,"package":facts["source"].get("package"),"version_name":facts["source"].get("version_name"),"apk_sha256":facts["source"].get("sha256"), "rulepack":{"name":pack.name,"version":pack.version,"fingerprint":pack.fingerprint},"engine":adapter.name,"docs_provided":{k:k in documents for k in ("ads_scripts","checklist")},"summary":summary,"findings":findings,"observations":[],"warnings":facts["warnings"]+([] if selected else ["no_rules"]),"output":str(output),"tool_versions":facts["tool_versions"]}
+    if progress:
+        progress("report")
     write_report(report, output, format)
     return report

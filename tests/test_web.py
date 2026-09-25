@@ -25,13 +25,17 @@ class WebTests(unittest.TestCase):
         self.addCleanup(self.server.shutdown)
         self.base = f"http://127.0.0.1:{self.server.server_port}"
 
-    def request(self, path, body=None, filename=None):
+    def request(self, path, body=None, filename=None, extra_headers=None):
         headers = {"X-Filename": filename} if filename else {}
+        headers.update(extra_headers or {})
         request = Request(self.base + path, data=body, headers=headers)
         return urlopen(request, timeout=5)
 
     def test_page_and_upload_report_flow(self):
-        self.assertIn(b"Th\xe1\xba\xa3 \xe1\xbb\xa9ng d\xe1\xbb\xa5ng", self.request("/").read())
+        page = self.request("/").read()
+        self.assertIn(b'id="start-button"', page)
+        self.assertIn(b'id="ads-input"', page)
+        self.assertIn(b'id="working-input"', page)
 
         def fake_run(archive, *, out, **kwargs):
             self.assertEqual(Path(archive).read_bytes(), b"fake archive")
@@ -64,6 +68,82 @@ class WebTests(unittest.TestCase):
         with self.assertRaises(HTTPError) as empty:
             self.request("/api/jobs", b"", "app.apk")
         self.assertEqual(empty.exception.code, 413)
+
+    def test_running_job_exposes_current_stage(self):
+        reached_rules = threading.Event()
+        finish = threading.Event()
+
+        def fake_run(archive, *, out, progress, **kwargs):
+            for stage in ("unpack", "facts", "rules"):
+                progress(stage)
+            reached_rules.set()
+            self.assertTrue(finish.wait(5))
+            progress("report")
+            output = Path(out)
+            output.mkdir(parents=True)
+            report = {"output": str(output), "package": "demo.app", "warnings": [],
+                      "summary": {"pass": 0, "fail": 0, "unknown": 0, "skipped": 0}, "findings": []}
+            (output / "report.json").write_text(json.dumps(report))
+            return report
+
+        with patch("apk_audit.web.run", side_effect=fake_run):
+            job_id = json.load(self.request("/api/jobs", b"fake archive", "demo.apk"))["id"]
+            self.assertTrue(reached_rules.wait(5))
+            job = json.load(self.request(f"/api/jobs/{job_id}"))
+            self.assertEqual((job["state"], job["stage"]), ("running", "rules"))
+            finish.set()
+            for _ in range(50):
+                job = json.load(self.request(f"/api/jobs/{job_id}"))
+                if job["state"] == "done":
+                    break
+                time.sleep(0.02)
+            self.assertEqual((job["state"], job["stage"]), ("done", "done"))
+
+    def test_both_documents_reach_pipeline(self):
+        ads = json.load(self.request(
+            "/api/documents", b'{"inter_splash":"app-id"}', "ADS%20SCRIPTS.json",
+            {"X-Document-Kind": "ads_scripts"},
+        ))["id"]
+        working = json.load(self.request(
+            "/api/documents", b"key,value\npackage,demo.app\n", "working.csv",
+            {"X-Document-Kind": "checklist"},
+        ))["id"]
+
+        def fake_run(archive, *, ads_scripts, checklist, out, **kwargs):
+            self.assertEqual(json.loads(Path(ads_scripts).read_text())["inter_splash"], "app-id")
+            self.assertIn("package,demo.app", Path(checklist).read_text())
+            output = Path(out)
+            output.mkdir(parents=True)
+            report = {"output": str(output), "package": "demo.app", "warnings": [],
+                      "summary": {"pass": 0, "fail": 0, "unknown": 1, "skipped": 0},
+                      "findings": [], "docs_provided": {"ads_scripts": True, "checklist": True}}
+            (output / "report.json").write_text(json.dumps(report))
+            return report
+
+        with patch("apk_audit.web.run", side_effect=fake_run):
+            job_id = json.load(self.request(
+                "/api/jobs", b"fake archive", "demo.apk",
+                {"X-Ads-Scripts-Id": ads, "X-Checklist-Id": working},
+            ))["id"]
+            for _ in range(50):
+                job = json.load(self.request(f"/api/jobs/{job_id}"))
+                if job["state"] == "done":
+                    break
+                time.sleep(0.02)
+            self.assertEqual(job["state"], "done", job)
+            self.assertTrue(job["docs_used"])
+            self.assertNotIn("documents", job)
+            self.assertTrue(json.load(self.request(f"/api/jobs/{job_id}/report"))["docs_provided"]["checklist"])
+
+    def test_one_document_cannot_be_attached_alone(self):
+        ads = json.load(self.request(
+            "/api/documents", b'{"key":"value"}', "ads.json",
+            {"X-Document-Kind": "ads_scripts"},
+        ))["id"]
+        with self.assertRaises(HTTPError) as response:
+            self.request("/api/jobs", b"fake archive", "demo.apk", {"X-Ads-Scripts-Id": ads})
+        self.assertEqual(response.exception.code, 400)
+        self.assertIn("Cần cả ADS SCRIPTS", response.exception.read().decode())
 
 
 if __name__ == "__main__":

@@ -20,6 +20,11 @@ class IntegrationTests(unittest.TestCase):
     setUp = FrameworkTests.setUp
     agent_rule = FrameworkTests.agent_rule
     # Reuse the isolated workspace fixture without duplicating inherited tests.
+    def test_pipeline_reports_its_real_stages(self):
+        stages = []
+        run(self.ws, rules=self.pack, out=self.root/'out', engine='none', progress=stages.append)
+        self.assertEqual(stages, ['unpack', 'facts', 'rules', 'report'])
+
     def test_cache_replays_and_invalidates_when_context_changes(self):
         (self.pack / 'rules/a.yaml').write_text('''- id: EXAMPLE
   title: Example

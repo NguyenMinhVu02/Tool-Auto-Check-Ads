@@ -21,7 +21,9 @@ Workspace mẫu chỉ chứa dữ liệu minh họa, không phải APK/app thậ
 uv run apk-audit serve
 ```
 
-Mở `http://127.0.0.1:8765` rồi kéo APK, XAPK hoặc APKM vào vùng tải lên. Trang gọi pipeline hiện có, lưu file đã tải và báo cáo dưới `out/web/`, sau đó hiển thị tổng quan và từng luật. Server chỉ lắng nghe trên `127.0.0.1`, xử lý một file tại một thời điểm; dùng `Ctrl+C` để dừng. Có thể đổi cổng/thư mục bằng `--port` và `--out`, hoặc trỏ bộ luật bằng `--rules`.
+Mở `http://127.0.0.1:8765`, chọn hoặc kéo APK/XAPK/APKM vào vùng tải lên, rồi bấm **Bắt đầu kiểm tra**. Chọn file không tự chạy. Hai ô ADS SCRIPTS và working file là tùy chọn: chỉ khi chọn **đủ cả hai**, web mới đưa chúng vào pipeline; thiếu một file thì bỏ qua cả cặp. Mỗi tài liệu nhận JSON object hoặc CSV hai cột `key,value`, tối đa 5 MiB. Web dùng font Poppins lưu sẵn trong gói để chạy offline; giấy phép ở `apk_audit/web_assets/fonts/OFL.txt`.
+
+Trang lưu file đã tải và báo cáo dưới `out/web/`, sau đó hiển thị tổng quan và từng luật. Khi chạy, web hiển thị bước hiện tại: tiếp nhận, giải mã, trích xuất dữ liệu, đối chiếu quy tắc, ghi báo cáo. Trình duyệt hỏi xác nhận nếu đóng tab, Back hoặc Reload trong lúc lượt kiểm tra đang chạy. Nếu vẫn Reload, trang lấy lại trạng thái lượt kiểm tra từ server. Việc tiếp tục hiển thị này chỉ hoạt động khi server chưa khởi động lại; job hiện được giữ trong bộ nhớ server. Server chỉ lắng nghe trên `127.0.0.1`, xử lý một file tại một thời điểm; dùng `Ctrl+C` để dừng. Có thể đổi cổng/thư mục bằng `--port` và `--out`, hoặc trỏ bộ luật bằng `--rules`.
 
 Đây là khung web có luồng upload và báo cáo thật. Engine mặc định vẫn là `none`: 10 luật logic hiện trả `UNKNOWN` cho đến khi có bộ chấm logic live. File cần `jadx` và Java như CLI. Trang chỉ nhận file có đuôi `.apk`, `.xapk`, `.apkm`; nội dung archive vẫn được kiểm tra trước khi giải mã.
 
