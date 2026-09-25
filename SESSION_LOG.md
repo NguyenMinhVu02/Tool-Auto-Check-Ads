@@ -2,15 +2,26 @@
 
 ## Trạng thái hiện tại
 
-- Cập nhật: 2026-09-25 10:16 (Asia/Ho_Chi_Minh).
-- Mục tiêu: Triển khai web localhost để xem khung, tải APK/XAPK/APKM và xem báo cáo pipeline hiện có.
-- Trạng thái: Hoàn tất web khung; chấm logic tự động vẫn còn lại.
-- Kết quả: `apk-audit serve` mở `http://127.0.0.1:8765`; web kéo thả, upload, trạng thái và report JSON, lưu trong `out/web`. Đã mở trang bằng Chrome headless; server đang chạy trong phiên này.
-- Kiểm tra: 18/18 unittest đạt; HTTP upload với archive thử nghiệm chạy pipeline thật và trả 10 UNKNOWN; wheel chứa web assets; `git diff --check` đạt.
+- Cập nhật: 2026-09-25 10:19 (Asia/Ho_Chi_Minh).
+- Mục tiêu: Push bản rule pack và web localhost lên Git trước khi làm bước tiếp theo.
+- Trạng thái: Hoàn tất push tính năng; chấm logic tự động vẫn còn lại.
+- Kết quả: Commit tính năng `0e42266` đã push lên `origin/main`; `apk-audit serve` mở `http://127.0.0.1:8765`, lưu upload và report trong `out/web`.
+- Kiểm tra: 18/18 unittest đạt; rule pack hợp lệ với 10 luật; `git diff --cached --check` đạt trước commit.
 - Giới hạn: Engine AI/static semantic chưa nối; 10 luật logic vẫn UNKNOWN với engine none. Web chỉ xử lý một file mỗi lần, danh sách job trong bộ nhớ phiên server. Chưa thử APK thương mại.
 - Bước tiếp theo: Nối bộ chấm logic có evidence; sau đó cải thiện web theo nhu cầu sử dụng thực tế.
 
 ## Lịch sử phiên
+
+### 2026-09-25 10:19 — Push rule pack và web localhost (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Push toàn bộ thay đổi đã triển khai lên Git trước bước tiếp theo.
+- Trạng thái: Hoàn tất.
+- Đã làm: Kiểm tra remote, staged 13 file mã/tài liệu/test từ hai phiên trước, commit `0e42266` và push `origin/main`.
+- File thay đổi: SESSION_LOG.md (ghi nhận kết quả push).
+- Quyết định quan trọng: Giữ nguyên nhánh main; không thêm thay đổi chức năng trong lượt push này.
+- Kiểm tra và kết quả: 18/18 unittest đạt, `rules check` đạt 10 luật, staged diff check đạt, GitHub nhận commit `0e42266`.
+- Việc còn lại / trở ngại: Không có cho yêu cầu push; engine chấm logic và thử APK thực tế thuộc bước sau.
+- Bước tiếp theo: Chờ yêu cầu triển khai bước tiếp theo.
 
 ### 2026-09-25 10:16 — Web localhost bản khung (Asia/Ho_Chi_Minh)
 
