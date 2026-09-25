@@ -1,0 +1,172 @@
+- id: ADS_INIT_ORDER
+  title: Khởi tạo SDK và đăng ký lifecycle
+  mode: agent
+  area: init
+  severity: high
+  question: >-
+    Từ Application thật trong manifest, lần theo onCreate. Có khởi tạo Mobile Ads,
+    DevConfig/version nếu SDK tương ứng có mặt, config local, SDK ads, cấu hình
+    khoảng interstitial, App Open và lifecycle callbacks theo thứ tự an toàn không?
+    Chấp nhận tên class/hàm tương đương; chỉ đánh giá điều kiện có trong APK.
+  verdict:
+    pass_when: "Các bước tương ứng hiện diện, config sẵn trước khi load và lifecycle được đăng ký."
+    fail_when: "Có bằng chứng thứ tự sai gây load trước init/config hoặc thiếu đăng ký lifecycle cần cho resume."
+    unknown_when: "Không thấy Application/SDK do obfuscation hoặc bước được thực hiện ngoài mã đã giải mã."
+  start_hints: ["resources/AndroidManifest.xml", "sources/"]
+  budget: {max_tool_calls: 25}
+
+- id: ADS_REMOTE_FALLBACK
+  title: Remote Config, timeout và fallback local
+  mode: agent
+  area: remote_config
+  severity: high
+  question: >-
+    Theo dấu local ad_config release/debug, Firebase Remote Config, fetch/activate,
+    timeout ở Splash và việc parse dữ liệu. Có fallback local khi remote chưa xong,
+    rỗng hoặc parse lỗi; chỉ load sau khi chọn config; phân biệt debug/release?
+    Ghi rõ các mốc thời gian tìm được, không buộc đúng literal của base nếu logic tương đương.
+  verdict:
+    pass_when: "Có chọn nguồn config nhất quán, timeout và fallback local cho các nhánh lỗi quan sát được."
+    fail_when: "Có bằng chứng remote lỗi/timeout dẫn đến config rỗng, crash hoặc load trước khi chọn config."
+    unknown_when: "Không thể xác định nhánh timeout hoặc dữ liệu config do giải mã thiếu; remote live không quan sát được."
+  start_hints: ["resources/assets/ad_config.json", "sources/"]
+  budget: {max_tool_calls: 25}
+
+- id: ADS_ID_SOURCE_AND_COVERAGE
+  title: Phân phối ID theo local/remote và inventory placement
+  mode: agent
+  area: config
+  severity: high
+  question: >-
+    Lập danh sách placement và ID từ assets, sau đó lần từng màn đến config.id đưa vào SDK.
+    Kiểm tra remote và local cùng schema/key, không trộn ID giữa slot hoặc dùng ID hard-code
+    bỏ qua config. Đối chiếu ID chính xác với ads_scripts nếu tài liệu được cung cấp;
+    nếu thiếu tài liệu, chỉ kết luận về logic và báo slot thiếu/thừa/không dùng dạng inventory,
+    không kết luận ID của app đúng hay sai so với ID mẫu base.
+  verdict:
+    pass_when: "Mỗi slot đang dùng lấy ID từ đúng config; nếu có ads_scripts thì ID và coverage khớp tài liệu."
+    fail_when: "Có bằng chứng slot lấy ID của slot khác, hard-code sai nguồn, hoặc lệch ads_scripts đã cung cấp."
+    unknown_when: "Không đủ call graph hoặc thiếu ads_scripts để kết luận ID cụ thể; đưa danh sách slot cần kiểm tra."
+  start_hints: ["resources/assets/ad_config.json", "sources/"]
+  budget: {max_tool_calls: 30}
+
+- id: ADS_SPLASH_PLACEMENT
+  title: Splash, uninstall shortcut và preload Language
+  mode: agent
+  area: splash
+  severity: high
+  question: >-
+    Kiểm Splash thường và shortcut uninstall riêng: banner/inter đúng cặp config;
+    native Language preload cho nhánh thường trước khi vào Language, không load ở uninstall;
+    Open Resume được bật/tắt từ config; timeout hoặc không có inter vẫn điều hướng.
+    So cả vị trí render banner, không yêu cầu tên hàm y hệt base.
+  verdict:
+    pass_when: "Các nhánh dùng đúng slot, preload ở hành trình cần thiết và điều hướng không bị kẹt."
+    fail_when: "Có bằng chứng load sai slot/thiếu preload hoặc callback khiến Splash kẹt."
+    unknown_when: "Không tìm đủ nhánh hoặc dữ liệu đã làm rối."
+  start_hints: ["sources/", "resources/AndroidManifest.xml"]
+  budget: {max_tool_calls: 25}
+
+- id: ADS_LANGUAGE_PLACEMENT
+  title: Language native, click native và preload Onboarding
+  mode: agent
+  area: language
+  severity: high
+  question: >-
+    Native đầu vào từ Splash và native click có stream/callback riêng, đổi observer khi click,
+    hủy observer cũ, render/hide theo giá trị và mạng; preload Onboarding page 1 khi không
+    vào từ Settings. Có delay nút Done từ Remote Config/fallback không?
+  verdict:
+    pass_when: "Đúng hai pha native, observer không chồng, Onboarding page 1 được preload và UI fallback hoạt động."
+    fail_when: "Có bằng chứng click không đổi slot, observer chồng hoặc mất preload/render fallback."
+    unknown_when: "Không xác định được liên kết slot với màn hoặc trạng thái observer."
+  start_hints: ["sources/"]
+  budget: {max_tool_calls: 25}
+
+- id: ADS_ONBOARDING_PLACEMENT
+  title: Onboarding page 1, page 4, full và inter trước Home
+  mode: agent
+  area: onboarding
+  severity: high
+  question: >-
+    Xác định từng page thật sự được render và ID/slot của native page 1, page 4, full;
+    preload page 4/full/inter sau khi vào Onboarding, page 1 từ Language. Native full
+    có gate UA; fragment dùng vòng đời view để observe. Inter nếu sẵn sàng/được phép
+    thì show rồi mới sang Home; nhánh không ad cũng sang Home. Không bắt full2 nếu
+    màn này không có trong hành trình thật.
+  verdict:
+    pass_when: "Các slot có màn tương ứng, load/observe/show đúng điểm và mọi nhánh đều tiến đến Home."
+    fail_when: "Có bằng chứng sai slot, thiếu gate, show không thể đạt hoặc điều hướng bị kẹt."
+    unknown_when: "Không thể nối page động với placement hoặc hành vi SDK nằm ngoài APK."
+  start_hints: ["sources/"]
+  budget: {max_tool_calls: 30}
+
+- id: ADS_WELCOME_RESUME
+  title: Welcome và App Open loại trừ nhau
+  mode: agent
+  area: welcome
+  severity: high
+  question: >-
+    Khi resume, App Open ưu tiên nếu bật; Welcome chỉ khi App Open tắt và hai slot
+    native_welcome/inter_welcome được phép. Kiểm danh sách màn loại trừ, purchase,
+    inter đang show, gate UA; Welcome load/observe native/inter, delay ngắn rồi
+    click show hoặc fallback thoát. Không yêu cầu Welcome luôn được bật trong defaults.
+  verdict:
+    pass_when: "Hai đường resume loại trừ nhau, gate đầy đủ, UI và thoát có fallback."
+    fail_when: "Có bằng chứng hai quảng cáo chồng nhau, sai màn resume hoặc Welcome không thoát khi không có ad."
+    unknown_when: "Không thể chứng minh lifecycle runtime hoặc SDK nội bộ."
+  start_hints: ["sources/"]
+  budget: {max_tool_calls: 25}
+
+- id: ADS_LOAD_OBSERVE_GATES
+  title: Gate load và quan sát native liên tục
+  mode: agent
+  area: render
+  severity: high
+  question: >-
+    Với các native đang dùng, lần theo isEnable, purchase, mạng và gate UA nếu slot cần;
+    nhánh từ chối/load fail phát null; Activity/Fragment observe stream theo lifecycle,
+    ad có thì populate, null/offline thì ẩn container. Không chấm PASS chỉ vì có từ
+    LiveData hoặc tên hàm; phải nối được load -> update -> observe -> render.
+  verdict:
+    pass_when: "Luồng load-update-observe-render/hide hiện diện cho các slot đang dùng."
+    fail_when: "Có đường load bỏ gate hoặc UI giữ ad/shimmer khi stream null, hoặc observer bị ngắt."
+    unknown_when: "Mã bị làm rối hoặc không chứng minh được cập nhật runtime liên tục."
+  start_hints: ["sources/"]
+  budget: {max_tool_calls: 30}
+
+- id: ADS_FIREBASE_EVENTS
+  title: Firebase tracking theo hành động và màn hình
+  mode: agent
+  area: tracking
+  severity: medium
+  question: >-
+    Kiểm call site thực sự gửi FirebaseAnalytics.logEvent hoặc wrapper tương đương:
+    splash_scr_view lúc vào Splash; splash_request_ad khi bắt đầu request;
+    splash_ad_load trong callback load thành công; splash_user_close_ad sau inter;
+    language_scr_view khi vào Language; language_scr_click khi chọn;
+    obd_1/2/3/4th_scr_view cho page tương ứng, obd_full_1/full_2_scr_view chỉ khi
+    full page thực sự hiện; home_scr_view khi vào Home. Mapping page động phải dựa
+    loại page, không chỉ chỉ số cứng. Không yêu cầu event Welcome vì base không có.
+  verdict:
+    pass_when: "Các event liên quan màn/nhánh có call site đúng thời điểm và page động map đúng."
+    fail_when: "Có bằng chứng event thiếu ở call site, gửi sai nhánh, hoặc page động gán sai event."
+    unknown_when: "Chỉ thấy hằng số/event string mà không chứng minh được call site hoặc callback runtime."
+  start_hints: ["sources/"]
+  budget: {max_tool_calls: 30}
+
+- id: ADS_BANNER_RELOAD
+  title: Banner placement và reload theo config
+  mode: agent
+  area: banner
+  severity: medium
+  question: >-
+    Banner Splash/Home dùng slot đúng container; với màn có reload, kiểm isEnable,
+    purchase, container, reloadIntervalSeconds và dọn handler khi pause/destroy.
+    Nếu app không có banner ngoài Splash, chỉ đánh giá slot tồn tại; không bắt thêm màn.
+  verdict:
+    pass_when: "Banner đang dùng có đúng config, gate và lifecycle reload."
+    fail_when: "Có bằng chứng banner sai slot, reload bất tận hoặc thiếu cleanup gây leak."
+    unknown_when: "Không xác định được container hoặc vòng đời qua mã đã giải mã."
+  start_hints: ["sources/", "resources/AndroidManifest.xml"]
+  budget: {max_tool_calls: 20}

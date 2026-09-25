@@ -1,3 +1,32 @@
-# Bối cảnh dự án mẫu
+# Hợp đồng logic ads/init từ Example-AdLogic-Partner
 
-Chưa cung cấp chuẩn ads/init. Thêm kiến trúc và quy tắc thực tế tại đây trước khi viết luật agent.
+Nguồn: repository `Example-AdLogic-Partner`, nhánh `main`, commit `e8f4337` (2026-09-24). Đây là mô tả hành vi mã nguồn tại commit này, không phải danh sách tên hàm bắt buộc. Đánh giá theo luồng dữ liệu, điều kiện, thứ tự và vị trí màn hình. Class/method có thể đổi tên. Chỉ báo FAIL khi có bằng chứng trong APK; thiếu mã do obfuscation hoặc SDK ngoài APK thì UNKNOWN. Giá trị ID AdMob trong base là mẫu, tuyệt đối không so khớp với APK đối tác. ID kỳ vọng của ứng dụng cần lấy từ ADS SCRIPTS riêng; Firebase/project/token từ working checklist riêng. Khi thiếu hai tài liệu đó, chỉ đánh giá logic và inventory, không phán đúng/sai ID cụ thể.
+
+## Khởi tạo
+
+Application được khai báo trong manifest. Trong `onCreate`, khởi tạo Mobile Ads, DevConfig với ba version BuildConfig (ERAIN_STUDIO_VERSION, PLAY_SERVICES_ADS_VERSION, GDPR_MODULE_VERSION), đọc cấu hình ads cục bộ, dựng ERainAdConfig theo debug/release, đặt Adjust/Facebook/TikTok token từ resource, đặt khoảng cách interstitial 35 giây, gọi ERainAd.init, cấu hình App Open, đăng ký ProcessLifecycleOwner observer và ActivityLifecycleCallbacks. Consent ở Splash: chỉ request khi chưa xác nhận, không phải global user và có mạng; kết thúc/timeout phải tiếp tục luồng. Không suy ra consent hợp lệ chỉ từ timeout.
+
+## Remote Config và ID
+
+`ad_config.json` là fallback release; `ad_config_debug.json` cho debug. Mỗi placement là object có `id`, `isEnable`, `enable_ua_check`; native có thể có `colorCTA`, `heightCTA`, `positionCTA`, `components`; banner có `reloadIntervalSeconds`. Không coi ID của base là ID chuẩn của app khác. Firebase Remote Config nhận defaults từ cấu hình local, min fetch interval 0 giây debug / 3600 giây release, gọi fetchAndActivate. Key `ad_remote_config` chứa JSON tổng có thể override cấu hình release. Trước khi hoàn tất hoặc nếu remote rỗng/lỗi parse thì dùng local. Chỉ chuyển sang load ads sau khi chọn config; remote ID và local ID của cùng placement không được trộn lẫn. `completed` trong base chỉ cho biết callback kết thúc, không xác nhận fetch thành công. APK tĩnh không cho biết giá trị Firebase remote đang triển khai.
+
+## Placement và thời điểm load/show
+
+- Splash thường: sau consent + chờ Remote Config, chọn `inter_splash`, `banner_splash`, preload `native_language_1` hoặc `_2` theo firstLanguage và cấu hình `open_resume`. Luồng uninstall shortcut chọn `inter_splash_uninstall`, `banner_splash_uninstall`, không preload Language. Timer splash 6500 ms, xét config sau ít nhất khoảng 1500 ms khi còn dưới 5000 ms; quá hạn vẫn dùng fallback. Splash inter dùng timeout 30000/5000 ms. Banner trong container Splash. Đóng/fail inter mới chuyển màn; nhánh không load cũng chuyển màn.
+- Language: nhận native đã preload từ Splash, sau `postDelayed(100 ms)` load `native_language_1_click` hoặc `_2_click` và preload `native_onboarding_1_1` hoặc `_2_1` nếu không vào từ Settings. Click ngôn ngữ đổi observer từ native đầu sang native click; hủy observer cũ. Native non-null thì populate, null/mất mạng thì ẩn. Nút Done có delay từ Remote Config, mặc định 2000 ms.
+- Onboarding: page 1 dùng native preload từ Language. Sau `postDelayed(100 ms)` load `native_onboarding_1_4`/`_2_4`, `native_onboarding_fullscreen_1_3`/`_2_3`, và `inter_onboarding`. Page 4 dùng native page 4; page full tùy gate UA. Fragment page observe native bằng `viewLifecycleOwner`, non-null render, null ẩn. Khi rời onboarding, inter sẵn sàng và được phép thì show rồi mới vào Home; nếu không thì vào Home. `native_onboarding_fullscreen_1_4`/`_2_4` có khai báo/helper nhưng không nằm trong luồng chính hiện tại: không bắt app khác load thừa slot này.
+- Welcome/Resume: `open_resume` có ưu tiên; nếu bật thì không đi Welcome. Welcome chỉ khi open_resume tắt và cả `native_welcome`, `inter_welcome` bật, qua gate lifecycle/purchase/UA. Welcome load 2 placement khi mở, observe native và inter, chờ tối đa khoảng 500 ms để mở nút Start; click show inter nếu sẵn sàng, callback close/fail hoặc nhánh không ad đều thoát. Không stack App Open và Welcome inter.
+- Banner màn khác: `isEnable`, chưa purchase, có container; `reloadIntervalSeconds` điều khiển reload; dọn handler lúc pause/destroy.
+
+Native load tập trung: kiểm tra isEnable, purchase, mạng và gate UA của placement khi cần; nhánh từ chối/load fail cập nhật stream thành null. Với inter, load/show phải có gate tương ứng và fallback chuyển màn. `enable_ua_check` lấy từ placement, không hard-code. Không yêu cầu tên AdsManager/LiveData giống hệt base; kiểm quan hệ load -> stream/callback -> observer -> render/hide liên tục theo lifecycle. Màn chính Splash, Language, Onboarding, Welcome là Activity riêng trong base; page Onboarding có thể là Fragment.
+
+## Firebase tracking (được đưa vào commit `56eb8b1`, vẫn có ở HEAD)
+
+Các tên event trong base: `splash_scr_view` khi vào Splash; `splash_request_ad` lúc bắt đầu load ads sau config; `splash_ad_load` trong callback inter load thành công; `splash_user_close_ad` trong callback tiếp tục sau inter; `language_scr_view` khi vào Language; `language_scr_click` khi chọn ngôn ngữ; `obd_1_scr_view`, `obd_2_scr_view`, `obd_3_scr_view`, `obd_4th_scr_view` cho các trang thường; `obd_full_1_scr_view`, `obd_full_2_scr_view` chỉ khi trang full thật sự xuất hiện; `home_scr_view` khi vào Home. Dùng FirebaseAnalytics.logEvent trực tiếp hoặc wrapper tương đương. Đối chiếu event ở call site, không chỉ tên hằng số. Welcome không có event riêng trong base, nên không bắt buộc.
+
+## Giới hạn/cảnh báo nguồn
+
+- Base hiện preload Language trong `checkRemoteConfigResult`, trước callback `onAdLoaded`, trong khi README/skill cũ mô tả preload trong callback. Lấy mã HEAD làm bằng chứng, ghi khác biệt; chưa áp đặt thời điểm chi tiết như điều kiện PASS tuyệt đối nếu preload vẫn đúng trước Language.
+- `showInterOnboarding` ở base có điều kiện `&& ignoreLimit`, trong khi caller thường dùng mặc định false. Đây là lỗi/điểm chưa nhất quán, không dùng làm quy tắc cho app khác. Tiêu chí là có nhánh show hợp lệ và fallback điều hướng.
+- Mapping event `onPageSelected(position)` trong base dùng vị trí cứng trong khi full page chỉ thêm có điều kiện và full2 không được thêm. Vì vậy không coi mapping position cứng là chuẩn; kiểm event theo loại page được render, hoặc UNKNOWN nếu APK không đủ dữ liệu.
+- APK static chỉ chứng minh đường đi trong mã và assets; không chứng minh Firebase thực nhận event, Remote Config live trả giá trị nào, ad thật có fill/show, hoặc observer nhận liên tục khi runtime. Những mục này cần thử runtime và không được chấm PASS tuyệt đối từ sự hiện diện của chuỗi.

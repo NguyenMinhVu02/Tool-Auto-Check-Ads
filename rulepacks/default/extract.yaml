@@ -1,4 +1,13 @@
 schema_version: 2
-string_patterns: {}
-asset_json: []
-known_packages: []
+string_patterns:
+  ad_unit_id: '^ca-app-pub-[0-9]+/[0-9]+$'
+  admob_app_id: '^ca-app-pub-[0-9]+~[0-9]+$'
+  firebase_event: '^(splash_(scr_view|request_ad|ad_load|user_close_ad)|language_(scr_view|scr_click)|obd_(1|2|3|4th|full_1|full_2)_scr_view|home_scr_view)$'
+  remote_config_key: '^(ad_remote_config|on_show_navigation_button|on_show_dialog_consent|delay_button_done_language|time_delay_show_language_done_button|on_enable_uninstall_widget)$'
+known_packages:
+  - com.ads.module
+  - com.google.android.gms.ads
+  - com.google.firebase
+asset_json:
+  - ad_config.json
+  - ad_config_debug.json

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>APK Audit · Local workspace</title>
+  <link rel="stylesheet" href="/app.css">
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/" aria-label="APK Audit trang chủ"><span class="brand-mark">A</span><span>APK<span class="brand-light">AUDIT</span><small>LOCAL WORKSPACE</small></span></a>
+      <div class="sidebar-label">WORKSPACE</div>
+      <nav class="nav" aria-label="Điều hướng">
+        <a class="nav-link active" href="#overview"><span class="nav-icon">▦</span> Tổng quan</a>
+        <a class="nav-link" href="#upload"><span class="nav-icon">↥</span> Tải ứng dụng</a>
+        <a class="nav-link" href="#results"><span class="nav-icon">≡</span> Kết quả kiểm tra</a>
+      </nav>
+      <div class="sidebar-bottom"><span class="status-dot"></span> Chạy trên máy của bạn <small>Dữ liệu được xử lý tại localhost</small></div>
+    </aside>
+
+    <main class="main" id="overview">
+      <header class="topbar"><div><span class="eyebrow">DASHBOARD / TỔNG QUAN</span><h1>Kiểm tra tích hợp Ads</h1><p>Đưa APK vào workspace để xem cấu trúc ứng dụng và tình trạng các quy tắc.</p></div><div class="top-pill"><span class="status-dot"></span> Local mode</div></header>
+
+      <section class="hero" id="upload" aria-labelledby="upload-title">
+        <div class="hero-copy"><span class="eyebrow light">BẮT ĐẦU PHÂN TÍCH</span><h2 id="upload-title">Thả ứng dụng của bạn vào đây</h2><p>Hỗ trợ APK, XAPK và APKM. Công cụ sẽ giải mã bằng jadx, thu thập facts và tạo báo cáo theo rule pack hiện tại.</p>
+          <div class="upload-zone" id="drop-zone" tabindex="0" role="button" aria-label="Chọn hoặc thả file APK, XAPK, APKM"><div class="upload-icon">↥</div><strong>Kéo thả file vào vùng này</strong><span>hoặc <span class="select-text">chọn từ máy tính</span></span><small>APK · XAPK · APKM</small></div>
+          <input id="file-input" type="file" accept=".apk,.xapk,.apkm" hidden>
+          <div class="upload-state" id="upload-state" role="status" aria-live="polite">Chưa có file nào được chọn.</div>
+          <div class="progress-track" id="progress-track" hidden><div class="progress-bar" id="progress-bar"></div></div>
+        </div>
+        <div class="hero-visual" aria-hidden="true"><div class="scan-circle scan-outer"></div><div class="scan-circle scan-middle"></div><div class="scan-circle scan-inner"></div><div class="phone"><div class="phone-notch"></div><div class="phone-shield">✓</div><div class="phone-line long"></div><div class="phone-line"></div><div class="phone-line short"></div></div><div class="scan-label">STATIC ANALYSIS</div></div>
+      </section>
+
+      <section class="steps" aria-label="Các bước xử lý"><div class="step"><span>01</span><div><strong>Tiếp nhận</strong><small>APK / XAPK / APKM</small></div></div><div class="step-arrow">→</div><div class="step"><span>02</span><div><strong>Giải mã</strong><small>jadx workspace</small></div></div><div class="step-arrow">→</div><div class="step"><span>03</span><div><strong>Đối chiếu</strong><small>facts &amp; rule pack</small></div></div><div class="step-arrow">→</div><div class="step"><span>04</span><div><strong>Báo cáo</strong><small>JSON &amp; Markdown</small></div></div></section>
+
+      <section id="results" class="results" aria-labelledby="results-title"><div class="section-head"><div><span class="eyebrow">KẾT QUẢ</span><h2 id="results-title">Tổng quan kiểm tra</h2></div><a id="report-link" class="report-link" href="#results" hidden>Tải report.json ↗</a></div>
+        <div class="notice"><span class="notice-icon">i</span><p>Rule pack hiện có 10 luật logic. Engine AI chưa kết nối, vì vậy các luật này sẽ hiển thị <strong>Chưa rõ</strong>; số 0 lỗi chưa chứng minh ứng dụng đạt chuẩn.</p></div>
+        <div class="metric-grid"><article class="metric"><span class="metric-icon pass">✓</span><span>ĐẠT</span><strong id="count-pass">—</strong><small>Quy tắc có bằng chứng phù hợp</small></article><article class="metric"><span class="metric-icon fail">!</span><span>CẦN XỬ LÝ</span><strong id="count-fail">—</strong><small>Quy tắc có bằng chứng sai lệch</small></article><article class="metric"><span class="metric-icon unknown">?</span><span>CHƯA RÕ</span><strong id="count-unknown">—</strong><small>Cần thêm phân tích hoặc dữ liệu</small></article><article class="metric"><span class="metric-icon skipped">–</span><span>BỎ QUA</span><strong id="count-skipped">—</strong><small>Thiếu tài liệu để đối chiếu</small></article></div>
+        <div class="result-panel"><div class="result-panel-head"><div><h3>Chi tiết phân tích</h3><p id="result-subtitle">Chưa có lượt kiểm tra nào trong phiên này.</p></div><span class="phase-chip" id="phase-chip">Sẵn sàng</span></div><div id="finding-list" class="finding-list"><div class="empty-state"><span>⌕</span><strong>Chưa có báo cáo</strong><p>Tải ứng dụng lên để bắt đầu xem kết quả tại đây.</p></div></div></div>
+      </section>
+      <footer>APK Audit <span>·</span> Local analysis workspace <span>·</span> v0.1</footer>
+    </main>
+  </div>
+</body>
+</html>

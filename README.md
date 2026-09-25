@@ -1,6 +1,6 @@
 # apk-audit
 
-Khung CLI audit APK theo thiết kế v2. **Chưa chứa bất kỳ chuẩn nghiệp vụ ads/init nào.** Bộ luật mặc định rỗng; báo cáo 0 luật không xác nhận app đạt chuẩn.
+Khung CLI audit APK theo thiết kế v2. Bộ luật mặc định hiện chứa chuẩn **logic ads/init** rút từ `Example-AdLogic-Partner` tại commit `e8f4337` (xem [hợp đồng tham chiếu](docs/base-ads-contract.md)). Các luật logic ở chế độ `agent`; `--engine none` trả `UNKNOWN`, không xác nhận app đạt chuẩn. ID ads của base không dùng làm ID kỳ vọng cho app đối tác.
 
 ## Chạy ngay
 
@@ -15,6 +15,16 @@ uv run apk-audit examples/workspace --out out/demo --engine none
 Kết quả: `out/demo/facts.json`, `xref_index.json`, `report.md`, `report.json`.
 Workspace mẫu chỉ chứa dữ liệu minh họa, không phải APK/app thật.
 
+## Web localhost
+
+```bash
+uv run apk-audit serve
+```
+
+Mở `http://127.0.0.1:8765` rồi kéo APK, XAPK hoặc APKM vào vùng tải lên. Trang gọi pipeline hiện có, lưu file đã tải và báo cáo dưới `out/web/`, sau đó hiển thị tổng quan và từng luật. Server chỉ lắng nghe trên `127.0.0.1`, xử lý một file tại một thời điểm; dùng `Ctrl+C` để dừng. Có thể đổi cổng/thư mục bằng `--port` và `--out`, hoặc trỏ bộ luật bằng `--rules`.
+
+Đây là khung web có luồng upload và báo cáo thật. Engine mặc định vẫn là `none`: 10 luật logic hiện trả `UNKNOWN` cho đến khi có bộ chấm logic live. File cần `jadx` và Java như CLI. Trang chỉ nhận file có đuôi `.apk`, `.xapk`, `.apkm`; nội dung archive vẫn được kiểm tra trước khi giải mã.
+
 Đọc APK có sẵn (cần Java và jadx trên PATH, hoặc biến `JADX_PATH`):
 
 ```bash
@@ -27,15 +37,15 @@ Tool gọi jadx trên bản gốc chỉ để đọc. XAPK/APKM được kiểm 
 
 Có thể truyền thẳng thư mục jadx đã bung. `--out` phải nằm ngoài thư mục đầu vào để không sửa dữ liệu đang phân tích.
 
-## Thêm chuẩn ads và init sau
+## Chuẩn ads/init hiện có và cách bổ sung
 
 Chỉnh ba nơi trong `rulepacks/default/`:
 
-1. `context.md`: kiến trúc và luồng chuẩn của dự án mẫu.
+1. `context.md`: kiến trúc và luồng tham chiếu từ base; bổ sung khi base đổi logic.
 2. `extract.yaml`: regex chuỗi cần tìm và tiền tố package cần thống kê.
-3. `rules/*.yaml`: các luật static hoặc câu hỏi agent.
+3. `rules/*.yaml`: 10 câu hỏi logic hoặc các luật static bổ sung.
 
-Từ thư mục dự án, tool tự nạp `rulepacks/default/`. Khi chạy ở nơi khác, truyền đường dẫn tuyệt đối bằng `--rules`. Nếu không tìm thấy bộ mặc định, dùng bộ rỗng có cảnh báo; đường dẫn `--rules` sai sẽ báo lỗi.
+Từ thư mục dự án, tool tự nạp `rulepacks/default/`. Khi chạy ở nơi khác, truyền đường dẫn tuyệt đối bằng `--rules`. Nếu không tìm thấy bộ mặc định, dùng bộ rỗng có cảnh báo; đường dẫn `--rules` sai sẽ báo lỗi. Muốn đối chiếu ID thật cần tài liệu ADS SCRIPTS riêng của app qua `--ads-scripts`; muốn đối chiếu package/tokens cần working checklist qua `--checklist`. Bộ khung hiện chỉ đọc JSON object hoặc CSV `key,value`, và chưa có adapter AI live để tự chấm 10 luật logic.
 
 ```bash
 uv run apk-audit rules check --rules rulepacks/default
@@ -114,7 +124,7 @@ Windows dùng `.venv/Scripts/python.exe`. Server không chỉnh cấu hình toà
 - `unpack.py`: nhận dữ liệu jadx, lưu mã thoát và log. Chưa nối baksmali; có thể cung cấp workspace đã có thư mục `smali/`.
 - `apk_audit.run(...)`: API chung cho CLI và các cửa vào tương lai.
 
-Chưa triển khai: tải tự động apkcombo/apkpure, lấy version từ Play, AI live, nhóm phiên theo area/chạy song song, quan sát ngoài bộ luật từ AI, `ask`, web M7 và skill `/audit-play`. Các lệnh dành sẵn cho phần chưa có trả lỗi rõ ràng. Mã thoát 0 chỉ nghĩa không có FAIL, không bảo đảm mọi luật PASS.
+Chưa triển khai: tải tự động apkcombo/apkpure, lấy version từ Play, AI live, nhóm phiên theo area/chạy song song, quan sát ngoài bộ luật từ AI, `ask` và skill `/audit-play`. Web localhost đã có giao diện/upload/báo cáo, nhưng chưa có engine chấm logic live. Mã thoát 0 chỉ nghĩa không có FAIL, không bảo đảm mọi luật PASS.
 
 ## Kiểm thử
 

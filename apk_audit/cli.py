@@ -41,7 +41,10 @@ def parser():
     ask = sub.add_parser("ask", help="Điểm mở rộng hỏi AI (chưa nối)")
     ask.add_argument("target")
     ask.add_argument("question")
-    sub.add_parser("serve", help="Điểm mở rộng web M7 (chưa nối)")
+    web = sub.add_parser("serve", help="Mở giao diện audit trên localhost")
+    web.add_argument("--port", type=int, default=8765)
+    web.add_argument("--out", type=Path, default=Path("out/web"))
+    web.add_argument("--rules", type=Path)
     return result
 
 def main(argv=None):
@@ -74,7 +77,8 @@ def main(argv=None):
         elif command == "ask":
             raise AuditError("ask chưa nối adapter AI; dùng apk-audit mcp --workspace với MCP client.", 6)
         elif command == "serve":
-            raise AuditError("Web M7 chưa triển khai trong bản khung CLI.")
+            from .web import serve
+            serve(port=args["port"], output_root=args["out"], rules=args["rules"])
         else:
             quiet = args.pop("quiet")
             if args.pop("static_only"):

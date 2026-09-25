@@ -2,15 +2,61 @@
 
 ## Trạng thái hiện tại
 
-- Cập nhật: 2026-09-10 17:22 (Asia/Ho_Chi_Minh).
-- Mục tiêu: Triển khai khung apk-audit theo thiết kế v2, để người dùng thêm chuẩn ads/init sau.
-- Trạng thái: Hoàn tất trong phạm vi bản khung.
-- Kết quả: Dự án `apk-audit/`, CLI, facts, tool/MCP, rule loader/checks tổng quát, agent guardrails/replay/cache, báo cáo, dữ liệu mẫu và README.
-- Kiểm tra: 16 unittest đạt; MCP stdio kiểm tra ngoài sandbox; CLI/demo và build wheel/sdist đạt; smoke test jadx với archive thử nghiệm tối giản.
-- Giới hạn: Chưa nối tải Play/apkcombo/apkpure, AI live Claude/Codex, baksmali, web/ask; chưa thử APK thương mại hoặc Windows/macOS.
-- Bước tiếp theo: Người dùng thêm context, extract và luật trong `apk-audit/rulepacks/default/`; hoặc yêu cầu nối các adapter. Không tự suy ra chuẩn ads/init.
+- Cập nhật: 2026-09-25 10:16 (Asia/Ho_Chi_Minh).
+- Mục tiêu: Triển khai web localhost để xem khung, tải APK/XAPK/APKM và xem báo cáo pipeline hiện có.
+- Trạng thái: Hoàn tất web khung; chấm logic tự động vẫn còn lại.
+- Kết quả: `apk-audit serve` mở `http://127.0.0.1:8765`; web kéo thả, upload, trạng thái và report JSON, lưu trong `out/web`. Đã mở trang bằng Chrome headless; server đang chạy trong phiên này.
+- Kiểm tra: 18/18 unittest đạt; HTTP upload với archive thử nghiệm chạy pipeline thật và trả 10 UNKNOWN; wheel chứa web assets; `git diff --check` đạt.
+- Giới hạn: Engine AI/static semantic chưa nối; 10 luật logic vẫn UNKNOWN với engine none. Web chỉ xử lý một file mỗi lần, danh sách job trong bộ nhớ phiên server. Chưa thử APK thương mại.
+- Bước tiếp theo: Nối bộ chấm logic có evidence; sau đó cải thiện web theo nhu cầu sử dụng thực tế.
 
 ## Lịch sử phiên
+
+### 2026-09-25 10:16 — Web localhost bản khung (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Cho người dùng nhìn và dùng thử khung web local trước khi hoàn thiện các phần kiểm tra khác.
+- Trạng thái: Hoàn tất trong phạm vi web khung.
+- Đã làm: Tạo HTTP server chỉ bind 127.0.0.1, giao diện kéo thả APK/XAPK/APKM, upload stream, xử lý một job một lúc, gọi pipeline chung, polling kết quả và tải report JSON; cập nhật CLI/README.
+- File thay đổi: apk_audit/web.py, apk_audit/web_assets/{index.html,app.css,app.js}, apk_audit/cli.py, tests/test_web.py, README.md, SESSION_LOG.md.
+- Quyết định quan trọng: Dùng thư viện chuẩn Python; hiển thị UNKNOWN trung thực khi engine none; giữ output/upload trong out/web; không sửa các thay đổi sẵn có từ phiên trước.
+- Kiểm tra và kết quả: 18/18 unittest đạt; Chrome headless render trang; upload archive smoke qua HTTP trả package demo.web và 10 UNKNOWN; wheel chứa web assets; git diff --check đạt.
+- Việc còn lại / trở ngại: Chưa nối semantic/AI engine, chưa thử APK thực tế; job list chỉ sống trong tiến trình server.
+- Bước tiếp theo: Triển khai logic chấm có bằng chứng rồi thử APK đối tác.
+
+### 2026-09-25 10:05 — Trích chuẩn ads/init từ base (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Lấy logic init, remote config, phân phối ID, placement Splash/Language/Onboarding/Welcome, observer và tracking từ base để cấp dữ liệu cho apk-audit.
+- Trạng thái: Hoàn tất dữ liệu/rule pack; chấm tự động và web để phase sau.
+- Đã làm: Fetch và xác nhận base main e8f4337; đọc mã thực tế, commit tracking 56eb8b1; viết contract có inventory/timing và ba điểm không nhất quán trong base; tạo 10 luật agent, regex extract, cập nhật README.
+- File thay đổi: README.md, SESSION_LOG.md, rulepacks/default/{context.md,extract.yaml,pack.yaml,rules/ads-flow.yaml}, docs/base-ads-contract.md.
+- Quyết định quan trọng: Chấm logic thay vì tên hàm, không áp ID mẫu base lên app khác; thiếu ADS SCRIPTS/working checklist thì không kết luận ID/token đúng; không sao chép lỗi show inter Onboarding và mapping event theo index cứng.
+- Kiểm tra và kết quả: `rules check` đạt 10 luật; smoke CLI tạo 10 UNKNOWN khi engine none; 16/16 unittest đạt; `git diff --check` đạt. Chưa chạy APK đối tác thật.
+- Việc còn lại / trở ngại: Agent live chưa nối; web localhost thuộc phase sau. Muốn đối chiếu ID cụ thể cần tài liệu app đối tác.
+- Bước tiếp theo: Nối semantic checker có evidence và kiểm bằng APK thật trước khi thêm web kéo thả.
+
+### 2026-09-25 09:43 — Pull và rà soát mức triển khai (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Kéo mã mới nhất từ Git và báo trạng thái dự án.
+- Trạng thái: Hoàn tất.
+- Đã làm: Kiểm tra remote/nhánh; fetch và pull qua SSH; so sánh HEAD với FETCH_HEAD; rà lại bộ luật mặc định.
+- File thay đổi: SESSION_LOG.md; không có thay đổi mã từ remote.
+- Quyết định quan trọng: Dùng SSH vì URL fetch HTTPS yêu cầu đăng nhập; pull chỉ cho phép fast-forward, giữ thay đổi cục bộ.
+- Kiểm tra và kết quả: HEAD = FETCH_HEAD = 9edd0d0; pull báo Already up to date. 15/16 unittest đạt trong sandbox; MCP stdio timeout ở sandbox, chạy riêng ngoài sandbox đạt.
+- Việc còn lại / trở ngại: Không có cho yêu cầu pull; chuẩn ads/init và các adapter live chưa triển khai.
+- Bước tiếp theo: Chờ yêu cầu bổ sung rule pack hoặc tích hợp.
+
+
+### 2026-09-25 09:40 — Giải thích chức năng dự án (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Trả lời dự án đang làm gì và chức năng ra sao.
+- Trạng thái: Hoàn tất.
+- Đã làm: Đối chiếu README, mã nguồn chính và bộ luật mặc định; xác định luồng đầu vào, xử lý, báo cáo và giới hạn hiện tại.
+- File thay đổi: SESSION_LOG.md.
+- Quyết định quan trọng: Mô tả theo trạng thái mã nguồn hiện tại; không xem bộ khung là bộ kiểm chuẩn ads/init đã hoàn thiện.
+- Kiểm tra và kết quả: Git sạch trước khi ghi nhật ký; các file liên quan đã đọc. Không chạy kiểm thử vì không sửa mã.
+- Việc còn lại / trở ngại: Không có trong phạm vi yêu cầu giải thích.
+- Bước tiếp theo: Chờ yêu cầu bổ sung luật ads/init hoặc tích hợp còn thiếu.
+
 
 ### 2026-09-10 17:22 — Dựng khung apk-audit
 
