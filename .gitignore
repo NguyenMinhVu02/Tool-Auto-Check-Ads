@@ -7,3 +7,4 @@ out/
 .cache/
 dist/
 *.egg-info/
+frontend/node_modules/

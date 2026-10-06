@@ -101,6 +101,9 @@ class FrameworkTests(unittest.TestCase):
             response = json.dumps({'rule_id':'EXAMPLE','status':'FAIL','evidence':evidence})
             finding, trace = evaluate(self.agent_rule(), WorkspaceTools(self.ws), ReplayEngine([response]), '')
             self.assertEqual(finding.status, status)
+        response = json.dumps({'rule_id':'EXAMPLE','status':'PASS','evidence':[]})
+        finding, _ = evaluate(self.agent_rule(), WorkspaceTools(self.ws), ReplayEngine([response]), '')
+        self.assertEqual(finding.status, 'UNKNOWN')
 
     def test_invalid_agent_output_and_wrong_rule(self):
         for responses in [['bad', 'bad'], [json.dumps({'rule_id':'OTHER','status':'PASS'})], [json.dumps({'rule_id':'EXAMPLE','status':'bogus'})], [json.dumps({'rule_id':'EXAMPLE','status':{}})]]:

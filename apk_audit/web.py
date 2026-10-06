@@ -96,7 +96,7 @@ class AuditJobs:
                 archive,
                 rules=self.rules,
                 out=self.output_root / job_id,
-                engine="none",
+                engine="codex",
                 ads_scripts=documents.get("ads_scripts"),
                 checklist=documents.get("checklist"),
                 progress=lambda stage: self.update(job_id, stage=stage),
@@ -124,7 +124,7 @@ def make_handler(jobs):
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
-            self.send_header("Content-Security-Policy", "default-src 'self'; object-src 'none'; base-uri 'none'")
+            self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'")
             self.end_headers()
             self.wfile.write(body)
 

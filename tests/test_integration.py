@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from test_framework import FrameworkTests
 from apk_audit.contracts import AgentResult, Rule
@@ -76,10 +77,27 @@ class IntegrationTests(unittest.TestCase):
         bad = subprocess.run([sys.executable, '-m', 'apk_audit', '/does/not/exist'], capture_output=True, text=True)
         self.assertEqual(bad.returncode, 2)
 
-    def test_missing_live_engine_is_explicit(self):
-        with self.assertRaises(AuditError) as context:
-            run(self.ws, engine='codex', out=self.root/'out')
+    def test_missing_codex_cli_is_explicit(self):
+        with patch('apk_audit.engines.shutil.which', return_value=None):
+            with self.assertRaises(AuditError) as context:
+                run(self.ws, engine='codex', out=self.root/'out')
         self.assertEqual(context.exception.code, 6)
+
+    def test_default_engine_uses_codex_for_agent_rules(self):
+        (self.pack/'rules/a.yaml').write_text('''- id: EXAMPLE
+  title: Example
+  mode: agent
+  question: Inspect
+  verdict: {pass_when: "yes", fail_when: "no", unknown_when: unclear}
+''')
+        response = json.dumps({'rule_id': 'EXAMPLE', 'status': 'PASS', 'evidence': [
+            {'file': 'sources/demo/App.java', 'line': 4, 'excerpt': 'Example.init();'}]})
+        fake = ReplayEngine([response])
+        fake.name = 'codex:gpt-6-luna'
+        with patch('apk_audit.pipeline.get_engine', return_value=fake) as get_engine:
+            report = run(self.ws, rules=self.pack, out=self.root/'out', cache_dir=self.root/'cache')
+        get_engine.assert_called_once_with('codex')
+        self.assertEqual(report['summary']['pass'], 1)
 
     def test_mcp_stdio(self):
         from fastmcp import Client

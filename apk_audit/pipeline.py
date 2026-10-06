@@ -57,7 +57,7 @@ def load_document(path):
     except (OSError, ValueError) as exc:
         raise AuditError(f"Không đọc được tài liệu: {exc}") from exc
 
-def run(target, *, rules=None, out=None, engine="none", only=None, cache_dir=None,
+def run(target, *, rules=None, out=None, engine="codex", only=None, cache_dir=None,
         refresh=False, refresh_rule=None, max_tool_calls=400, trace=False,
         format="both", no_cache=False, ads_scripts=None, checklist=None, provider=None,
         progress=None):

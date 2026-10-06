@@ -33,11 +33,13 @@ class WebTests(unittest.TestCase):
 
     def test_page_and_upload_report_flow(self):
         page = self.request("/").read()
-        self.assertIn(b'id="start-button"', page)
-        self.assertIn(b'id="ads-input"', page)
-        self.assertIn(b'id="working-input"', page)
+        self.assertIn(b'id="root"', page)
+        self.assertIn(b'/app.js', page)
+        self.assertIn(b'/app.css', page)
+        self.assertIn(b'start-button', self.request('/app.js').read())
 
         def fake_run(archive, *, out, **kwargs):
+            self.assertEqual(kwargs['engine'], 'codex')
             self.assertEqual(Path(archive).read_bytes(), b"fake archive")
             output = Path(out)
             output.mkdir(parents=True)

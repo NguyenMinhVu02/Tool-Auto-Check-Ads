@@ -68,7 +68,7 @@ def evaluate(rule, tools, engine, context, max_tool_calls=None):
         except (OSError, ValueError, KeyError, TypeError):
             pass
         finding.evidence.append({"file":item.get("file"),"line":item.get("line"),"excerpt":item.get("excerpt"),"verified":verified})
-    if finding.status == "FAIL" and not any(x["verified"] for x in finding.evidence):
+    if finding.status in {"PASS", "FAIL"} and not any(x["verified"] for x in finding.evidence):
         finding.status = "UNKNOWN"
         finding.reason = "unverified_evidence"
     return finding, trace

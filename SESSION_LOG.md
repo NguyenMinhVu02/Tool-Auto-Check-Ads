@@ -2,15 +2,65 @@
 
 ## Trạng thái hiện tại
 
-- Cập nhật: 2026-09-25 10:46 (Asia/Ho_Chi_Minh).
-- Mục tiêu: Push các thay đổi UI và tiến độ audit lên Git trước bước tiếp theo.
-- Trạng thái: Hoàn tất; commit tính năng `7d9a5f3` đã push lên `origin/main`.
-- Kết quả: Đã đưa lên Git các ô tài liệu tùy chọn, font Poppins, cảnh báo rời trang và hiển thị 5 bước audit. Server localhost đang chạy tại 127.0.0.1:8765.
-- Kiểm tra: 22/22 unittest đạt trong phiên push; GitHub nhận commit `7d9a5f3`; node --check và staged diff --check đạt.
-- Giới hạn: Cảnh báo là hộp thoại chuẩn của trình duyệt, không tùy biến được nội dung; job chỉ ở bộ nhớ server nên khởi động lại server sẽ mất trạng thái. Engine chấm logic chưa nối; chưa thử APK thương mại.
-- Bước tiếp theo: Nối bộ chấm logic có evidence và kiểm trên APK thực tế.
+- Cập nhật: 2026-10-06 17:55 (Asia/Ho_Chi_Minh).
+- Mục tiêu: Push mã giao diện Ant Design và tích hợp Codex Luna lên GitHub.
+- Trạng thái: Hoàn tất push mã hiện tại; kiểm định AI trên APK đối tác thật vẫn đang làm.
+- Kết quả: `origin/main` chứa giao diện Ant Design, frontend React/Vite đã build và adapter Codex Luna. Web local vẫn chạy tại `http://127.0.0.1:8765`.
+- Kiểm tra: Remote main trước push trùng HEAD `403267f`; `npm run build` đạt; 24/24 unittest đạt; `git diff --check` đạt. Một rule Codex Luna đã được thử trên workspace mẫu từ phiên trước.
+- Giới hạn: Chưa thử toàn bộ 10 luật trên APK và tài liệu đối tác thật; kết luận AI cần người kiểm lại. Job web chỉ ở bộ nhớ server; cảnh báo rời trang là hộp thoại chuẩn của trình duyệt.
+- Bước tiếp theo: Audit APK đối tác cùng ADS SCRIPTS/working file, xem chất lượng verdict và chỉnh rule nếu cần; commit/push khi người dùng yêu cầu.
 
 ## Lịch sử phiên
+
+### 2026-10-06 17:55 — Push Ant Design và Codex Luna (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Đưa toàn bộ thay đổi mã hiện tại lên Git theo yêu cầu người dùng.
+- Trạng thái: Hoàn tất sau khi push `origin/main`.
+- Đã làm: Fetch main qua SSH và xác nhận remote chưa có commit mới; build frontend; chạy test; commit mã, frontend build và nhật ký; push `origin/main`.
+- File thay đổi: .gitignore, README.md, SESSION_LOG.md, apk_audit/{agent.py,cli.py,config.py,engines.py,pipeline.py,web.py}, apk_audit/web_assets/{index.html,app.js,app.css}, frontend/*, tests/{test_codex_engine.py,test_framework.py,test_integration.py,test_web.py}.
+- Kiểm tra và kết quả: `npm run build -- --logLevel error` đạt; 24/24 unittest đạt; `git diff --check` đạt; remote main trước push = `403267f`.
+- Việc còn lại / trở ngại: Chưa chạy và kiểm định 10 rule với APK đối tác thật cùng cặp tài liệu thực tế.
+- Bước tiếp theo: Audit APK đối tác và rà từng verdict AI.
+
+### 2026-10-06 17:24 — Đổi giao diện sang Ant Design (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Dùng Ant Design cho web audit local.
+- Trạng thái: Hoàn tất trong phạm vi giao diện; chưa commit/push.
+- Đã làm: Tạo frontend React/Vite với Ant Design và Poppins; thay màn upload, tài liệu, tiến độ, thống kê, danh sách rule bằng component Ant Design; giữ API/job hiện tại; build file tĩnh vào `apk_audit/web_assets`; cập nhật CSP để Ant Design tạo style; mở lại web trong Google Chrome.
+- File thay đổi: .gitignore, README.md, SESSION_LOG.md, apk_audit/web.py, apk_audit/web_assets/{index.html,app.js,app.css}, frontend/{package.json,package-lock.json,vite.config.js,index.html,src/*}, tests/test_web.py. Các thay đổi Codex Luna từ phiên trước vẫn được giữ nguyên.
+- Kiểm tra và kết quả: `npm run build` đạt; Chrome screenshot cho thấy bố cục Ant Design; Chrome DevTools xác nhận chọn APK chỉ bật nút Bắt đầu kiểm tra, không tự audit; 24/24 unittest đạt; `uv build --offline` tạo wheel chứa assets mới; `git diff --check` đạt.
+- Việc còn lại / trở ngại: Chưa kiểm định verdict AI bằng APK và tài liệu đối tác thật; chưa commit/push theo quy tắc dự án.
+- Bước tiếp theo: Người dùng kiểm tra giao diện tại localhost; sau đó audit APK thật và rà chất lượng rule.
+
+### 2026-10-06 17:11 — Mở web trong Chrome (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Mở giao diện web audit local bằng Google Chrome.
+- Trạng thái: Hoàn tất.
+- Đã làm: Khởi động `apk-audit serve` trên 127.0.0.1:8765, mở URL bằng `google-chrome` trong phiên trình duyệt hiện có.
+- File thay đổi: SESSION_LOG.md (nhật ký).
+- Kiểm tra và kết quả: HTTP GET tới trang chủ trả `200 OK` ngoài sandbox; chưa thao tác upload trong phiên này.
+- Việc còn lại / trở ngại: Server chạy trong phiên terminal hiện tại; tích hợp AI chưa kiểm định bằng APK đối tác thật.
+- Bước tiếp theo: Người dùng có thể chọn APK và bấm Bắt đầu kiểm tra trong Chrome.
+
+### 2026-10-06 16:59 — Kết nối Codex Luna và rà soát tiến độ (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Dùng Codex `gpt-6-luna` đánh giá rule ads qua CLI/web và báo tiến độ.
+- Trạng thái: Đang làm; tích hợp và smoke test xong, kiểm định với APK đối tác còn lại.
+- Đã làm: Thay adapter Codex mẫu bằng lời gọi Codex CLI có JSON schema, phiên chỉ đọc, timeout và ngân sách tool; đặt làm engine mặc định cho CLI/web; chỉ chấp nhận PASS/FAIL khi có evidence file/dòng hợp lệ; cập nhật giao diện, README và kiểm thử.
+- File thay đổi: README.md, SESSION_LOG.md, apk_audit/{agent.py,cli.py,config.py,engines.py,pipeline.py,web.py}, apk_audit/web_assets/index.html, tests/{test_codex_engine.py,test_framework.py,test_integration.py,test_web.py}.
+- Kiểm tra và kết quả: 24/24 unittest đạt ngoài sandbox. Chạy live `ADS_INIT_ORDER` trên `examples/workspace` bằng Codex `gpt-6-luna`: 4 tool calls, report tạo thành công, UNKNOWN có evidence xác minh vì workspace mẫu thiếu mã SDK. `git diff --check` đạt. Không thử APK đối tác hay 10 luật live cùng lúc.
+- Việc còn lại / trở ngại: Cần APK và cặp tài liệu thật để xác nhận độ chính xác của verdict; các thay đổi chưa commit/push. Chưa kiểm tra remote GitHub trực tiếp.
+- Bước tiếp theo: Chạy audit thực tế với tài liệu đối tác, rà từng verdict và hiệu chỉnh rule nếu cần.
+
+### 2026-10-01 15:04 — Rà soát tiến độ (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Cho biết phần đã triển khai và phần chưa triển khai.
+- Trạng thái: Hoàn tất rà soát.
+- Đã làm: Đối chiếu SESSION_LOG, README, mã nguồn, trạng thái Git và tiến trình web server.
+- File thay đổi: SESSION_LOG.md (chỉ nhật ký phiên).
+- Kiểm tra và kết quả: HEAD = origin/main theo nhánh theo dõi cục bộ = `403267f`; chưa có thay đổi mã trước khi ghi nhật ký; không thấy tiến trình `apk-audit serve`. Kết quả 22/22 test thuộc phiên trước; chưa chạy lại.
+- Việc còn lại / trở ngại: Engine AI/semantic chưa kết nối, nên 10 luật logic trả UNKNOWN với `engine none`; chưa audit APK đối tác thật với tài liệu ADS SCRIPTS/working thực tế; job web chỉ lưu trong bộ nhớ. Kiểm tra HTTP localhost bị sandbox chặn socket, nên chưa xác nhận cổng trực tiếp.
+- Bước tiếp theo: Nối engine chấm logic có bằng chứng và chạy đối chiếu APK cùng tài liệu thật.
 
 ### 2026-09-25 10:46 — Push UI và tiến độ audit (Asia/Ho_Chi_Minh)
 
