@@ -4,22 +4,23 @@
 
 - Cập nhật: 2026-10-16 15:29 (Asia/Ho_Chi_Minh).
 - Mục tiêu: Commit và push các cải tiến audit lên GitHub theo yêu cầu người dùng.
-- Trạng thái: Đang làm; đã kiểm thử và kiểm tra remote, chuẩn bị commit/push.
+- Trạng thái: Hoàn tất push mã cải tiến; GitHub main đã nhận commit 6146440.
 - Kết quả: Nhận hai mẫu CSV thật; kiểm kê key/ID, Package, App ID; thêm rule giao thoa thành 11 rule; siết prompt theo nhánh và hợp đồng app; sửa bằng chứng một lần với đủ context; xác minh được đoạn nhiều dòng; cache theo từng rule và tiến độ n/11 trên web. Web mã mới chạy tại http://127.0.0.1:8765.
 - Kiểm tra: 35/35 unittest đạt, frontend build đạt, rule pack hợp lệ, git diff --check đạt. CSV thật có 24 placement, local release 23, 23 ID chung khớp, thiếu inter_onboarding; Package và App ID khớp. Đã chạy các lượt đủ 11 rule (~11–12 phút) và kiểm chứng riêng sau hiệu chỉnh; bản tổng hợp tại out/cast-tv-final-review/validation.md.
 - Giới hạn: Chưa chạy lại toàn bộ 11 rule sau sửa cuối về đoạn trích nhiều dòng; đã xác minh trực tiếp 5/5 đoạn của rule ID và chạy live rule giao thoa. Kết luận mã tĩnh vẫn cần rà ngữ nghĩa; các FAIL cũ về page 1/Welcome/Splash retry đã được ghi rõ và hiệu chỉnh. Chưa kiểm runtime; job mất khi restart server; lượt đầu web vẫn cần nhiều phút.
-- Bước tiếp theo: Người dùng thử APK và CSV trên web; kiểm runtime các nhánh quảng cáo/Firebase khi cần; commit/push chỉ khi được yêu cầu.
+- Bước tiếp theo: Máy khác có thể pull main để nhận bản mới; kiểm thử web đầu cuối và runtime theo các giới hạn đã ghi.
 
 ## Lịch sử phiên
 
 ### 2026-10-16 15:29 — Chuẩn bị push cải tiến audit (Asia/Ho_Chi_Minh)
 
 - Mục tiêu: Đưa toàn bộ cải tiến CSV, inventory, bằng chứng, rule và tiến độ web lên GitHub.
-- Trạng thái: Đang làm.
+- Trạng thái: Hoàn tất; GitHub main nhận commit 6146440.
 - Đã làm: Kiểm tra Git main và remote; fetch HTTPS thiếu đăng nhập, fetch trực tiếp SSH thành công; HEAD và main trên remote cùng commit trước khi commit mới.
 - File thay đổi: Mã và tài liệu trong lượt triển khai trước, kèm SESSION_LOG.md. APK/CSV đối tác, cache và báo cáo out/ bị Git ignore.
 - Kiểm tra: Chạy mới 35/35 unittest đạt; npm run build đạt; git diff --check đạt.
-- Bước tiếp theo: Commit, push main và xác minh commit trên remote; ghi kết quả xuất bản.
+- Kết quả xuất bản: Commit 6146440 (feat: deepen ads audits and show rule progress), push origin main thành công từ 7163042 lên 6146440. Nhật ký xác nhận được commit riêng sau mã.
+- Bước tiếp theo: Pull main trên máy khác để nhận mã mới; các phần runtime và job bền vững vẫn theo kế hoạch.
 
 ### 2026-10-16 15:21 — Cơ chế và phần cần hoàn thiện (Asia/Ho_Chi_Minh)
 
