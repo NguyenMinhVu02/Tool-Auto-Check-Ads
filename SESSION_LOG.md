@@ -2,15 +2,25 @@
 
 ## Trạng thái hiện tại
 
-- Cập nhật: 2026-10-16 17:00 (Asia/Ho_Chi_Minh).
+- Cập nhật: 2026-10-16 17:21 (Asia/Ho_Chi_Minh).
 - Mục tiêu: Tăng cỡ chữ và trình bày kết quả audit dễ đọc, giữ đầy đủ nội dung.
-- Trạng thái: Hoàn tất UI và kiểm chứng; chưa commit/push.
+- Trạng thái: Hoàn tất; code đã push lên GitHub main tại commit 7d439cf.
 - Kết quả: Tiêu đề 17px, nội dung 15px, evidence 13px; báo cáo cũ có ý chính và mở toàn bộ phân tích thành từng ý, giữ nguyên identifier; báo cáo có mục được trình bày theo Kết luận/Cần sửa/Đã đúng/Chưa xác minh. Assets mới phục vụ tại http://127.0.0.1:8765.
 - Kiểm tra: 51/51 unittest đạt ngoài sandbox; frontend build và git diff --check đạt; Node kiểm tra giữ đủ nội dung/identifier và nhận section; HTTP assets xác nhận nội dung mới và font 15px.
 - Giới hạn: Chưa kiểm tra trực quan bằng browser automation. Prompt hướng dẫn reasoning theo mục đã sửa trong agent.py, có hiệu lực khi backend khởi động lại và gọi AI mới; cache/báo cáo cũ dùng renderer tương thích. Giữ server hiện tại để không mất job đang xem. Claude OAuth vẫn cần đăng nhập lại theo phiên trước.
-- Bước tiếp theo: Tải lại trang để nhận UI; có thể chạy lại với cache để xem kết quả. Chỉ commit/push khi được yêu cầu.
+- Bước tiếp theo: Máy khác pull main; đăng nhập lại Claude nếu cần và restart backend để nạp prompt mới.
 
 ## Lịch sử phiên
+
+### 2026-10-16 17:21 — Push Claude CLI, CSV và UI kết quả (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Commit/push code theo yêu cầu người dùng.
+- Trạng thái: Hoàn tất push code 7d439cf lên origin/main.
+- Đã làm: Kiểm remote main cùng HEAD cũ 42a5376; commit toàn bộ sửa CSV, Claude adapter/bộ chọn AI và UI dễ đọc; push SSH thành công, không force push. APK/CSV đối tác và out/ không đưa vào commit.
+- File thay đổi: 21 file code/test/assets/docs ở commit 7d439cf; nhật ký xuất bản trong commit tiếp theo.
+- Kiểm tra: Chạy mới 51/51 unittest đạt, npm run build exit 0, git diff --cached --check đạt; git push xác nhận main từ 42a5376 lên 7d439cf.
+- Việc còn lại: Các giới hạn đã ghi nhận về Claude OAuth/verdict thật, browser automation và nạp prompt sau restart vẫn còn; không thay đổi backend đang chạy trong lượt push.
+- Bước tiếp theo: Pull main trên máy khác hoặc tải lại UI local.
 
 ### 2026-10-16 17:00 — Làm rõ phần đọc kết quả (Asia/Ho_Chi_Minh)
 
