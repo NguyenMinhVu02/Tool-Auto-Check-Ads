@@ -8,6 +8,7 @@ from urllib.parse import unquote, urlsplit
 from uuid import uuid4
 
 from .errors import AuditError
+from .engines import detect_engines
 from .pipeline import run
 
 
@@ -51,12 +52,20 @@ class AuditJobs:
             self.documents[document_id] = (kind, path)
         return document_id
 
-    def reserve(self, filename, ads_id=None, checklist_id=None):
+    def reserve(self, filename, ads_id=None, checklist_id=None, engine=None):
         name = Path(unquote(filename).replace("\\", "/")).name
         if not name or Path(name).suffix.lower() not in ALLOWED_EXTENSIONS:
             raise ValueError("Chỉ nhận file .apk, .xapk hoặc .apkm")
         if bool(ads_id) != bool(checklist_id):
             raise ValueError("Cần cả ADS SCRIPTS và working file; nếu thiếu một file hãy bỏ qua cả hai")
+        detected = detect_engines()
+        engine = detected['default'] if engine is None else engine
+        if engine is None:
+            raise ValueError("Chưa tìm thấy Codex CLI hoặc Claude CLI trên PATH của máy chạy server")
+        if engine not in {'codex', 'claude'}:
+            raise ValueError("Engine không hợp lệ; chọn codex hoặc claude")
+        if not any(item['id'] == engine and item['installed'] for item in detected['engines']):
+            raise ValueError(f"Không tìm thấy {engine} CLI; cài CLI vào PATH rồi bấm Phát hiện lại")
         with self.lock:
             if self.active is not None:
                 raise RuntimeError("Đang xử lý một file khác; hãy đợi kết quả")
@@ -71,7 +80,7 @@ class AuditJobs:
                 self.documents.pop(checklist_id)
             job_id = uuid4().hex
             self.active = job_id
-            self.jobs[job_id] = {"id": job_id, "filename": name, "state": "uploading", "stage": "upload", "docs_used": bool(documents)}
+            self.jobs[job_id] = {"id": job_id, "filename": name, "state": "uploading", "stage": "upload", "docs_used": bool(documents), "engine": engine}
             self.jobs[job_id]["documents"] = documents
         return job_id, self.output_root / "uploads" / (job_id + Path(name).suffix.lower())
 
@@ -86,7 +95,7 @@ class AuditJobs:
             return dict(self.jobs[job_id]) if job_id in self.jobs else None
 
     def start(self, job_id, archive):
-        self.update(job_id, state="running", stage="unpack")
+        self.update(job_id, state="running", stage="documents")
         threading.Thread(target=self._execute, args=(job_id, archive), daemon=True).start()
 
     def _execute(self, job_id, archive):
@@ -103,7 +112,7 @@ class AuditJobs:
                 rules=self.rules,
                 out=self.output_root / job_id,
                 cache_dir=self.output_root / "cache",
-                engine="codex",
+                engine=self.get(job_id)["engine"],
                 ads_scripts=documents.get("ads_scripts"),
                 checklist=documents.get("checklist"),
                 progress=lambda stage: self.update(job_id, stage=stage),
@@ -141,6 +150,9 @@ def make_handler(jobs):
 
         def do_GET(self):
             route = urlsplit(self.path).path
+            if route == '/api/engines':
+                self._json(200, detect_engines())
+                return
             static = {"/": ("index.html", "text/html"), "/app.css": ("app.css", "text/css"), "/app.js": ("app.js", "text/javascript")}
             for weight in ("Regular", "Medium", "SemiBold", "Bold"):
                 static[f"/fonts/Poppins-{weight}.ttf"] = (f"fonts/Poppins-{weight}.ttf", "font/ttf")
@@ -197,6 +209,7 @@ def make_handler(jobs):
                     self.headers.get("X-Filename", ""),
                     self.headers.get("X-Ads-Scripts-Id"),
                     self.headers.get("X-Checklist-Id"),
+                    self.headers.get("X-Audit-Engine"),
                 )
             except ValueError as exc:
                 self._json(400, {"error": str(exc)})

@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { findingText } from './findingText';
 import {
   Alert, Button, Card, Collapse, Empty, Layout, List, Progress, Space,
-  Statistic, Steps, Tag, Typography, Upload,
+  Select, Statistic, Steps, Tag, Typography, Upload,
 } from 'antd';
 import {
   AppstoreOutlined, CheckCircleOutlined, CloudUploadOutlined,
@@ -13,9 +14,10 @@ const { Sider, Content } = Layout;
 const { Dragger } = Upload;
 const { Title, Text, Paragraph } = Typography;
 const jobStorageKey = 'apk-audit-active-job';
-const stageOrder = ['upload', 'unpack', 'facts', 'rules', 'report'];
+const stageOrder = ['upload', 'documents', 'unpack', 'facts', 'rules', 'report'];
 const stageLabels = {
   upload: 'Tiếp nhận ứng dụng',
+  documents: 'Đọc tài liệu đối chiếu',
   unpack: 'Giải mã APK',
   facts: 'Trích xuất dữ liệu',
   rules: 'Đối chiếu quy tắc',
@@ -23,9 +25,10 @@ const stageLabels = {
 };
 const steps = [
   { title: 'Tiếp nhận', description: 'APK / XAPK / APKM' },
+  { title: 'Tài liệu', description: 'ADS SCRIPTS & working file' },
   { title: 'Giải mã', description: 'jadx workspace' },
   { title: 'Trích xuất', description: 'Manifest & facts' },
-  { title: 'Đối chiếu', description: '10 rule ads' },
+  { title: 'Đối chiếu', description: 'Các rule ads' },
   { title: 'Báo cáo', description: 'JSON & Markdown' },
 ];
 const statusLabels = { PASS: 'Đạt', FAIL: 'Cần xử lý', UNKNOWN: 'Chưa rõ', SKIPPED: 'Bỏ qua' };
@@ -50,12 +53,13 @@ async function uploadDocument(kind, file) {
   return (await readJson(response)).id;
 }
 
-function uploadArchive(file, documentIds, onProgress) {
+function uploadArchive(file, documentIds, engine, onProgress) {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
     request.open('POST', '/api/jobs');
     request.setRequestHeader('Content-Type', 'application/octet-stream');
     request.setRequestHeader('X-Filename', encodeURIComponent(file.name));
+    request.setRequestHeader('X-Audit-Engine', engine);
     if (documentIds) {
       request.setRequestHeader('X-Ads-Scripts-Id', documentIds.ads_scripts);
       request.setRequestHeader('X-Checklist-Id', documentIds.checklist);
@@ -78,8 +82,20 @@ function Metric({ title, value, color, help }) {
   return <Card className={`metric-card metric-${color}`}><Statistic title={title} value={value ?? '—'} /><Text type="secondary">{help}</Text></Card>;
 }
 
+function inlineAnalysis(text) {
+  return text.split(/(`[^`]+`)/g).map((part, index) => part.startsWith('`') && part.endsWith('`')
+    ? <Text code key={index}>{part.slice(1, -1)}</Text> : part);
+}
+
 function Finding({ item }) {
   const evidence = (item.evidence || []).filter((entry) => entry.verified);
+  const analysis = findingText(item.reasoning || item.reason || 'Chưa có mô tả.');
+  const renderLine = (line, index) => {
+    const clean = line.replace(/^#{1,3}\s*/, '').replace(/\*\*/g, '').replace(/^[-•]\s*/, '');
+    const heading = clean.match(/^(Kết luận|Cần sửa|Đã đúng|Chưa xác minh)\s*:\s*(.*)$/i);
+    return heading ? <div className="finding-section" key={index}><Text strong>{heading[1]}</Text>{heading[2] && <Paragraph>{inlineAnalysis(heading[2])}</Paragraph>}</div>
+      : <li key={index}>{inlineAnalysis(clean)}</li>;
+  };
   return (
     <List.Item className="finding-item">
       <div className="finding-main">
@@ -88,7 +104,13 @@ function Finding({ item }) {
           <Tag color={statusColors[item.status]}>{statusLabels[item.status] || item.status}</Tag>
         </div>
         <Text type="secondary" className="finding-meta">{item.area} · {item.rule_id}</Text>
-        <Paragraph className="finding-reason">{item.reasoning || item.reason || 'Chưa có mô tả.'}</Paragraph>
+        {analysis.structured ? <div className="finding-reason">{analysis.lines.map((line, index) => {
+          const rendered = renderLine(line, index);
+          return rendered.type === 'li' ? <ul className="finding-points" key={index}>{rendered}</ul> : rendered;
+        })}</div> : <div className="finding-reason">
+          <Paragraph className="finding-summary">{inlineAnalysis(analysis.summary)}</Paragraph>
+          <Collapse ghost items={[{ key: 'analysis', label: 'Đọc toàn bộ phân tích', children: <ul className="finding-points">{analysis.lines.map(renderLine)}</ul> }]} />
+        </div>}
         {evidence.length > 0 && <Collapse ghost size="small" items={[{
           key: 'evidence',
           label: `${evidence.length} bằng chứng đã xác minh`,
@@ -112,8 +134,30 @@ export default function App() {
   const [error, setError] = useState(false);
   const [job, setJob] = useState(null);
   const [report, setReport] = useState(null);
+  const [engines, setEngines] = useState([]);
+  const [selectedEngine, setSelectedEngine] = useState(null);
+  const [enginesLoading, setEnginesLoading] = useState(true);
+  const [engineError, setEngineError] = useState('');
   const busyRef = useRef(false);
   const timerRef = useRef(null);
+
+  const refreshEngines = useCallback(async () => {
+    setEnginesLoading(true);
+    setEngineError('');
+    try {
+      const data = await readJson(await fetch('/api/engines'));
+      setEngines(data.engines);
+      setSelectedEngine((previous) => data.engines.some((item) => item.id === previous && item.installed) ? previous : data.default);
+    } catch (cause) {
+      setEngineError(cause.message);
+      setEngines([]);
+      setSelectedEngine(null);
+    } finally {
+      setEnginesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { refreshEngines(); }, [refreshEngines]);
 
   const changeBusy = useCallback((value) => {
     busyRef.current = value;
@@ -126,8 +170,8 @@ export default function App() {
       if (response.status === 404) sessionStorage.removeItem(jobStorageKey);
       const next = await readJson(response);
       setJob(next);
+      setStage(stageLabels[next.stage] ? next.stage : 'upload');
       if (next.state === 'running' || next.state === 'uploading') {
-        setStage(stageLabels[next.stage] ? next.stage : 'unpack');
         const ruleText = next.stage === 'rules' && next.current_rule
           ? ` · ${next.rule_completed || 0}/${next.rule_total || '?'}: ${next.current_rule_title || next.current_rule}`
           : '';
@@ -209,7 +253,7 @@ export default function App() {
   }
 
   async function beginAudit() {
-    if (busyRef.current || !apk) return;
+    if (busyRef.current || !apk || enginesLoading || !engines.some((item) => item.id === selectedEngine && item.installed)) return;
     changeBusy(true);
     setReport(null);
     setJob(null);
@@ -226,7 +270,7 @@ export default function App() {
       }
       setNotice(`Đang tải ${apk.name}…`);
       setUploadPercent(0);
-      const id = await uploadArchive(apk, documentIds, setUploadPercent);
+      const id = await uploadArchive(apk, documentIds, selectedEngine, setUploadPercent);
       sessionStorage.setItem(jobStorageKey, id);
       poll(id);
     } catch (cause) {
@@ -244,6 +288,9 @@ export default function App() {
       : 'Không bắt buộc. Có thể kiểm tra APK mà không kèm tài liệu.';
   const currentStep = stage === 'done' ? steps.length : Math.max(0, stageOrder.indexOf(stage));
   const phase = job?.state === 'error' ? 'Có lỗi' : stage === 'done' ? 'Đã tạo báo cáo' : busy ? stageLabels[stage] || 'Đang xử lý' : 'Sẵn sàng';
+  const ruleTotal = report?.summary?.total ?? job?.rule_total;
+  const displayedEngine = report?.engine || job?.engine || selectedEngine;
+  const engineLabel = displayedEngine?.startsWith('claude') ? 'Claude CLI' : displayedEngine?.startsWith('codex') ? 'Codex GPT-6 Luna' : 'AI CLI';
 
   return (
     <Layout className="app-layout">
@@ -259,7 +306,7 @@ export default function App() {
       </Sider>
       <Content className="main-content" id="overview">
         <header className="page-header">
-          <div><Text className="eyebrow">DASHBOARD / TỔNG QUAN</Text><Title level={2}>Kiểm tra tích hợp Ads</Title><Text type="secondary">Kiểm tra logic quảng cáo trong ứng dụng Android bằng Codex GPT-6 Luna.</Text></div>
+          <div><Text className="eyebrow">DASHBOARD / TỔNG QUAN</Text><Title level={2}>Kiểm tra tích hợp Ads</Title><Text type="secondary">Kiểm tra logic quảng cáo trong ứng dụng Android bằng Codex hoặc Claude CLI.</Text></div>
           <Tag className="local-tag" color="processing"><span className="live-dot" /> Local mode</Tag>
         </header>
 
@@ -281,7 +328,18 @@ export default function App() {
             <div className="document-field"><Text strong>ADS SCRIPTS</Text><Upload id="ads-upload" accept=".csv,.json" showUploadList={false} beforeUpload={(file) => chooseDocument(file, 'ads')}><Button icon={<FolderOpenOutlined />} disabled={busy}>Chọn file</Button></Upload><Text type="secondary" ellipsis>{ads?.name || 'Chưa chọn file'}</Text></div>
             <div className="document-field"><Text strong>Working file</Text><Upload id="working-upload" accept=".csv,.json" showUploadList={false} beforeUpload={(file) => chooseDocument(file, 'working')}><Button icon={<FolderOpenOutlined />} disabled={busy}>Chọn file</Button></Upload><Text type="secondary" ellipsis>{working?.name || 'Chưa chọn file'}</Text></div>
           </div>
-          <div className="start-row"><Text type="secondary">{documentHint}</Text><Button id="start-button" type="primary" size="large" icon={busy ? <LoadingOutlined /> : <FileSearchOutlined />} disabled={!apk || busy} onClick={beginAudit}>{busy ? 'Đang kiểm tra' : 'Bắt đầu kiểm tra'}</Button></div>
+          <div className="engine-field">
+            <Text strong>AI dùng để audit</Text>
+            <Space wrap>
+              <Select id="engine-select" aria-label="AI dùng để audit" style={{ width: 290 }} placeholder="Chưa tìm thấy CLI" value={selectedEngine || undefined} loading={enginesLoading} disabled={busy || enginesLoading}
+                onChange={setSelectedEngine} options={engines.map((item) => ({ value: item.id, label: `${item.label}${item.installed ? '' : ' — chưa cài'}`, disabled: !item.installed }))} />
+              <Button onClick={refreshEngines} loading={enginesLoading} disabled={busy}>Phát hiện lại</Button>
+            </Space>
+            <Text type="secondary">Phát hiện trên máy chạy server. CLI cần được đăng nhập sẵn; Claude dùng model mặc định của CLI.</Text>
+            {engineError && <Alert type="error" showIcon message={engineError} />}
+            {!enginesLoading && !engineError && !selectedEngine && <Alert type="warning" showIcon message="Cài và đăng nhập Codex CLI hoặc Claude CLI, sau đó khởi động lại server nếu PATH thay đổi và bấm Phát hiện lại." />}
+          </div>
+          <div className="start-row"><Text type="secondary">{documentHint}</Text><Button id="start-button" type="primary" size="large" icon={busy ? <LoadingOutlined /> : <FileSearchOutlined />} disabled={!apk || busy || enginesLoading || !selectedEngine} onClick={beginAudit}>{busy ? 'Đang kiểm tra' : 'Bắt đầu kiểm tra'}</Button></div>
         </Card>
 
         <Card className="steps-card" title="Tiến độ audit" extra={<Tag color={error ? 'error' : busy ? 'processing' : stage === 'done' ? 'success' : 'default'}>{phase}</Tag>}>
@@ -296,7 +354,7 @@ export default function App() {
 
         <section className="results-section" id="results">
           <div className="results-header"><div><Text className="eyebrow">KẾT QUẢ</Text><Title level={3}>Tổng quan kiểm tra</Title></div>{report && <Button href={`/api/jobs/${job.id}/report`} icon={<DownloadOutlined />}>Tải report.json</Button>}</div>
-          <Alert className="ai-notice" type="info" showIcon icon={<InfoCircleOutlined />} message={`Codex GPT-6 Luna đánh giá ${report?.summary?.total || job?.rule_total || 10} rule ads`} description="PASS và FAIL cần bằng chứng file/dòng hợp lệ. Khi thiếu dữ liệu hoặc không thể kết nối AI, kết quả là Chưa rõ." />
+          <Alert className="ai-notice" type="info" showIcon icon={<InfoCircleOutlined />} message={ruleTotal ? `${engineLabel} đánh giá ${ruleTotal} rule ads` : `${engineLabel} đọc mã và đánh giá các rule ads`} description="PASS và FAIL cần bằng chứng file/dòng hợp lệ. Khi thiếu dữ liệu hoặc không thể kết nối AI, kết quả là Chưa rõ. Nội dung mã và tài liệu được gửi tới nhà cung cấp AI đã chọn, sử dụng quota của tài khoản CLI." />
           {report?.inventory?.documents_available && <Alert className="inventory-notice" type={report.inventory.missing_local.length || report.inventory.mismatched_ids.length || report.inventory.package_match === false || report.inventory.app_id_match === false ? 'warning' : 'success'} showIcon
             message={`Kiểm kê ID: ${report.inventory.matching_ids.length}/${report.inventory.expected_count} placement khớp config local`}
             description={<Space direction="vertical" size={2}>

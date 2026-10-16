@@ -27,10 +27,21 @@ class IntegrationTests(unittest.TestCase):
         rules = []
         run(self.ws, rules=self.pack, out=self.root/'out', engine='none', progress=stages.append,
             rule_progress=lambda event, detail: rules.append((event, detail)))
-        self.assertEqual(stages, ['unpack', 'facts', 'rules', 'report'])
+        self.assertEqual(stages, ['documents', 'unpack', 'facts', 'rules', 'report'])
         self.assertEqual(rules[0][0], 'start')
         self.assertEqual(rules[-1][0], 'complete')
         self.assertEqual(rules[-1][1]['completed'], rules[-1][1]['total'])
+
+    def test_document_failure_happens_before_unpack(self):
+        document = self.root / 'bad.csv'
+        document.write_text('foo,bar\na,b\n')
+        stages = []
+        with patch('apk_audit.pipeline.prepare') as prepare:
+            with self.assertRaises(AuditError):
+                run(self.ws, rules=self.pack, engine='none', ads_scripts=document,
+                    out=self.root / 'out', progress=stages.append)
+        prepare.assert_not_called()
+        self.assertEqual(stages, ['documents'])
 
     def test_cache_replays_and_invalidates_when_context_changes(self):
         (self.pack / 'rules/a.yaml').write_text('''- id: EXAMPLE

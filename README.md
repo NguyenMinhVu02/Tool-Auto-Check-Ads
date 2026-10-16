@@ -1,6 +1,6 @@
 # apk-audit
 
-Khung CLI audit APK theo thiết kế v2. Bộ luật mặc định hiện chứa chuẩn **logic ads/init** rút từ `Example-AdLogic-Partner` tại commit `e8f4337` (xem [hợp đồng tham chiếu](docs/base-ads-contract.md)). Mặc định Codex CLI dùng `gpt-6-luna` đọc workspace đã giải mã và đánh giá 11 luật logic, gồm một lượt rà lỗi giao thoa giữa các luồng ads; cần cài và đăng nhập Codex CLI. `--engine none` tắt AI và trả `UNKNOWN`. ID ads của base không dùng làm ID kỳ vọng cho app đối tác.
+Khung CLI audit APK theo thiết kế v2. Bộ luật mặc định hiện chứa chuẩn **logic ads/init** rút từ `Example-AdLogic-Partner` tại commit `e8f4337` (xem [hợp đồng tham chiếu](docs/base-ads-contract.md)). Mặc định Codex CLI dùng `gpt-6-luna` đọc workspace đã giải mã và đánh giá 11 luật logic, gồm một lượt rà lỗi giao thoa giữa các luồng ads; cần cài và đăng nhập Codex CLI. Có thể chọn Claude CLI bằng `--engine claude` hoặc bộ chọn AI trên web. `--engine none` tắt AI và trả `UNKNOWN`. ID ads của base không dùng làm ID kỳ vọng cho app đối tác.
 
 ## Chạy ngay
 
@@ -22,11 +22,25 @@ Workspace mẫu chỉ chứa dữ liệu minh họa, không phải APK/app thậ
 uv run apk-audit serve
 ```
 
-Mở `http://127.0.0.1:8765`, chọn hoặc kéo APK/XAPK/APKM vào vùng tải lên, rồi bấm **Bắt đầu kiểm tra**. Chọn file không tự chạy. Hai ô ADS SCRIPTS và working file là tùy chọn: chỉ khi chọn **đủ cả hai**, web mới đưa chúng vào pipeline; thiếu một file thì bỏ qua cả cặp. Mỗi tài liệu nhận JSON object, CSV hai cột `key,value`, hoặc đúng mẫu bảng ADS SCRIPTS/working file của Infinity, tối đa 5 MiB. Bảng ADS SCRIPTS cần bốn cột đầu `STT,Ads type,Name,ID`; working file cần `Phase 2,Task,Task Detail,Document`. Web dùng font Poppins lưu sẵn trong gói để chạy offline; giấy phép ở `apk_audit/web_assets/fonts/OFL.txt`.
+Mở `http://127.0.0.1:8765`, chọn hoặc kéo APK/XAPK/APKM vào vùng tải lên, rồi bấm **Bắt đầu kiểm tra**. Chọn file không tự chạy. Hai ô ADS SCRIPTS và working file là tùy chọn: chỉ khi chọn **đủ cả hai**, web mới đưa chúng vào pipeline; thiếu một file thì bỏ qua cả cặp. Mỗi tài liệu nhận JSON object, CSV hai cột `key,value`, hoặc bảng ADS SCRIPTS/working file của Infinity, tối đa 5 MiB. ADS SCRIPTS nhận các cột `Ads type`, `Name` hoặc `Tên`, `ID`; đọc theo tên cột nên có thể đổi thứ tự. Working file nhận cả `Task/Task Detail` và `Content/Detail`. Header được chuẩn hóa dấu/khoảng trắng/hoa thường; tên placement và giá trị trong ô được giữ nguyên. Web đọc tài liệu trước khi giải mã và hiển thị riêng bước lỗi CSV. Web dùng font Poppins lưu sẵn trong gói để chạy offline; giấy phép ở `apk_audit/web_assets/fonts/OFL.txt`.
 
-Trang lưu file đã tải, báo cáo và cache dưới `out/web/`, sau đó hiển thị kiểm kê ID, tổng quan và từng luật. Khi chạy, web hiển thị bước hiện tại và trong bước đối chiếu hiển thị số rule đã xong, rule đang chạy và kết quả gần nhất. Kết quả của rule không đổi được dùng lại từ cache ở lượt sau; sửa một rule không xóa cache các rule khác. Lượt đầu vẫn có thể mất nhiều phút vì Codex đọc JADX tuần tự. Trình duyệt hỏi xác nhận nếu đóng tab, Back hoặc Reload trong lúc lượt kiểm tra đang chạy. Nếu vẫn Reload, trang lấy lại trạng thái lượt kiểm tra từ server. Việc tiếp tục hiển thị này chỉ hoạt động khi server chưa khởi động lại; job hiện được giữ trong bộ nhớ server. Server chỉ lắng nghe trên `127.0.0.1`, xử lý một file tại một thời điểm; dùng `Ctrl+C` để dừng. Có thể đổi cổng/thư mục bằng `--port` và `--out`, hoặc trỏ bộ luật bằng `--rules`.
+Trang lưu file đã tải, báo cáo và cache dưới `out/web/`, sau đó hiển thị kiểm kê ID, tổng quan và từng luật. Khi chạy, web hiển thị bước hiện tại và trong bước đối chiếu hiển thị số rule đã xong, rule đang chạy và kết quả gần nhất. Kết quả của rule không đổi được dùng lại từ cache ở lượt sau; sửa một rule không xóa cache các rule khác. Lượt đầu vẫn có thể mất nhiều phút vì AI đọc JADX tuần tự. Trình duyệt hỏi xác nhận nếu đóng tab, Back hoặc Reload trong lúc lượt kiểm tra đang chạy. Nếu vẫn Reload, trang lấy lại trạng thái lượt kiểm tra từ server. Việc tiếp tục hiển thị này chỉ hoạt động khi server chưa khởi động lại; job hiện được giữ trong bộ nhớ server. Server chỉ lắng nghe trên `127.0.0.1`, xử lý một file tại một thời điểm; dùng `Ctrl+C` để dừng. Có thể đổi cổng/thư mục bằng `--port` và `--out`, hoặc trỏ bộ luật bằng `--rules`.
 
-Giao diện dùng React và các component Ant Design; font Poppins được phục vụ từ gói local. Mã frontend nằm trong `frontend/`, bản build phục vụ offline nằm trong `apk_audit/web_assets/`. Sau khi sửa frontend, chạy `cd frontend && npm ci && npm run build`; người dùng web không cần cài Node.js. Web mặc định chạy Codex CLI với model `gpt-6-luna` cho mọi luật agent sau khi jadx giải mã. Codex chạy phiên chỉ đọc cho từng luật, có giới hạn thời gian và số lần gọi công cụ; mọi evidence được dẫn phải khớp file/dòng trước khi nhận `PASS` hoặc `FAIL`. Nội dung mã và tài liệu cần thiết được gửi tới model qua Codex; lượt audit có thể dùng quota/tính phí theo tài khoản. Nếu thiếu bằng chứng hoặc Codex lỗi, luật trả `UNKNOWN`. File cần `jadx` và Java như CLI. Trang chỉ nhận file có đuôi `.apk`, `.xapk`, `.apkm`; nội dung archive vẫn được kiểm tra trước khi giải mã.
+Giao diện dùng React và các component Ant Design; font Poppins được phục vụ từ gói local. Mã frontend nằm trong `frontend/`, bản build phục vụ offline nằm trong `apk_audit/web_assets/`. Sau khi sửa frontend, chạy `cd frontend && npm ci && npm run build`; người dùng web không cần cài Node.js. Web tự phát hiện Codex/Claude CLI trên PATH của máy chạy server. Ô **AI dùng để audit** cho chọn engine, nút **Phát hiện lại** quét lại CLI; nếu có cả hai thì chọn Codex trước, chỉ có Claude thì chọn Claude. Nếu vừa sửa PATH, khởi động lại server từ terminal nhận PATH mới. Thiếu CLI thì nút bắt đầu bị khóa. Phát hiện binary không xác nhận đăng nhập hay quota. Codex dùng `gpt-6-luna`, Claude dùng model mặc định của CLI. Engine được cố định theo từng job, không tự chuyển provider khi lỗi. Cả hai chạy phiên chỉ đọc cho từng luật, có giới hạn thời gian và số lần gọi công cụ; mọi evidence được dẫn phải khớp file/dòng trước khi nhận `PASS` hoặc `FAIL`. Nội dung mã và tài liệu cần thiết được gửi tới nhà cung cấp AI đã chọn qua CLI; lượt audit có thể dùng quota/tính phí theo tài khoản. Nếu thiếu bằng chứng hoặc CLI lỗi, luật trả `UNKNOWN`. File cần `jadx` và Java như CLI. Trang chỉ nhận file có đuôi `.apk`, `.xapk`, `.apkm`; nội dung archive vẫn được kiểm tra trước khi giải mã.
+
+### Dùng Claude CLI
+
+Cài Claude Code CLI trên máy chạy backend rồi đăng nhập từ terminal:
+
+```bash
+claude --version
+claude auth login
+claude auth status
+uv run apk-audit doctor
+uv run apk-audit audit /path/to/app.apk --engine claude --out out/claude-app
+```
+
+Trên web: tải lại trang, bấm **Phát hiện lại**, chọn **Claude CLI**, chọn APK/tài liệu và bấm **Bắt đầu kiểm tra**. Khi OAuth hết hạn, đăng nhập lại rồi chạy lượt mới. Không nhập tài khoản hay API key vào web. Việc cài extension Claude/Antigravity trong IDE không tự tạo CLI `claude` trên PATH.
 
 Đọc APK có sẵn (cần Java và jadx trên PATH, hoặc biến `JADX_PATH`):
 
@@ -121,9 +135,9 @@ Windows dùng `.venv/Scripts/python.exe`. Server không chỉnh cấu hình toà
 ## Chỗ nối tích hợp
 
 - `fetch.py:DownloadProvider`: adapter tải APK. Hiện link Play được parse package, rồi báo rõ chưa nối provider. Không scrape giả hoặc vượt CAPTCHA.
-- `engines.py:Engine`: nhận prompt, bộ tools, ngân sách; trả `AgentResult`. `CodexEngine` gọi Codex CLI với `gpt-6-luna`, phiên chỉ đọc và đầu ra JSON có schema; `none` và `replay` dùng cho kiểm thử/offline. `ClaudeEngine` chưa nối.
+- `engines.py:Engine`: nhận prompt, bộ tools, ngân sách; trả `AgentResult`. `CodexEngine` gọi Codex CLI với `gpt-6-luna`, phiên chỉ đọc và đầu ra JSON có schema; `none` và `replay` dùng cho kiểm thử/offline. `ClaudeEngine` gọi Claude CLI với JSON schema, chỉ cấp Read/Glob/Grep, tắt customization và MCP, không lưu phiên hội thoại. Cần bản Claude CLI hỗ trợ `--safe-mode`, `--restricted`, `--json-schema`, `--no-session-persistence`; nếu CLI cũ không nhận cờ, cập nhật CLI trước.
 - `agent.py`: dựng prompt, thử lại JSON hỏng một lần, kiểm tra ID/status/ngân sách, mở file xác minh evidence. PASS/FAIL thiếu bằng chứng hợp lệ trở thành UNKNOWN.
-- `verdict_cache.py`: khóa gồm APK/workspace, pack context/extract, từng luật, engine, tài liệu và phiên bản tool; rule rà giao thoa thêm kết quả các rule trước. Cache lưu prompt và trace. Codex đếm lời gọi công cụ từ event JSONL và dừng khi quá ngân sách.
+- `verdict_cache.py`: khóa gồm APK/workspace, pack context/extract, từng luật, engine, tài liệu và phiên bản tool; rule rà giao thoa thêm kết quả các rule trước. Cache lưu prompt và trace. Hai adapter đếm lời gọi công cụ từ event JSONL và dừng khi quá ngân sách. Claude dùng model mặc định nên nếu đổi model hoặc phiên bản CLI, dùng `--refresh` ở CLI hoặc xóa cache verdict local trước khi so sánh lại.
 - `unpack.py`: nhận dữ liệu jadx, lưu mã thoát và log. Chưa nối baksmali; có thể cung cấp workspace đã có thư mục `smali/`.
 - `apk_audit.run(...)`: API chung cho CLI và các cửa vào tương lai.
 

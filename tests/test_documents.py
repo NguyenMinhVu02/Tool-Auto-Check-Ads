@@ -52,3 +52,31 @@ class DocumentTests(unittest.TestCase):
                          '2,native,native_second,id-2,,,,\n')
         result = load_document(path, "ads_scripts")
         self.assertEqual([row["line"] for row in result["placements"]], [2, 4])
+
+    def test_vietnamese_ads_header_keeps_note_and_layout_columns(self):
+        path = self.save('ads-vi.csv', 'STT,Ads type,Tên ,ID,Mô tả TV,Mô tả TA,Note,Layout\n'
+                         '1,native,Native_full,id-1,Hiện native,Show native,keep note,UI 1\n'
+                         ',,App ID,app-1,,,,\n')
+        result = load_document(path, 'ads_scripts')
+        placement = result['placements'][0]
+        self.assertEqual(placement['name'], 'Native_full')
+        self.assertEqual(placement['description'], 'Hiện native')
+        self.assertEqual(placement['note'], 'keep note')
+        self.assertEqual(placement['format'], 'UI 1')
+        self.assertEqual(result['app_id'], 'app-1')
+
+    def test_working_content_detail_format(self):
+        path = self.save('working.csv', ',Content,Detail,PIC\n'
+                         '1,Package name,demo.app,Infinity\n'
+                         '2,Adjust token,sample-token,Owner\n')
+        rows = load_document(path, 'checklist')['checklist_rows']
+        self.assertEqual(rows[0]['task'], 'Package name')
+        self.assertEqual(rows[0]['detail'], 'demo.app')
+        self.assertEqual(rows[0]['pic'], 'Infinity')
+        self.assertEqual(rows[1]['detail'], 'sample-token')
+
+    def test_ads_columns_can_be_reordered_without_changing_identifiers(self):
+        path = self.save('ads.csv', 'ID, Name ,Ads Type,STT\nid-1,Native_First,native,1\n')
+        result = load_document(path, 'ads_scripts')
+        self.assertEqual(result['placements'][0]['name'], 'Native_First')
+        self.assertEqual(result['placements'][0]['id'], 'id-1')

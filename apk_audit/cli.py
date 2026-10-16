@@ -15,7 +15,7 @@ def parser():
     audit.add_argument("target")
     audit.add_argument("--rules", type=Path)
     audit.add_argument("--out", type=Path)
-    audit.add_argument("--engine", choices=["none","claude","codex"], default="codex", help="Mặc định Codex với model gpt-6-luna; dùng none để tắt AI")
+    audit.add_argument("--engine", choices=["none","claude","codex"], default="codex", help="codex: gpt-6-luna (mặc định); claude: model mặc định Claude CLI; none: tắt AI")
     audit.add_argument("--static-only", action="store_true")
     audit.add_argument("--only")
     audit.add_argument("--max-tool-calls", type=int, default=400)

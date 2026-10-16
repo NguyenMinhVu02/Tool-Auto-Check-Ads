@@ -14,6 +14,11 @@ from apk_audit.web import AuditJobs, make_handler
 
 class WebTests(unittest.TestCase):
     def setUp(self):
+        self.engine_detection = patch('apk_audit.web.detect_engines', return_value={
+            'engines': [{'id': 'codex', 'label': 'Codex', 'installed': True},
+                        {'id': 'claude', 'label': 'Claude', 'installed': True}], 'default': 'codex'})
+        self.detect_engines = self.engine_detection.start()
+        self.addCleanup(self.engine_detection.stop)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
@@ -71,6 +76,59 @@ class WebTests(unittest.TestCase):
         with self.assertRaises(HTTPError) as empty:
             self.request("/api/jobs", b"", "app.apk")
         self.assertEqual(empty.exception.code, 413)
+
+    def test_engine_detection_endpoint_and_claude_default(self):
+        self.detect_engines.return_value = {'engines': [
+            {'id': 'codex', 'label': 'Codex', 'installed': False},
+            {'id': 'claude', 'label': 'Claude', 'installed': True}], 'default': 'claude'}
+        data = json.load(self.request('/api/engines'))
+        self.assertEqual(data['default'], 'claude')
+        job_id, _ = self.jobs.reserve('demo.apk')
+        self.assertEqual(self.jobs.get(job_id)['engine'], 'claude')
+
+    def test_selected_claude_reaches_pipeline_and_is_fixed_in_job(self):
+        reached = threading.Event()
+        finish = threading.Event()
+
+        def fake_run(archive, *, engine, **kwargs):
+            self.assertEqual(engine, 'claude')
+            reached.set()
+            finish.wait(5)
+            raise ValueError('end test')
+
+        with patch('apk_audit.web.run', side_effect=fake_run):
+            job_id = json.load(self.request('/api/jobs', b'fake archive', 'demo.apk',
+                                          {'X-Audit-Engine': 'claude'}))['id']
+            try:
+                self.assertTrue(reached.wait(5))
+                self.assertEqual(json.load(self.request(f'/api/jobs/{job_id}'))['engine'], 'claude')
+                self.detect_engines.return_value = {'engines': [], 'default': None}
+                self.assertEqual(self.jobs.get(job_id)['engine'], 'claude')
+            finally:
+                finish.set()
+            for _ in range(50):
+                if self.jobs.get(job_id)['state'] == 'error':
+                    break
+                time.sleep(0.02)
+            self.assertEqual(self.jobs.get(job_id)['state'], 'error')
+
+    def test_invalid_or_missing_engine_rejected_before_consuming_documents(self):
+        from io import BytesIO
+        ads = self.jobs.store_document('ads_scripts', 'ads.csv', BytesIO(b'a'), 1)
+        working = self.jobs.store_document('checklist', 'working.csv', BytesIO(b'b'), 1)
+        for engine in ('claude;echo injected', 'none', ''):
+            with self.subTest(engine=engine), self.assertRaises(HTTPError) as response:
+                self.request('/api/jobs', b'bytes', 'demo.apk', {
+                    'X-Audit-Engine': engine, 'X-Ads-Scripts-Id': ads, 'X-Checklist-Id': working})
+            self.assertEqual(response.exception.code, 400)
+        self.detect_engines.return_value = {'engines': [
+            {'id': 'claude', 'installed': False}], 'default': None}
+        for engine in ('claude', None):
+            with self.subTest(engine=engine), self.assertRaises(ValueError):
+                self.jobs.reserve('demo.apk', ads, working, engine)
+        self.assertIsNone(self.jobs.active)
+        self.assertEqual(set(self.jobs.documents), {ads, working})
+        self.assertFalse((self.root / 'uploads').exists())
 
     def test_running_job_exposes_current_stage(self):
         reached_rules = threading.Event()
@@ -151,6 +209,25 @@ class WebTests(unittest.TestCase):
             self.request("/api/jobs", b"fake archive", "demo.apk", {"X-Ads-Scripts-Id": ads})
         self.assertEqual(response.exception.code, 400)
         self.assertIn("Cần cả ADS SCRIPTS", response.exception.read().decode())
+
+    def test_invalid_csv_is_reported_at_documents_stage_before_jadx(self):
+        from apk_audit.engines import NoneEngine
+        ads_id = json.load(self.request('/api/documents', b'foo,bar\na,b\n', 'ads.csv',
+                                        {'X-Document-Kind': 'ads_scripts'}))['id']
+        working_id = json.load(self.request('/api/documents', b'key,value\npackage,demo.app\n', 'working.csv',
+                                            {'X-Document-Kind': 'checklist'}))['id']
+        with patch('apk_audit.pipeline.get_engine', return_value=NoneEngine()), patch('apk_audit.pipeline.prepare') as prepare:
+            job_id = json.load(self.request('/api/jobs', b'not a real apk', 'demo.apk',
+                {'X-Ads-Scripts-Id': ads_id, 'X-Checklist-Id': working_id}))['id']
+            for _ in range(50):
+                job = json.load(self.request(f'/api/jobs/{job_id}'))
+                if job['state'] == 'error':
+                    break
+                time.sleep(0.02)
+        self.assertEqual(job['state'], 'error')
+        self.assertEqual(job['stage'], 'documents')
+        self.assertIn('ADS SCRIPTS', job['error'])
+        prepare.assert_not_called()
 
 
 if __name__ == "__main__":

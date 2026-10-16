@@ -17,4 +17,4 @@ def find_jadx():
 def doctor():
     return {"jadx": find_jadx(), "java": shutil.which("java"),
             "claude": shutil.which("claude"), "codex": shutil.which("codex"),
-            "live_engine_adapters": "codex:gpt-6-luna", "cache_dir": str(cache_path())}
+            "live_engine_adapters": "codex:gpt-6-luna, claude:default", "cache_dir": str(cache_path())}

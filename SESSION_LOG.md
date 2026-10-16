@@ -2,15 +2,48 @@
 
 ## Trạng thái hiện tại
 
-- Cập nhật: 2026-10-16 15:29 (Asia/Ho_Chi_Minh).
-- Mục tiêu: Commit và push các cải tiến audit lên GitHub theo yêu cầu người dùng.
-- Trạng thái: Hoàn tất push mã cải tiến; GitHub main đã nhận commit 6146440.
-- Kết quả: Nhận hai mẫu CSV thật; kiểm kê key/ID, Package, App ID; thêm rule giao thoa thành 11 rule; siết prompt theo nhánh và hợp đồng app; sửa bằng chứng một lần với đủ context; xác minh được đoạn nhiều dòng; cache theo từng rule và tiến độ n/11 trên web. Web mã mới chạy tại http://127.0.0.1:8765.
-- Kiểm tra: 35/35 unittest đạt, frontend build đạt, rule pack hợp lệ, git diff --check đạt. CSV thật có 24 placement, local release 23, 23 ID chung khớp, thiếu inter_onboarding; Package và App ID khớp. Đã chạy các lượt đủ 11 rule (~11–12 phút) và kiểm chứng riêng sau hiệu chỉnh; bản tổng hợp tại out/cast-tv-final-review/validation.md.
-- Giới hạn: Chưa chạy lại toàn bộ 11 rule sau sửa cuối về đoạn trích nhiều dòng; đã xác minh trực tiếp 5/5 đoạn của rule ID và chạy live rule giao thoa. Kết luận mã tĩnh vẫn cần rà ngữ nghĩa; các FAIL cũ về page 1/Welcome/Splash retry đã được ghi rõ và hiệu chỉnh. Chưa kiểm runtime; job mất khi restart server; lượt đầu web vẫn cần nhiều phút.
-- Bước tiếp theo: Máy khác có thể pull main để nhận bản mới; kiểm thử web đầu cuối và runtime theo các giới hạn đã ghi.
+- Cập nhật: 2026-10-16 17:00 (Asia/Ho_Chi_Minh).
+- Mục tiêu: Tăng cỡ chữ và trình bày kết quả audit dễ đọc, giữ đầy đủ nội dung.
+- Trạng thái: Hoàn tất UI và kiểm chứng; chưa commit/push.
+- Kết quả: Tiêu đề 17px, nội dung 15px, evidence 13px; báo cáo cũ có ý chính và mở toàn bộ phân tích thành từng ý, giữ nguyên identifier; báo cáo có mục được trình bày theo Kết luận/Cần sửa/Đã đúng/Chưa xác minh. Assets mới phục vụ tại http://127.0.0.1:8765.
+- Kiểm tra: 51/51 unittest đạt ngoài sandbox; frontend build và git diff --check đạt; Node kiểm tra giữ đủ nội dung/identifier và nhận section; HTTP assets xác nhận nội dung mới và font 15px.
+- Giới hạn: Chưa kiểm tra trực quan bằng browser automation. Prompt hướng dẫn reasoning theo mục đã sửa trong agent.py, có hiệu lực khi backend khởi động lại và gọi AI mới; cache/báo cáo cũ dùng renderer tương thích. Giữ server hiện tại để không mất job đang xem. Claude OAuth vẫn cần đăng nhập lại theo phiên trước.
+- Bước tiếp theo: Tải lại trang để nhận UI; có thể chạy lại với cache để xem kết quả. Chỉ commit/push khi được yêu cầu.
 
 ## Lịch sử phiên
+
+### 2026-10-16 17:00 — Làm rõ phần đọc kết quả (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Khắc phục chữ nhỏ và đoạn reasoning quá dài theo phản hồi người dùng.
+- Trạng thái: Hoàn tất UI; prompt mới chờ restart backend để được nạp.
+- Đã làm: Tăng typography kết quả; thêm findingText.js nhận các mục reasoning, chia đoạn cũ thành từng câu mà không làm vỡ package/key; nêu câu caveat có sẵn làm ý chính, mở đầy đủ nội dung bằng Collapse; tên code trong backtick hiển thị monospace. Thêm hướng dẫn AI viết tiếng Việt với bốn mục, kết luận trước và giữ điều kiện/giới hạn; không sửa status hoặc dữ liệu report cũ.
+- File thay đổi: frontend/src/{App.jsx,style.css,findingText.js}, apk_audit/agent.py, apk_audit/web_assets/{app.js,app.css}, SESSION_LOG.md. Giữ các thay đổi trước.
+- Kiểm tra: Frontend build exit 0, 51/51 unittest đạt ngoài sandbox; kiểm Node xác nhận câu cũ ghép lại nguyên nội dung và giữ com.demo.App/config.open_resume, nhận mục mới; HTTP JS/CSS trả bản mới; git diff --check đạt. Lượt test trong sandbox bị dừng ở MCP nên dùng lượt ngoài sandbox làm bằng chứng. Chưa chạy browser automation.
+- Vận hành: Giữ server hiện tại và job hoàn tất 565175d1f3f24d65a1be15b63749bfec để tránh reset kết quả trong bộ nhớ; frontend assets cập nhật ngay khi tải lại. Prompt mới được nạp ở lần backend restart tiếp theo; verdict cache cũ giữ nguyên và vẫn đọc được.
+- Việc còn lại: Người dùng xem UI; chưa commit/push. Xác thực Claude vẫn chờ đăng nhập lại.
+- Bước tiếp theo: Xem trên localhost, chỉ xuất bản mã khi được yêu cầu.
+
+### 2026-10-16 16:51 — Claude CLI và bộ chọn AI trên web (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Tự phát hiện Codex/Claude trên máy và cho người dùng chọn AI trước khi audit.
+- Trạng thái: Hoàn tất triển khai, kiểm thử mô phỏng và xử lý lỗi thực; xác minh verdict Claude thật còn phụ thuộc đăng nhập lại.
+- Đã làm: Tách JSON schema/prompt dùng chung; thêm Claude adapter stream-json, chỉ Read/Glob/Grep, safe-mode/restricted, tắt MCP/customization và lưu phiên, giới hạn tool calls/timeout; đưa lỗi xác thực từ stdout vào UNKNOWN. Thêm API detection và header X-Audit-Engine, kiểm engine trước upload/tiêu thụ tài liệu, lưu engine theo job, không fallback provider. UI Ant Design Select và Phát hiện lại, khóa khi đang chạy/thiếu CLI, hiển thị engine của báo cáo và thông tin gửi dữ liệu qua AI. Cập nhật doctor/help/README/kế hoạch.
+- File thay đổi: apk_audit/{claude_engine,engine_common,engines,web,config,cli}.py, frontend/src/{App.jsx,style.css}, apk_audit/web_assets/{app.js,app.css}, tests/{test_claude_engine,test_web}.py, README.md, docs/2026-10-16-claude-cli-plan.md, SESSION_LOG.md. Giữ các thay đổi CSV/documents/pipeline/test của phiên trước.
+- Kiểm tra: 51/51 unittest đạt; npm run build đạt (cảnh báo bundle AntD/use client/font runtime); git diff --check đạt. HTTP /api/engines nhận cả hai CLI, default codex; trang/assets/Poppins trả 200 và bundle có selector/header/detection. Claude thực gọi trên examples/workspace với một rule, không gửi docs đối tác, trả UNKNOWN do OAuth session expired and could not be refreshed; báo cáo out/claude-cli-smoke/report.json ghi rõ nguyên nhân. Không tự đăng nhập hay lưu thông tin xác thực.
+- Vận hành: Kiểm tra job IPTV cũ 96d62344feac491badd2ae0118018ffa đã done trước khi restart server; báo cáo cũ vẫn nằm trong out/web/. Server mới chạy cổng 8765; danh sách job cũ trong bộ nhớ bị reset theo thiết kế hiện có.
+- Việc còn lại: Người dùng đăng nhập lại Claude để xác minh verdict thành công trên model thật; chưa kiểm thử giao diện bằng trình duyệt tự động hoặc chạy Claude đủ 11 rule trên APK thật. Cache Claude theo engine default, khi đổi model cần refresh/xóa verdict cache như README. Chưa commit/push.
+- Bước tiếp theo: claude auth login, tải lại trang, chọn engine và audit.
+
+### 2026-10-16 16:14 — Sửa CSV IPTV và bước lỗi web (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Sửa lỗi CSV không đúng mẫu mà người dùng gặp khi audit iptv1_Inative.apk.
+- Trạng thái: Hoàn tất sửa, chưa commit/push.
+- Nguyên nhân: ADS SCRIPTS có header Tên/Mô tả TV/Mô tả TA/Note/Layout, working file dùng Content/Detail/PIC. Parser trước yêu cầu Name và Phase 2/Task/Task Detail ở vị trí cố định. Web gán stage unpack trước khi đọc tài liệu nên lỗi CSV hiện ở Giải mã.
+- Đã làm: Chuẩn hóa header dấu/khoảng trắng/hoa thường; ánh xạ cột theo tên, nhận Name/Tên và Task/Content, Task Detail/Detail; giữ nguyên placement/ID và dữ liệu trong ô; bổ sung thông báo đúng loại tài liệu; thêm stage documents trong pipeline/API/frontend và xử lý stage cả khi lỗi; bỏ số 10 hardcode; cập nhật README; build assets, mở lại server.
+- File thay đổi: README.md, SESSION_LOG.md, apk_audit/{documents,pipeline,web}.py, frontend/src/App.jsx, apk_audit/web_assets/app.js, tests/{test_documents,test_integration,test_web}.py.
+- Kiểm tra và kết quả: 40/40 unittest đạt; test hồi quy cho hai header mới, đổi thứ tự cột, lỗi CSV dừng ở documents trước khi gọi JADX; npm run build và git diff --check đạt. CLI engine none với đúng ba file upload hoàn tất ~71 giây, 63 placement/23 hàng working, Package và AdMob App ID khớp; report tại out/iptv-csv-fix-smoke/. Web HTTP 200 tại cổng 8765. Không lưu nội dung token trong nhật ký.
+- Việc còn lại: Người dùng chọn lại file trên web để chạy AI; chưa audit AI hoặc runtime IPTV trong phiên sửa lỗi. Các giới hạn chung về suy luận AI và job chưa lưu bền vẫn còn.
+- Bước tiếp theo: Chạy lại lượt audit trên web; chỉ commit/push bản sửa theo yêu cầu người dùng.
 
 ### 2026-10-16 15:29 — Chuẩn bị push cải tiến audit (Asia/Ho_Chi_Minh)
 

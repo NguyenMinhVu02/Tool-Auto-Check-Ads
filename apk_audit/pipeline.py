@@ -51,6 +51,8 @@ def run(target, *, rules=None, out=None, engine="codex", only=None, cache_dir=No
     if refresh_rule and refresh_rule not in {r.id for r in pack.rules}:
         raise AuditError(f"Không có rule: {refresh_rule}", 5)
     adapter = get_engine(engine) if isinstance(engine, str) else engine
+    if progress:
+        progress("documents")
     documents = {k:v for k,v in {"ads_scripts": load_document(ads_scripts, "ads_scripts"), "checklist":load_document(checklist, "checklist")}.items() if v is not None}
     if progress:
         progress("unpack")

@@ -57,6 +57,8 @@ body{margin:0;min-width:320px}
 .start-row{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:18px;padding-top:16px;border-top:1px solid #eef1f5}
 .start-row>.ant-typography{font-size:11px;line-height:1.5}
 .start-row .ant-btn{flex:none}
+.engine-field{display:flex;flex-direction:column;gap:10px;margin-top:20px;padding-top:18px;border-top:1px solid #eef1f5}
+.engine-field>.ant-typography:last-child{font-size:12px}
 .steps-card .ant-card-body{padding:25px 22px}
 .steps-card .ant-steps-item-description{font-size:10px}
 .rule-progress{margin-top:20px}.rule-progress .ant-progress{margin:7px 0}.rule-progress>.ant-typography{display:inline-block;margin-right:8px}
@@ -82,10 +84,18 @@ body{margin:0;min-width:320px}
 .finding-item{align-items:flex-start!important;padding:15px 0!important}
 .finding-main{width:100%;min-width:0}
 .finding-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
-.finding-heading>.ant-typography{font-size:12px}
-.finding-meta{display:block;font-size:10px}
-.finding-reason{margin:8px 0 0!important;font-size:11px;line-height:1.6}
-.evidence{display:flex;flex-wrap:wrap;gap:5px 12px;margin:8px 0;font-size:10px}
+.finding-heading>.ant-typography{font-size:17px;line-height:1.5}
+.finding-meta{display:block;font-size:12px;margin-top:5px}
+.finding-reason{margin:16px 0 0!important;font-size:15px;line-height:1.8;max-width:1000px;overflow-wrap:anywhere}
+.finding-reason .ant-typography{font-size:15px;line-height:1.8}
+.finding-summary{padding:12px 16px;background:#f5f8fc;border-left:3px solid #3c70ce;border-radius:6px}
+.finding-section{margin:16px 0 6px}
+.finding-section>.ant-typography:first-child{display:block;margin-bottom:4px}
+.finding-points{padding-left:22px;margin:6px 0 12px}
+.finding-points li{margin:6px 0}
+.finding-main .ant-collapse-header-text{font-size:14px}
+.evidence{display:flex;flex-wrap:wrap;gap:5px 12px;margin:12px 0;font-size:13px}
+.evidence .ant-typography{font-size:13px;line-height:1.7}
 .evidence>.ant-typography:last-child{overflow-wrap:anywhere}
 footer{text-align:center;color:#9eacc0;font-size:10px;padding-top:10px}
 @media(max-width:1100px){.document-field{flex-wrap:wrap}.document-field>.ant-typography:last-child{flex-basis:100%}.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
