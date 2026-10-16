@@ -1,6 +1,6 @@
 # apk-audit
 
-Khung CLI audit APK theo thiết kế v2. Bộ luật mặc định hiện chứa chuẩn **logic ads/init** rút từ `Example-AdLogic-Partner` tại commit `e8f4337` (xem [hợp đồng tham chiếu](docs/base-ads-contract.md)). Mặc định Codex CLI dùng `gpt-6-luna` đọc workspace đã giải mã và đánh giá 10 luật logic; cần cài và đăng nhập Codex CLI. `--engine none` tắt AI và trả `UNKNOWN`. ID ads của base không dùng làm ID kỳ vọng cho app đối tác.
+Khung CLI audit APK theo thiết kế v2. Bộ luật mặc định hiện chứa chuẩn **logic ads/init** rút từ `Example-AdLogic-Partner` tại commit `e8f4337` (xem [hợp đồng tham chiếu](docs/base-ads-contract.md)). Mặc định Codex CLI dùng `gpt-6-luna` đọc workspace đã giải mã và đánh giá 11 luật logic, gồm một lượt rà lỗi giao thoa giữa các luồng ads; cần cài và đăng nhập Codex CLI. `--engine none` tắt AI và trả `UNKNOWN`. ID ads của base không dùng làm ID kỳ vọng cho app đối tác.
 
 ## Chạy ngay
 
@@ -13,7 +13,7 @@ codex login status
 uv run apk-audit examples/workspace --out out/demo
 ```
 
-Kết quả: `out/demo/facts.json`, `xref_index.json`, `report.md`, `report.json`.
+Kết quả: `out/demo/facts.json`, `xref_index.json`, `inventory.json`, `report.md`, `report.json`.
 Workspace mẫu chỉ chứa dữ liệu minh họa, không phải APK/app thật.
 
 ## Web localhost
@@ -22,11 +22,11 @@ Workspace mẫu chỉ chứa dữ liệu minh họa, không phải APK/app thậ
 uv run apk-audit serve
 ```
 
-Mở `http://127.0.0.1:8765`, chọn hoặc kéo APK/XAPK/APKM vào vùng tải lên, rồi bấm **Bắt đầu kiểm tra**. Chọn file không tự chạy. Hai ô ADS SCRIPTS và working file là tùy chọn: chỉ khi chọn **đủ cả hai**, web mới đưa chúng vào pipeline; thiếu một file thì bỏ qua cả cặp. Mỗi tài liệu nhận JSON object hoặc CSV hai cột `key,value`, tối đa 5 MiB. Web dùng font Poppins lưu sẵn trong gói để chạy offline; giấy phép ở `apk_audit/web_assets/fonts/OFL.txt`.
+Mở `http://127.0.0.1:8765`, chọn hoặc kéo APK/XAPK/APKM vào vùng tải lên, rồi bấm **Bắt đầu kiểm tra**. Chọn file không tự chạy. Hai ô ADS SCRIPTS và working file là tùy chọn: chỉ khi chọn **đủ cả hai**, web mới đưa chúng vào pipeline; thiếu một file thì bỏ qua cả cặp. Mỗi tài liệu nhận JSON object, CSV hai cột `key,value`, hoặc đúng mẫu bảng ADS SCRIPTS/working file của Infinity, tối đa 5 MiB. Bảng ADS SCRIPTS cần bốn cột đầu `STT,Ads type,Name,ID`; working file cần `Phase 2,Task,Task Detail,Document`. Web dùng font Poppins lưu sẵn trong gói để chạy offline; giấy phép ở `apk_audit/web_assets/fonts/OFL.txt`.
 
-Trang lưu file đã tải và báo cáo dưới `out/web/`, sau đó hiển thị tổng quan và từng luật. Khi chạy, web hiển thị bước hiện tại: tiếp nhận, giải mã, trích xuất dữ liệu, đối chiếu quy tắc, ghi báo cáo. Trình duyệt hỏi xác nhận nếu đóng tab, Back hoặc Reload trong lúc lượt kiểm tra đang chạy. Nếu vẫn Reload, trang lấy lại trạng thái lượt kiểm tra từ server. Việc tiếp tục hiển thị này chỉ hoạt động khi server chưa khởi động lại; job hiện được giữ trong bộ nhớ server. Server chỉ lắng nghe trên `127.0.0.1`, xử lý một file tại một thời điểm; dùng `Ctrl+C` để dừng. Có thể đổi cổng/thư mục bằng `--port` và `--out`, hoặc trỏ bộ luật bằng `--rules`.
+Trang lưu file đã tải, báo cáo và cache dưới `out/web/`, sau đó hiển thị kiểm kê ID, tổng quan và từng luật. Khi chạy, web hiển thị bước hiện tại và trong bước đối chiếu hiển thị số rule đã xong, rule đang chạy và kết quả gần nhất. Kết quả của rule không đổi được dùng lại từ cache ở lượt sau; sửa một rule không xóa cache các rule khác. Lượt đầu vẫn có thể mất nhiều phút vì Codex đọc JADX tuần tự. Trình duyệt hỏi xác nhận nếu đóng tab, Back hoặc Reload trong lúc lượt kiểm tra đang chạy. Nếu vẫn Reload, trang lấy lại trạng thái lượt kiểm tra từ server. Việc tiếp tục hiển thị này chỉ hoạt động khi server chưa khởi động lại; job hiện được giữ trong bộ nhớ server. Server chỉ lắng nghe trên `127.0.0.1`, xử lý một file tại một thời điểm; dùng `Ctrl+C` để dừng. Có thể đổi cổng/thư mục bằng `--port` và `--out`, hoặc trỏ bộ luật bằng `--rules`.
 
-Giao diện dùng React và các component Ant Design; font Poppins được phục vụ từ gói local. Mã frontend nằm trong `frontend/`, bản build phục vụ offline nằm trong `apk_audit/web_assets/`. Sau khi sửa frontend, chạy `cd frontend && npm ci && npm run build`; người dùng web không cần cài Node.js. Web mặc định chạy Codex CLI với model `gpt-6-luna` cho mọi luật agent sau khi jadx giải mã. Codex chạy phiên chỉ đọc cho từng luật, có giới hạn thời gian và số lần gọi công cụ; tool kiểm tra lại file/dòng trước khi nhận `PASS` hoặc `FAIL`. Nội dung mã và tài liệu cần thiết được gửi tới model qua Codex; lượt audit có thể dùng quota/tính phí theo tài khoản. Nếu thiếu bằng chứng hoặc Codex lỗi, luật trả `UNKNOWN`. File cần `jadx` và Java như CLI. Trang chỉ nhận file có đuôi `.apk`, `.xapk`, `.apkm`; nội dung archive vẫn được kiểm tra trước khi giải mã.
+Giao diện dùng React và các component Ant Design; font Poppins được phục vụ từ gói local. Mã frontend nằm trong `frontend/`, bản build phục vụ offline nằm trong `apk_audit/web_assets/`. Sau khi sửa frontend, chạy `cd frontend && npm ci && npm run build`; người dùng web không cần cài Node.js. Web mặc định chạy Codex CLI với model `gpt-6-luna` cho mọi luật agent sau khi jadx giải mã. Codex chạy phiên chỉ đọc cho từng luật, có giới hạn thời gian và số lần gọi công cụ; mọi evidence được dẫn phải khớp file/dòng trước khi nhận `PASS` hoặc `FAIL`. Nội dung mã và tài liệu cần thiết được gửi tới model qua Codex; lượt audit có thể dùng quota/tính phí theo tài khoản. Nếu thiếu bằng chứng hoặc Codex lỗi, luật trả `UNKNOWN`. File cần `jadx` và Java như CLI. Trang chỉ nhận file có đuôi `.apk`, `.xapk`, `.apkm`; nội dung archive vẫn được kiểm tra trước khi giải mã.
 
 Đọc APK có sẵn (cần Java và jadx trên PATH, hoặc biến `JADX_PATH`):
 
@@ -91,7 +91,7 @@ Chuỗi hiện lấy từ text đã decode, chưa phải DEX string pool. Các t
 
 Luật agent khai báo `question`, `verdict.pass_when`, `verdict.fail_when`, `verdict.unknown_when`, `start_hints`, `budget.max_tool_calls`. Viết các tiêu chí dạng chuỗi (đặt dấu nháy nếu là `yes/no`). Dùng `--engine none` sẽ trả UNKNOWN với lý do engine_disabled.
 
-Tài liệu đầu vào hỗ trợ JSON object hoặc CSV **key,value** qua `--ads-scripts` / `--checklist`; đối chiếu bằng `equals_doc: ads_scripts.some_key`. Chưa đọc URL Google Sheets. Thiếu key/tài liệu trả SKIPPED.
+Tài liệu đầu vào hỗ trợ JSON object, CSV **key,value** hoặc đúng hai mẫu bảng Infinity qua `--ads-scripts` / `--checklist`; đối chiếu bằng `equals_doc: ads_scripts.some_key`. Với ADS SCRIPTS dạng bảng, tool tạo `placements`, đối chiếu số key và ID trong `ad_config.json`, so AdMob App ID với manifest, so Package với working file, rồi lưu vị trí chuỗi placement và nguồn config trong Java giải mã vào `inventory.json`. Vị trí chuỗi không chứng minh ad đã load/show. Cột Status của working file chỉ là dữ liệu tiến độ trong tài liệu, không phải verdict audit. Chưa đọc URL Google Sheets. Thiếu key/tài liệu trả SKIPPED.
 
 ## MCP chỉ đọc
 
@@ -123,11 +123,11 @@ Windows dùng `.venv/Scripts/python.exe`. Server không chỉnh cấu hình toà
 - `fetch.py:DownloadProvider`: adapter tải APK. Hiện link Play được parse package, rồi báo rõ chưa nối provider. Không scrape giả hoặc vượt CAPTCHA.
 - `engines.py:Engine`: nhận prompt, bộ tools, ngân sách; trả `AgentResult`. `CodexEngine` gọi Codex CLI với `gpt-6-luna`, phiên chỉ đọc và đầu ra JSON có schema; `none` và `replay` dùng cho kiểm thử/offline. `ClaudeEngine` chưa nối.
 - `agent.py`: dựng prompt, thử lại JSON hỏng một lần, kiểm tra ID/status/ngân sách, mở file xác minh evidence. PASS/FAIL thiếu bằng chứng hợp lệ trở thành UNKNOWN.
-- `verdict_cache.py`: khóa gồm APK/workspace, nội dung pack/context, luật, engine, tài liệu và phiên bản tool. Cache lưu prompt và trace. Codex đếm lời gọi công cụ từ event JSONL và dừng khi quá ngân sách.
+- `verdict_cache.py`: khóa gồm APK/workspace, pack context/extract, từng luật, engine, tài liệu và phiên bản tool; rule rà giao thoa thêm kết quả các rule trước. Cache lưu prompt và trace. Codex đếm lời gọi công cụ từ event JSONL và dừng khi quá ngân sách.
 - `unpack.py`: nhận dữ liệu jadx, lưu mã thoát và log. Chưa nối baksmali; có thể cung cấp workspace đã có thư mục `smali/`.
 - `apk_audit.run(...)`: API chung cho CLI và các cửa vào tương lai.
 
-Chưa triển khai: tải tự động apkcombo/apkpure, lấy version từ Play, nhóm phiên theo area/chạy song song, quan sát ngoài bộ luật từ AI, `ask` và skill `/audit-play`. Chưa kiểm định chất lượng verdict với APK đối tác thực tế. Mã thoát 0 chỉ nghĩa không có FAIL, không bảo đảm mọi luật PASS.
+Chưa triển khai: tải tự động apkcombo/apkpure, lấy version từ Play, nhóm phiên theo area/chạy song song, phát hiện mọi bug Java ngoài luồng ads, `ask` và skill `/audit-play`. Đã chạy pilot tĩnh với Cast TV nhưng chưa kiểm chứng runtime request/show ad và Firebase. Mã thoát 0 chỉ nghĩa không có FAIL, không bảo đảm mọi luật PASS.
 
 ## Kiểm thử
 

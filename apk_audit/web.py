@@ -92,14 +92,22 @@ class AuditJobs:
     def _execute(self, job_id, archive):
         try:
             documents = self.get(job_id)["documents"]
+            def rule_progress(event, detail):
+                self.update(job_id, rule_total=detail["total"], rule_completed=detail["completed"],
+                            current_rule=detail["rule_id"] if event == "start" else None,
+                            current_rule_title=detail["title"] if event == "start" else None,
+                            last_rule={"rule_id": detail["rule_id"], "status": detail["status"],
+                                       "from_cache": detail["from_cache"]} if event == "complete" else self.get(job_id).get("last_rule"))
             report = run(
                 archive,
                 rules=self.rules,
                 out=self.output_root / job_id,
+                cache_dir=self.output_root / "cache",
                 engine="codex",
                 ads_scripts=documents.get("ads_scripts"),
                 checklist=documents.get("checklist"),
                 progress=lambda stage: self.update(job_id, stage=stage),
+                rule_progress=rule_progress,
             )
             self.update(
                 job_id,

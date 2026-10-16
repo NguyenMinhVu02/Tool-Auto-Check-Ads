@@ -8,9 +8,14 @@
     DevConfig/version nếu SDK tương ứng có mặt, config local, SDK ads, cấu hình
     khoảng interstitial, App Open và lifecycle callbacks theo thứ tự an toàn không?
     Chấp nhận tên class/hàm tương đương; chỉ đánh giá điều kiện có trong APK.
+    Sai nguồn release/debug thuộc ADS_REMOTE_FALLBACK; không chấm FAIL riêng ở rule này
+    nếu thứ tự khởi tạo vẫn đúng. Nếu ADS SCRIPTS không có App Open, ID rỗng chỉ là
+    quan sát phụ trừ khi chứng minh được đường thực thi đến AppOpenAd.load sau tất cả
+    gate, danh sách màn loại trừ và cờ được thay đổi ở Splash. Cờ đăng ký lifecycle
+    không đủ để kết luận đường load này có thể chạy.
   verdict:
     pass_when: "Các bước tương ứng hiện diện, config sẵn trước khi load và lifecycle được đăng ký."
-    fail_when: "Có bằng chứng thứ tự sai gây load trước init/config hoặc thiếu đăng ký lifecycle cần cho resume."
+    fail_when: "Có bằng chứng load trước init/config, thiếu đăng ký lifecycle cần cho resume, hoặc đường App Open theo hợp đồng thực sự tới lệnh load với ID rỗng sau mọi gate. Không dùng sai nguồn config hay chỉ cờ đăng ký callback làm lý do FAIL của rule này."
     unknown_when: "Không thấy Application/SDK do obfuscation hoặc bước được thực hiện ngoài mã đã giải mã."
   start_hints: ["resources/AndroidManifest.xml", "sources/"]
   budget: {max_tool_calls: 25}
@@ -27,7 +32,7 @@
     Ghi rõ các mốc thời gian tìm được, không buộc đúng literal của base nếu logic tương đương.
   verdict:
     pass_when: "Có chọn nguồn config nhất quán, timeout và fallback local cho các nhánh lỗi quan sát được."
-    fail_when: "Có bằng chứng remote lỗi/timeout dẫn đến config rỗng, crash hoặc load trước khi chọn config."
+    fail_when: "Có bằng chứng release dùng config debug, remote bị đọc nhưng không áp dụng, hoặc lỗi/timeout dẫn đến config rỗng, crash hay load trước khi chọn config."
     unknown_when: "Không thể xác định nhánh timeout hoặc dữ liệu config do giải mã thiếu; remote live không quan sát được."
   start_hints: ["resources/assets/ad_config.json", "sources/"]
   budget: {max_tool_calls: 25}
@@ -93,7 +98,9 @@
     preload page 4/full/inter sau khi vào Onboarding, page 1 từ Language. Native full
     có gate UA; fragment dùng vòng đời view để observe. Inter nếu sẵn sàng/được phép
     thì show rồi mới sang Home; nhánh không ad cũng sang Home. Không bắt full2 nếu
-    màn này không có trong hành trình thật.
+    màn này không có trong hành trình thật. Với constructor Kotlin synthetic, giải mã mask
+    cho từng item theo positionIndicator; page 1 là item positionIndicator=0, không được
+    lấy mask của page 2 (positionIndicator=1) để kết luận page 1 bị tắt native.
   verdict:
     pass_when: "Các slot có màn tương ứng, load/observe/show đúng điểm và mọi nhánh đều tiến đến Home."
     fail_when: "Có bằng chứng sai slot, thiếu gate, show không thể đạt hoặc điều hướng bị kẹt."
@@ -107,13 +114,15 @@
   area: welcome
   severity: high
   question: >-
-    Khi resume, App Open ưu tiên nếu bật; Welcome chỉ khi App Open tắt và hai slot
-    native_welcome/inter_welcome được phép. Kiểm danh sách màn loại trừ, purchase,
-    inter đang show, gate UA; Welcome load/observe native/inter, delay ngắn rồi
-    click show hoặc fallback thoát. Không yêu cầu Welcome luôn được bật trong defaults.
+    Theo ADS SCRIPTS của app, xác định slot Welcome/Resume thực sự được yêu cầu.
+    Nếu có App Open và native_welcome/inter_welcome trong hợp đồng, kiểm chúng loại trừ
+    nhau, gate và luồng native/inter. Nếu hợp đồng chỉ có inter_welcome_back thì đánh giá
+    biến thể WelcomeBack này, không coi thiếu native_welcome/open_resume là lỗi.
+    Kiểm màn loại trừ, purchase, inter đang show, gate UA, load/show và nhánh thoát khi
+    không có ad. Không yêu cầu Welcome luôn được bật trong defaults.
   verdict:
-    pass_when: "Hai đường resume loại trừ nhau, gate đầy đủ, UI và thoát có fallback."
-    fail_when: "Có bằng chứng hai quảng cáo chồng nhau, sai màn resume hoặc Welcome không thoát khi không có ad."
+    pass_when: "Các slot có trong hợp đồng dùng đúng gate và Welcome thoát được khi không có ad; nếu App Open có trong hợp đồng thì hai đường resume loại trừ nhau."
+    fail_when: "Có bằng chứng hai quảng cáo cùng được phép show, sai màn resume, thiếu gate của slot có trong hợp đồng hoặc Welcome không thoát khi không có ad."
     unknown_when: "Không thể chứng minh lifecycle runtime hoặc SDK nội bộ."
   start_hints: ["sources/"]
   budget: {max_tool_calls: 25}
@@ -166,7 +175,28 @@
     Nếu app không có banner ngoài Splash, chỉ đánh giá slot tồn tại; không bắt thêm màn.
   verdict:
     pass_when: "Banner đang dùng có đúng config, gate và lifecycle reload."
-    fail_when: "Có bằng chứng banner sai slot, reload bất tận hoặc thiếu cleanup gây leak."
+    fail_when: "Có bằng chứng banner sai slot, reloadIntervalSeconds được cấu hình nhưng không dùng, reload bất tận hoặc thiếu cleanup gây leak."
     unknown_when: "Không xác định được container hoặc vòng đời qua mã đã giải mã."
   start_hints: ["sources/", "resources/AndroidManifest.xml"]
   budget: {max_tool_calls: 20}
+
+- id: ADS_CROSS_FLOW_BUGS
+  title: Lỗi giao thoa giữa các luồng ads và điều hướng
+  mode: agent
+  area: cross_flow
+  severity: high
+  question: >-
+    Sau các rule chuyên biệt, chủ động tìm lỗi ads/điều hướng chưa được nêu: config bị ghi đè,
+    load sau khi màn đã đóng, callback kép, show lặp, observer giữ màn cũ, timer không dọn,
+    nhánh purchase/offline/fail/timeout bị kẹt hoặc load sai ID. Lần theo ít nhất hai call site
+    hoặc một call site với callback/nhánh lỗi trước khi kết luận. Không lặp lại lỗi đã có trong
+    các finding trước. Trước khi nói màn bị kẹt khi xuống nền, lần qua cả onResume/onStart,
+    Runnable được postDelayed và cờ retry trong manager; helper/Runnable đã làm rối vẫn phải
+    mở mã đích, không coi tên hàm lạ là không có retry. Mã bị làm rối hoặc không thấy lỗi
+    không đồng nghĩa PASS.
+  verdict:
+    pass_when: "Chỉ PASS khi có bằng chứng bao phủ các nhánh trọng yếu và không có lỗi mới; tránh khẳng định bao phủ toàn APK."
+    fail_when: "Có lỗi mới cụ thể, tái tạo được bằng đường đi mã và bằng chứng file/dòng."
+    unknown_when: "Không tìm được lỗi mới có bằng chứng hoặc không thể chứng minh hành vi do mã giải biên dịch thiếu."
+  start_hints: ["sources/", "resources/assets/ad_config.json"]
+  budget: {max_tool_calls: 35}

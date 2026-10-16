@@ -5,9 +5,14 @@ from .utils import digest_json, write_json
 class VerdictCache:
     def __init__(self, directory):
         self.root = Path(directory) / "verdicts"
-    def key(self, facts, pack, rule, engine, documents):
+    def key(self, facts, pack, rule, engine, documents, dependencies=None):
         from dataclasses import asdict
-        return digest_json({"tool":"0.1.0", "apk": facts["source"].get("sha256"), "workspace":facts["workspace"]["content_sha256"], "pack":pack.fingerprint, "rule":asdict(rule), "engine":engine, "documents":documents})
+        return digest_json({"tool":"0.6.0", "apk": facts["source"].get("sha256"),
+                            "workspace":facts["workspace"]["content_sha256"],
+                            "pack_name":pack.name, "pack_version":pack.version,
+                            "context":pack.context, "extract":pack.extract,
+                            "rule":asdict(rule), "engine":engine,
+                            "documents":documents, "dependencies":dependencies})
     def get(self, key):
         try:
             value = json.loads((self.root / (key+".json")).read_text(encoding="utf-8"))

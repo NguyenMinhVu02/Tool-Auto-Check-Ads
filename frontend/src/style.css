@@ -59,6 +59,8 @@ body{margin:0;min-width:320px}
 .start-row .ant-btn{flex:none}
 .steps-card .ant-card-body{padding:25px 22px}
 .steps-card .ant-steps-item-description{font-size:10px}
+.rule-progress{margin-top:20px}.rule-progress .ant-progress{margin:7px 0}.rule-progress>.ant-typography{display:inline-block;margin-right:8px}
+.inventory-notice{margin-bottom:18px}.inventory-notice .ant-space{display:flex}
 .results-section{padding-top:12px}
 .results-header{align-items:end;margin-bottom:15px}
 .results-header h3.ant-typography{margin:5px 0 0;font-size:20px}

@@ -40,6 +40,7 @@ class WebTests(unittest.TestCase):
 
         def fake_run(archive, *, out, **kwargs):
             self.assertEqual(kwargs['engine'], 'codex')
+            self.assertEqual(Path(kwargs['cache_dir']), self.root / 'cache')
             self.assertEqual(Path(archive).read_bytes(), b"fake archive")
             output = Path(out)
             output.mkdir(parents=True)
@@ -75,11 +76,13 @@ class WebTests(unittest.TestCase):
         reached_rules = threading.Event()
         finish = threading.Event()
 
-        def fake_run(archive, *, out, progress, **kwargs):
+        def fake_run(archive, *, out, progress, rule_progress, **kwargs):
             for stage in ("unpack", "facts", "rules"):
                 progress(stage)
+            rule_progress("start", {"index": 1, "total": 2, "completed": 0, "rule_id": "RULE_A", "title": "Rule A"})
             reached_rules.set()
             self.assertTrue(finish.wait(5))
+            rule_progress("complete", {"index": 1, "total": 2, "completed": 1, "rule_id": "RULE_A", "title": "Rule A", "status": "FAIL", "from_cache": False})
             progress("report")
             output = Path(out)
             output.mkdir(parents=True)
@@ -93,6 +96,7 @@ class WebTests(unittest.TestCase):
             self.assertTrue(reached_rules.wait(5))
             job = json.load(self.request(f"/api/jobs/{job_id}"))
             self.assertEqual((job["state"], job["stage"]), ("running", "rules"))
+            self.assertEqual((job["rule_completed"], job["rule_total"], job["current_rule"]), (0, 2, "RULE_A"))
             finish.set()
             for _ in range(50):
                 job = json.load(self.request(f"/api/jobs/{job_id}"))
@@ -100,6 +104,7 @@ class WebTests(unittest.TestCase):
                     break
                 time.sleep(0.02)
             self.assertEqual((job["state"], job["stage"]), ("done", "done"))
+            self.assertEqual(job["last_rule"]["status"], "FAIL")
 
     def test_both_documents_reach_pipeline(self):
         ads = json.load(self.request(

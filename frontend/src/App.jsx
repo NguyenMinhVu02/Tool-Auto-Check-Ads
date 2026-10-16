@@ -128,7 +128,10 @@ export default function App() {
       setJob(next);
       if (next.state === 'running' || next.state === 'uploading') {
         setStage(stageLabels[next.stage] ? next.stage : 'unpack');
-        setNotice(`${next.filename}: ${stageLabels[next.stage] || 'Đang xử lý'}…`);
+        const ruleText = next.stage === 'rules' && next.current_rule
+          ? ` · ${next.rule_completed || 0}/${next.rule_total || '?'}: ${next.current_rule_title || next.current_rule}`
+          : '';
+        setNotice(`${next.filename}: ${stageLabels[next.stage] || 'Đang xử lý'}${ruleText}…`);
         setError(false);
         timerRef.current = setTimeout(() => poll(id), 1200);
         return;
@@ -273,7 +276,7 @@ export default function App() {
         </Card>
 
         <Card className="documents-card" title="Thông tin đối chiếu" extra={<Tag>Không bắt buộc</Tag>}>
-          <Paragraph type="secondary">Chọn đủ ADS SCRIPTS và working file để so sánh ID ads, package và cấu hình. Hỗ trợ JSON object hoặc CSV cột key,value.</Paragraph>
+          <Paragraph type="secondary">Chọn đủ ADS SCRIPTS và working file để so sánh ID ads, package và cấu hình. Hỗ trợ CSV dạng bảng của Infinity, CSV key,value hoặc JSON object.</Paragraph>
           <div className="document-grid">
             <div className="document-field"><Text strong>ADS SCRIPTS</Text><Upload id="ads-upload" accept=".csv,.json" showUploadList={false} beforeUpload={(file) => chooseDocument(file, 'ads')}><Button icon={<FolderOpenOutlined />} disabled={busy}>Chọn file</Button></Upload><Text type="secondary" ellipsis>{ads?.name || 'Chưa chọn file'}</Text></div>
             <div className="document-field"><Text strong>Working file</Text><Upload id="working-upload" accept=".csv,.json" showUploadList={false} beforeUpload={(file) => chooseDocument(file, 'working')}><Button icon={<FolderOpenOutlined />} disabled={busy}>Chọn file</Button></Upload><Text type="secondary" ellipsis>{working?.name || 'Chưa chọn file'}</Text></div>
@@ -283,11 +286,27 @@ export default function App() {
 
         <Card className="steps-card" title="Tiến độ audit" extra={<Tag color={error ? 'error' : busy ? 'processing' : stage === 'done' ? 'success' : 'default'}>{phase}</Tag>}>
           <Steps size="small" responsive current={currentStep} status={error ? 'error' : 'process'} items={steps} />
+          {stage === 'rules' && job?.rule_total > 0 && <div className="rule-progress">
+            <Text strong>{job.rule_completed || 0}/{job.rule_total} quy tắc đã xong</Text>
+            <Progress percent={Math.round(100 * (job.rule_completed || 0) / job.rule_total)} size="small" />
+            {job.current_rule && <Text type="secondary">Đang đọc mã: {job.current_rule_title || job.current_rule}</Text>}
+            {job.last_rule && <Text type="secondary"> · Vừa xong: {job.last_rule.rule_id} ({statusLabels[job.last_rule.status] || job.last_rule.status}{job.last_rule.from_cache ? ', cache' : ''})</Text>}
+          </div>}
         </Card>
 
         <section className="results-section" id="results">
           <div className="results-header"><div><Text className="eyebrow">KẾT QUẢ</Text><Title level={3}>Tổng quan kiểm tra</Title></div>{report && <Button href={`/api/jobs/${job.id}/report`} icon={<DownloadOutlined />}>Tải report.json</Button>}</div>
-          <Alert className="ai-notice" type="info" showIcon icon={<InfoCircleOutlined />} message="Codex GPT-6 Luna đánh giá 10 rule ads" description="PASS và FAIL cần bằng chứng file/dòng hợp lệ. Khi thiếu dữ liệu hoặc không thể kết nối AI, kết quả là Chưa rõ." />
+          <Alert className="ai-notice" type="info" showIcon icon={<InfoCircleOutlined />} message={`Codex GPT-6 Luna đánh giá ${report?.summary?.total || job?.rule_total || 10} rule ads`} description="PASS và FAIL cần bằng chứng file/dòng hợp lệ. Khi thiếu dữ liệu hoặc không thể kết nối AI, kết quả là Chưa rõ." />
+          {report?.inventory?.documents_available && <Alert className="inventory-notice" type={report.inventory.missing_local.length || report.inventory.mismatched_ids.length || report.inventory.package_match === false || report.inventory.app_id_match === false ? 'warning' : 'success'} showIcon
+            message={`Kiểm kê ID: ${report.inventory.matching_ids.length}/${report.inventory.expected_count} placement khớp config local`}
+            description={<Space direction="vertical" size={2}>
+              {report.inventory.missing_local.length > 0 && <Text>Thiếu trong config: {report.inventory.missing_local.join(', ')}</Text>}
+              {report.inventory.mismatched_ids.length > 0 && <Text>ID lệch: {report.inventory.mismatched_ids.join(', ')}</Text>}
+              {report.inventory.extra_local.length > 0 && <Text>Thừa trong config: {report.inventory.extra_local.join(', ')}</Text>}
+              {report.inventory.package_match !== null && report.inventory.package_match !== undefined && <Text>Package: {report.inventory.package_match ? 'khớp working file' : 'không khớp working file'}</Text>}
+              {report.inventory.app_id_match !== null && report.inventory.app_id_match !== undefined && <Text>AdMob App ID: {report.inventory.app_id_match ? 'khớp ADS SCRIPTS' : 'không khớp ADS SCRIPTS'}</Text>}
+              <Text type="secondary">Kiểm kê từ tài liệu và assets; chưa chứng minh ID được dùng khi chạy.</Text>
+            </Space>} />}
           <div className="metric-grid"><Metric title="ĐẠT" value={report?.summary?.pass} color="pass" help="Có bằng chứng phù hợp" /><Metric title="CẦN XỬ LÝ" value={report?.summary?.fail} color="fail" help="Có bằng chứng sai lệch" /><Metric title="CHƯA RÕ" value={report?.summary?.unknown} color="unknown" help="Cần thêm dữ liệu" /><Metric title="BỎ QUA" value={report?.summary?.skipped} color="skipped" help="Chưa đủ điều kiện" /></div>
           <Card className="findings-card" title="Chi tiết phân tích" extra={<Tag color={error ? 'error' : stage === 'done' ? 'success' : 'default'}>{phase}</Tag>}>
             {job && <Paragraph type="secondary" className="report-subtitle">{job.filename}{job.package ? ` · ${job.package}` : ''}{job.state === 'done' ? ` · ${job.docs_used ? 'Đã nhận 2 tài liệu' : 'Không kèm tài liệu'}` : ''}</Paragraph>}

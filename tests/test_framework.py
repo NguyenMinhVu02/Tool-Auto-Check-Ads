@@ -104,6 +104,39 @@ class FrameworkTests(unittest.TestCase):
         response = json.dumps({'rule_id':'EXAMPLE','status':'PASS','evidence':[]})
         finding, _ = evaluate(self.agent_rule(), WorkspaceTools(self.ws), ReplayEngine([response]), '')
         self.assertEqual(finding.status, 'UNKNOWN')
+        mixed = [{'file':'sources/demo/App.java','line':4,'excerpt':'Example.init();'},
+                 {'file':'sources/demo/App.java','line':99,'excerpt':'Example.init();'}]
+        finding, _ = evaluate(self.agent_rule(), WorkspaceTools(self.ws), ReplayEngine([json.dumps({'rule_id':'EXAMPLE','status':'FAIL','evidence':mixed})]), '')
+        self.assertEqual((finding.status, finding.reason), ('UNKNOWN', 'unverified_evidence'))
+
+    def test_invalid_evidence_can_be_repaired_once(self):
+        wrong = {'rule_id': 'EXAMPLE', 'status': 'FAIL', 'evidence': [
+            {'file': 'sources/demo/App.java', 'line': 5, 'excerpt': 'Example.init();'}]}
+        fixed = {'rule_id': 'EXAMPLE', 'status': 'FAIL', 'evidence': [
+            {'file': 'sources/demo/App.java', 'line': 4, 'excerpt': 'Example.init();'}]}
+        class RecordingReplay(ReplayEngine):
+            def __init__(self, responses):
+                super().__init__(responses)
+                self.prompts = []
+
+            def run_agent(self, prompt, tools, max_tool_calls, timeout=600):
+                self.prompts.append(prompt)
+                return super().run_agent(prompt, tools, max_tool_calls, timeout)
+
+        engine = RecordingReplay([json.dumps(wrong), json.dumps(fixed)])
+        finding, trace = evaluate(self.agent_rule(), WorkspaceTools(self.ws), engine, 'DOC_MARKER')
+        self.assertEqual(finding.status, 'FAIL')
+        self.assertTrue(finding.evidence[0]['verified'])
+        self.assertTrue(trace['attempts'][-1]['repair'])
+        self.assertIn('DOC_MARKER', engine.prompts[1])
+
+    def test_multiline_evidence_must_match_contiguous_source_at_cited_line(self):
+        excerpt = ' public void onCreate() {\n  Example.init();\n }'
+        for line, expected in [(3, 'FAIL'), (4, 'UNKNOWN')]:
+            payload = {'rule_id': 'EXAMPLE', 'status': 'FAIL', 'evidence': [
+                {'file': 'sources/demo/App.java', 'line': line, 'excerpt': excerpt}]}
+            finding, _ = evaluate(self.agent_rule(), WorkspaceTools(self.ws), ReplayEngine([json.dumps(payload)]), '')
+            self.assertEqual(finding.status, expected)
 
     def test_invalid_agent_output_and_wrong_rule(self):
         for responses in [['bad', 'bad'], [json.dumps({'rule_id':'OTHER','status':'PASS'})], [json.dumps({'rule_id':'EXAMPLE','status':'bogus'})], [json.dumps({'rule_id':'EXAMPLE','status':{}})]]:

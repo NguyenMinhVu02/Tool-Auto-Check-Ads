@@ -2,15 +2,95 @@
 
 ## Trạng thái hiện tại
 
-- Cập nhật: 2026-10-06 17:55 (Asia/Ho_Chi_Minh).
-- Mục tiêu: Push mã giao diện Ant Design và tích hợp Codex Luna lên GitHub.
-- Trạng thái: Hoàn tất push mã hiện tại; kiểm định AI trên APK đối tác thật vẫn đang làm.
-- Kết quả: `origin/main` chứa giao diện Ant Design, frontend React/Vite đã build và adapter Codex Luna. Web local vẫn chạy tại `http://127.0.0.1:8765`.
-- Kiểm tra: Remote main trước push trùng HEAD `403267f`; `npm run build` đạt; 24/24 unittest đạt; `git diff --check` đạt. Một rule Codex Luna đã được thử trên workspace mẫu từ phiên trước.
-- Giới hạn: Chưa thử toàn bộ 10 luật trên APK và tài liệu đối tác thật; kết luận AI cần người kiểm lại. Job web chỉ ở bộ nhớ server; cảnh báo rời trang là hộp thoại chuẩn của trình duyệt.
-- Bước tiếp theo: Audit APK đối tác cùng ADS SCRIPTS/working file, xem chất lượng verdict và chỉnh rule nếu cần; commit/push khi người dùng yêu cầu.
+- Cập nhật: 2026-10-16 15:29 (Asia/Ho_Chi_Minh).
+- Mục tiêu: Commit và push các cải tiến audit lên GitHub theo yêu cầu người dùng.
+- Trạng thái: Đang làm; đã kiểm thử và kiểm tra remote, chuẩn bị commit/push.
+- Kết quả: Nhận hai mẫu CSV thật; kiểm kê key/ID, Package, App ID; thêm rule giao thoa thành 11 rule; siết prompt theo nhánh và hợp đồng app; sửa bằng chứng một lần với đủ context; xác minh được đoạn nhiều dòng; cache theo từng rule và tiến độ n/11 trên web. Web mã mới chạy tại http://127.0.0.1:8765.
+- Kiểm tra: 35/35 unittest đạt, frontend build đạt, rule pack hợp lệ, git diff --check đạt. CSV thật có 24 placement, local release 23, 23 ID chung khớp, thiếu inter_onboarding; Package và App ID khớp. Đã chạy các lượt đủ 11 rule (~11–12 phút) và kiểm chứng riêng sau hiệu chỉnh; bản tổng hợp tại out/cast-tv-final-review/validation.md.
+- Giới hạn: Chưa chạy lại toàn bộ 11 rule sau sửa cuối về đoạn trích nhiều dòng; đã xác minh trực tiếp 5/5 đoạn của rule ID và chạy live rule giao thoa. Kết luận mã tĩnh vẫn cần rà ngữ nghĩa; các FAIL cũ về page 1/Welcome/Splash retry đã được ghi rõ và hiệu chỉnh. Chưa kiểm runtime; job mất khi restart server; lượt đầu web vẫn cần nhiều phút.
+- Bước tiếp theo: Người dùng thử APK và CSV trên web; kiểm runtime các nhánh quảng cáo/Firebase khi cần; commit/push chỉ khi được yêu cầu.
 
 ## Lịch sử phiên
+
+### 2026-10-16 15:29 — Chuẩn bị push cải tiến audit (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Đưa toàn bộ cải tiến CSV, inventory, bằng chứng, rule và tiến độ web lên GitHub.
+- Trạng thái: Đang làm.
+- Đã làm: Kiểm tra Git main và remote; fetch HTTPS thiếu đăng nhập, fetch trực tiếp SSH thành công; HEAD và main trên remote cùng commit trước khi commit mới.
+- File thay đổi: Mã và tài liệu trong lượt triển khai trước, kèm SESSION_LOG.md. APK/CSV đối tác, cache và báo cáo out/ bị Git ignore.
+- Kiểm tra: Chạy mới 35/35 unittest đạt; npm run build đạt; git diff --check đạt.
+- Bước tiếp theo: Commit, push main và xác minh commit trên remote; ghi kết quả xuất bản.
+
+### 2026-10-16 15:21 — Cơ chế và phần cần hoàn thiện (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Giải thích luồng xử lý và xác định tiêu chí để coi công cụ audit tĩnh đủ ổn định.
+- Trạng thái: Hoàn tất đánh giá, không triển khai mã mới.
+- Đã làm: Đối chiếu pipeline, web job, nhật ký và Git; phân biệt đối chiếu deterministic với Codex suy luận, xác minh đoạn trích với xác minh ngữ nghĩa, local web với lời gọi AI qua Codex.
+- File thay đổi: SESSION_LOG.md.
+- Kiểm tra: Đọc mã hiện tại; không chạy thêm audit hoặc test, kết quả 35/35 test thuộc lượt triển khai ngay trước đó.
+- Việc còn lại: Kiểm thử đầu cuối bản cuối qua web; tập APK có lỗi đã biết để đo sai lệch; xác minh đường đi/callback trước FAIL; lưu job/checkpoint/lịch sử; cập nhật và version hóa base rules; runtime cho kết luận load/show/Firebase; đo cache và tối ưu sau benchmark.
+- Bước tiếp theo: Ưu tiên chất lượng kết luận và kiểm thử web đầu cuối trước tối ưu thời gian hoặc bổ sung runtime.
+
+### 2026-10-16 15:14 — Triển khai cải thiện audit và web (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Lập kế hoạch và triển khai các sửa đổi sau pilot để đọc CSV thật, rà JADX sâu hơn và hiện tiến độ từng rule.
+- Trạng thái: Hoàn tất lát cắt đã lên kế hoạch; chưa commit/push.
+- Đã làm: Tạo kế hoạch docs/2026-10-16-audit-depth-plan.md; tách parser documents.py; tạo inventory.py với key/ID/Package/App ID và vị trí chuỗi config/placement; thêm rule giao thoa, điều chỉnh Init/Onboarding/Welcome theo logic thực và hợp đồng app; sửa verifier hỗ trợ đoạn nhiều dòng; thêm một lượt sửa dẫn chứng có đầy đủ context; cache từng rule và dependency của rule cuối; web dùng cache trong out/web/cache và hiện rule hiện tại/số hoàn thành/kiểm kê.
+- File thay đổi: README.md, SESSION_LOG.md, apk_audit/{agent,documents,inventory,pipeline,verdict_cache,web}.py, frontend/src/{App.jsx,style.css}, apk_audit/web_assets/{app.js,app.css}, rulepacks/default/rules/ads-flow.yaml, tests/{test_documents,test_inventory,test_framework,test_integration,test_web}.py, kế hoạch trong docs. Artifact local trong out/ bị Git ignore.
+- Kiểm tra và kết quả: 35/35 unittest đạt ngoài sandbox cho socket/MCP; npm run build đạt; rule pack check và git diff --check đạt. Parser nhận trực tiếp hai CSV gốc (24 placement/65 hàng working); 23 ID chung khớp config release, thiếu inter_onboarding, Package/App ID khớp. Các lượt đủ 11 rule mất 673s và 721s; một lượt sau bị chủ động dừng để sửa prompt repair thiếu docs. Rule Init hiệu chỉnh PASS với 14 evidence; rule ID v5 được xác minh lại đủ 5/5 đoạn nhiều dòng; rule giao thoa cuối UNKNOWN, 12/12 evidence đúng.
+- Rà chất lượng: Bác bỏ kết luận page 1 không có native do nhầm mask page 2; không ép slot Welcome ngoài ADS SCRIPTS; bác bỏ Splash kẹt vì onResume có Runnable retry. Bản tổng hợp đã rà ở out/cast-tv-final-review/validation.md (1 PASS, 8 FAIL, 2 UNKNOWN theo rule, không phải một lượt mới duy nhất).
+- Việc còn lại: Chưa kiểm runtime quảng cáo/Remote Config live/Firebase; chưa benchmark cache toàn lượt sau sửa cuối; job chưa lưu bền qua restart; chưa xây bộ tìm mọi bug Java ngoài luồng ads.
+- Bước tiếp theo: Dùng web với APK/CSV thật và lấy runtime evidence khi cần; chỉ commit/push khi người dùng yêu cầu.
+
+### 2026-10-12 14:55 — Đánh giá độ sâu audit và thời gian web (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Trả lời liệu công cụ hiện đã đọc JADX đủ kỹ để tìm bug/khác biệt và người dùng phải chờ bao lâu trên web.
+- Trạng thái: Hoàn tất rà soát; cải tiến chưa triển khai.
+- Đã làm: Đọc pipeline, Codex adapter, evidence verifier, JADX unpack/cache, web job và 10 rule; đo số liệu từ pilot Cast TV.
+- File thay đổi: `SESSION_LOG.md` (chỉ nhật ký). Không sửa source, không commit/push.
+- Kiểm tra và kết quả: 10 rule chạy tuần tự trong ~842 giây, JADX ~34 giây; 124 tool calls, 92 evidence/24 file (20 Java), 89 evidence đúng file/dòng. Web dùng cùng engine và pipeline, cache của pilot đặt riêng trong `/tmp` nên web mặc định chưa tận dụng lượt pilot này. Hai CSV bảng gốc bị từ chối ngay ở `load_document`.
+- Việc còn lại / trở ngại: Chưa có chế độ tìm bug ngoài ads, smali xrefs, evidence liên kết logic đủ mạnh, CSV parser theo mẫu, tiến độ từng rule/ETA, job bền vững và kiểm thử runtime.
+- Bước tiếp theo: Ưu tiên parser CSV và tiến độ, sau đó bổ sung phân tích call graph/nhánh lỗi và kiểm chứng verdict; đo lại thời gian trên web với dữ liệu thật.
+
+### 2026-10-12 14:27 — Pilot Cast TV APK và tài liệu thật (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Chạy thử toàn bộ audit với APK Cast TV 1.0.8 và hai CSV đối tác; đánh giá độ hữu ích và giới hạn của kết quả.
+- Trạng thái: Hoàn tất pilot tĩnh; runtime và parser CSV còn việc.
+- Đã làm: Xác nhận ba file đầu vào; phát hiện CLI chỉ nhận CSV `key,value`; chuyển tạm hai CSV thành JSON ở `/tmp/apk-audit-cast-docs/`; chạy Codex Luna đủ 10 rule; đối chiếu thủ công các verdict và inventory placement; lưu `report.md`, `report.json`, trace, `validation.md` trong `out/cast-tv-pilot/`.
+- File thay đổi: `SESSION_LOG.md`; `out/cast-tv-pilot/` (artifact audit, bị Git ignore). Không sửa source, không commit/push.
+- Kiểm tra và kết quả: 1 PASS, 7 FAIL, 2 UNKNOWN; 124 tool calls, ~842 giây. Package và AdMob App ID khớp docs; 23 ID chung khớp CSV, thiếu key `inter_onboarding` trong release config. Xác nhận code path config debug, preload Splash không phủ hết nhánh, UA gate Onboarding, tracking event và banner reload bằng mã giải biên dịch. Không kiểm thử runtime hoặc chạy unittest mới.
+- Việc còn lại / trở ngại: Parser không hỗ trợ CSV ADS SCRIPTS/working file dạng bảng; các kết luận runtime về Remote Config/App Open/show ad/Firebase cần thiết bị và log để kiểm chứng.
+- Bước tiếp theo: Triển khai parser CSV đúng mẫu, thử lại qua web, rồi thu runtime evidence; chỉ commit/push theo yêu cầu người dùng.
+
+### 2026-10-12 13:54 — Đề xuất bước tiếp theo (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Xếp thứ tự việc cần triển khai tiếp.
+- Trạng thái: Hoàn tất đề xuất.
+- Đã làm: Đối chiếu bộ 10 rule, pipeline AI, web job và các giới hạn trong README; xác định kiểm định kết quả trên APK thật là bước cần làm trước.
+- File thay đổi: SESSION_LOG.md (nhật ký phiên).
+- Kiểm tra và kết quả: Đã đọc mã và tài liệu liên quan; server localhost vẫn nghe cổng 8765. Không chạy test hoặc audit mới trong phiên này.
+- Việc còn lại / trở ngại: Chưa có APK đối tác và cặp tài liệu thật để đo sai lệch verdict; base rule pack đang bám commit `e8f4337` và không tự cập nhật; web chưa có tiến độ từng rule, job chỉ lưu trong bộ nhớ.
+- Bước tiếp theo: Chạy pilot với dữ liệu thật, ghi kết quả kỳ vọng từng rule, chỉnh bộ luật và evidence, rồi hoàn thiện trải nghiệm web.
+
+### 2026-10-12 13:51 — Chạy web audit local (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Khởi động web theo yêu cầu người dùng.
+- Trạng thái: Hoàn tất.
+- Đã làm: Chạy `.venv/bin/apk-audit serve` và mở `http://127.0.0.1:8765` trong phiên Google Chrome hiện có.
+- File thay đổi: SESSION_LOG.md (nhật ký phiên, giữ thay đổi ghi nhận từ lượt rà soát trước).
+- Kiểm tra và kết quả: HTTP GET trang chủ trả `200 OK`; chưa upload APK trong phiên này.
+- Việc còn lại / trở ngại: Audit trên APK đối tác thật cùng tài liệu chưa được kiểm định; server chỉ chạy khi tiến trình hiện tại còn sống.
+- Bước tiếp theo: Người dùng chọn APK trên web và bấm Bắt đầu kiểm tra.
+
+### 2026-10-12 13:49 — Rà soát tiến độ dự án (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Cho biết dự án đã triển khai đến đâu.
+- Trạng thái: Hoàn tất rà soát.
+- Đã làm: Đối chiếu Git, README, nhật ký và trạng thái web server; chạy lại bộ kiểm thử.
+- File thay đổi: SESSION_LOG.md (chỉ nhật ký phiên).
+- Kiểm tra và kết quả: HEAD = nhánh theo dõi cục bộ `origin/main` = `7163042`; working tree sạch trước khi ghi nhật ký; 24/24 unittest đạt; không thấy server lắng nghe cổng 8765. Chưa kiểm tra remote GitHub trực tiếp.
+- Việc còn lại / trở ngại: Chưa audit APK đối tác thật với cặp ADS SCRIPTS/working file, chưa kiểm định chất lượng 10 verdict AI; job web chỉ lưu trong bộ nhớ; các mục mở rộng trong README chưa triển khai.
+- Bước tiếp theo: Chạy audit thực tế, rà bằng chứng và hiệu chỉnh rule/AI nếu cần.
 
 ### 2026-10-06 17:55 — Push Ant Design và Codex Luna (Asia/Ho_Chi_Minh)
 

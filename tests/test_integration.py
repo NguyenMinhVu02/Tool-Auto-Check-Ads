@@ -22,9 +22,15 @@ class IntegrationTests(unittest.TestCase):
     agent_rule = FrameworkTests.agent_rule
     # Reuse the isolated workspace fixture without duplicating inherited tests.
     def test_pipeline_reports_its_real_stages(self):
+        (self.pack / 'rules/a.yaml').write_text('- id: EXAMPLE\n  title: Example\n  mode: agent\n  question: Inspect\n  verdict: {pass_when: "yes", fail_when: "no", unknown_when: unclear}\n')
         stages = []
-        run(self.ws, rules=self.pack, out=self.root/'out', engine='none', progress=stages.append)
+        rules = []
+        run(self.ws, rules=self.pack, out=self.root/'out', engine='none', progress=stages.append,
+            rule_progress=lambda event, detail: rules.append((event, detail)))
         self.assertEqual(stages, ['unpack', 'facts', 'rules', 'report'])
+        self.assertEqual(rules[0][0], 'start')
+        self.assertEqual(rules[-1][0], 'complete')
+        self.assertEqual(rules[-1][1]['completed'], rules[-1][1]['total'])
 
     def test_cache_replays_and_invalidates_when_context_changes(self):
         (self.pack / 'rules/a.yaml').write_text('''- id: EXAMPLE
@@ -47,6 +53,41 @@ class IntegrationTests(unittest.TestCase):
         third = run(self.ws, engine=ReplayEngine([json.dumps({'rule_id':'EXAMPLE','status':'UNKNOWN'})]), **kwargs)
         self.assertEqual(third['summary']['from_cache'], 0)
         self.assertEqual(third['summary']['unknown'], 1)
+
+    def test_cross_flow_cache_key_changes_with_prior_findings(self):
+        from apk_audit.verdict_cache import VerdictCache
+        from apk_audit.facts import build_facts
+        from apk_audit.rules.loader import load_pack
+        (self.pack / 'rules/a.yaml').write_text('''- id: ADS_CROSS_FLOW_BUGS
+  title: Cross flow
+  mode: agent
+  question: Inspect
+  verdict: {pass_when: "yes", fail_when: "no", unknown_when: unclear}
+''')
+        facts = build_facts(self.ws).to_dict()
+        pack = load_pack(self.pack)
+        rule = pack.rules[0]
+        cache = VerdictCache(self.root / 'cache')
+        first = cache.key(facts, pack, rule, 'codex', {}, dependencies=[])
+        second = cache.key(facts, pack, rule, 'codex', {}, dependencies=[{'rule_id': 'A', 'status': 'FAIL'}])
+        self.assertNotEqual(first, second)
+
+    def test_editing_other_rule_does_not_invalidate_unrelated_cache(self):
+        from apk_audit.verdict_cache import VerdictCache
+        from apk_audit.facts import build_facts
+        from apk_audit.rules.loader import load_pack
+        rule_a = '- id: A\n  title: A\n  mode: agent\n  question: Inspect A\n  verdict: {pass_when: "yes", fail_when: "no", unknown_when: unclear}\n'
+        rule_b = '- id: B\n  title: B\n  mode: agent\n  question: Inspect B\n  verdict: {pass_when: "yes", fail_when: "no", unknown_when: unclear}\n'
+        (self.pack / 'rules/a.yaml').write_text(rule_a)
+        (self.pack / 'rules/b.yaml').write_text(rule_b)
+        facts = build_facts(self.ws).to_dict()
+        cache = VerdictCache(self.root / 'cache')
+        before = load_pack(self.pack)
+        first = cache.key(facts, before, before.rules[0], 'codex', {})
+        (self.pack / 'rules/b.yaml').write_text(rule_b.replace('Inspect B', 'Inspect B more'))
+        after = load_pack(self.pack)
+        self.assertNotEqual(before.fingerprint, after.fingerprint)
+        self.assertEqual(first, cache.key(facts, after, after.rules[0], 'codex', {}))
 
     def test_budget_exhaustion(self):
         finding, _ = evaluate(self.agent_rule(), WorkspaceTools(self.ws), ReplayEngine([AgentResult('{"rule_id":"EXAMPLE","status":"PASS"}', tool_calls=26)]), '')
