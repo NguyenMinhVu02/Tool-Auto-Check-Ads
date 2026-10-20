@@ -44,6 +44,9 @@ assert args[args.index('--sandbox') + 1] == 'read-only'
 assert 'model_reasoning_effort="medium"' in args
 assert '--profile' not in args
 assert '--ephemeral' in args and '--output-schema' in args
+assert 'skills.include_instructions=false' in args and 'project_doc_max_bytes=0' in args
+assert 'features.plugins=false' in args and '--ignore-rules' in args
+assert args[-1] == '-'
 assert 'TEST_RULE' in sys.stdin.read()
 schema = json.loads(Path(args[args.index('--output-schema') + 1]).read_text())
 assert schema['properties']['evidence']['type'] == 'array'
@@ -63,6 +66,23 @@ print(json.dumps({'type': 'turn.completed', 'usage': {'input_tokens': 7, 'output
             self.assertEqual(json.loads(result.text)["status"], "UNKNOWN")
             self.assertEqual(result.tool_calls, 1)
             self.assertEqual(result.usage, {'input_tokens': 7, 'output_tokens': 2})
+
+    def test_quota_error_from_json_stream_is_reported(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            executable = root / 'codex'
+            executable.write_text('''#!/usr/bin/env python3
+import json, sys
+sys.stdin.read()
+print(json.dumps({'type':'error','message':"You've hit your usage limit. Try again at 7:10 PM."}), flush=True)
+print(json.dumps({'type':'turn.failed','error':{'message':"You've hit your usage limit. Try again at 7:10 PM."}}), flush=True)
+sys.exit(1)
+''')
+            executable.chmod(0o755)
+            tools = type('Tools', (), {'root': root})()
+            with patch.dict(os.environ, {'PATH': f"{root}:{os.environ['PATH']}"}):
+                with self.assertRaisesRegex(Exception, 'usage limit.*7:10 PM'):
+                    CodexEngine().run_agent('TEST_RULE', tools, 2, timeout=5)
 
 
 if __name__ == "__main__":

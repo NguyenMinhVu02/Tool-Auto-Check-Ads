@@ -43,6 +43,15 @@ class CodexEngine:
     model = "gpt-6.1-sol"
     reasoning_effort = "medium"
     name = f"codex:{model}:{reasoning_effort}"
+    # Audits must not inherit the user's personal skills, plugins, hooks or AGENTS.md:
+    # they cost tool calls/quota and can steer verdicts away from the rule pack.
+    isolation = [
+        "--ignore-rules",
+        "--config", "features.plugins=false", "--config", "features.apps=false",
+        "--config", "features.hooks=false", "--config", "features.multi_agent=false",
+        "--config", "skills.include_instructions=false", "--config", "include_apps_instructions=false",
+        "--config", "project_doc_max_bytes=0",
+    ]
     label = "Codex CLI (GPT-6.1 Sol · medium)"
 
     def available(self):
@@ -68,7 +77,7 @@ class CodexEngine:
                 "--sandbox", "read-only", "--model", self.model,
                 "--config", f'model_reasoning_effort="{self.reasoning_effort}"',
                 "--output-schema", str(schema_path), "--output-last-message", str(result_path),
-                "--json", "--cd", str(tools.root), "-",
+                "--json", "--cd", str(tools.root), *self.isolation, "-",
             ]
             if max_tool_calls == 0:
                 command[2:2] = ['--config', 'features.shell_tool=false',
@@ -88,7 +97,9 @@ class CodexEngine:
             if exhausted:
                 return AgentResult("", tool_calls=calls, events=events, exhausted_budget=True, usage=usage)
             if process.returncode:
-                detail = stderr_path.read_text(encoding="utf-8", errors="replace")[-1000:].strip()
+                # Quota/auth failures arrive as JSON error events on stdout, not stderr.
+                detail = next((e["message"] for e in reversed(events) if e.get("type") in {"error", "turn.failed"} and e.get("message")), "")
+                detail = detail or stderr_path.read_text(encoding="utf-8", errors="replace")[-1000:].strip()
                 raise agent_error("Codex CLI lỗi: " + (detail or f"exit {process.returncode}"), calls, usage)
             if not result_path.is_file():
                 raise agent_error("Codex CLI không trả kết quả", calls, usage)
@@ -143,7 +154,8 @@ class CodexEngine:
                         item = event['item']
                         retain_source_read(events, item.get('tool', ''), json.dumps(item.get('result', {}), ensure_ascii=False))
                     if kind in {"turn.failed", "error"}:
-                        events.append({"type": kind, "message": str(event.get("message", ""))[:500]})
+                        error = event.get("error") if isinstance(event.get("error"), dict) else {}
+                        events.append({"type": kind, "message": str(event.get("message") or error.get("message") or "")[:500]})
                     if exhausted:
                         break
                 if exhausted:

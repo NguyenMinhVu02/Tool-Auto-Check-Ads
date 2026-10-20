@@ -43,8 +43,9 @@ def verdict_schema():
                 'required': ['file', 'line', 'excerpt'], 'additionalProperties': False}},
             'claims': {'type': 'array', 'items': claim},
             'reasoning': {'type': 'string'}, 'hint': {'type': 'string'},
+            'marketing_summary': {'type': 'string'},
         },
-        'required': ['rule_id', 'status', 'evidence', 'claims', 'reasoning', 'hint'],
+        'required': ['rule_id', 'status', 'evidence', 'claims', 'reasoning', 'hint', 'marketing_summary'],
         'additionalProperties': False,
     }
 

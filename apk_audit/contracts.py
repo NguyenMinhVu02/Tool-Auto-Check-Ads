@@ -49,6 +49,7 @@ class Finding:
     reasoning: str = ""
     reason: str = ""
     hint: str = ""
+    marketing_summary: str = ""
     resolved_by: str = ""
     tool_calls: int = 0
     exhausted_budget: bool = False
@@ -80,3 +81,4 @@ class AgentResult:
     events: list = field(default_factory=list)
     exhausted_budget: bool = False
     usage: dict = field(default_factory=dict)
+    session_id: str | None = None

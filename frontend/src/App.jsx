@@ -3,7 +3,7 @@ import { findingText } from './findingText';
 import { unknownExplanation } from './findingExplanation';
 import {
   Alert, Button, Card, Collapse, Empty, Layout, List, Progress, Space,
-  Select, Statistic, Steps, Tag, Typography, Upload,
+  Checkbox, Select, Statistic, Steps, Table, Tag, Typography, Upload,
 } from 'antd';
 import {
   AppstoreOutlined, CheckCircleOutlined, CloudUploadOutlined,
@@ -59,13 +59,14 @@ async function uploadDocument(kind, file) {
   return { id: data.id, sheets: data.sheets || [] };
 }
 
-function uploadArchive(file, documentIds, engine, onProgress) {
+function uploadArchive(file, documentIds, engine, crossFlow, onProgress) {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
     request.open('POST', '/api/jobs');
     request.setRequestHeader('Content-Type', 'application/octet-stream');
     request.setRequestHeader('X-Filename', encodeURIComponent(file.name));
     request.setRequestHeader('X-Audit-Engine', engine);
+    if (crossFlow) request.setRequestHeader('X-Cross-Flow', '1');
     if (documentIds) {
       request.setRequestHeader('X-Ads-Scripts-Id', documentIds.ads_scripts.id);
       request.setRequestHeader('X-Checklist-Id', documentIds.checklist.id);
@@ -165,6 +166,48 @@ function elapsed(since, now) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
+const levelTags = { ok: 'success', issue: 'error', check: 'warning' };
+
+function MarketingSummary({ data }) {
+  const problems = data.id_problems || [];
+  return (
+    <Card className="marketing-card" title="Tóm tắt cho Marketing · 4 màn đầu" style={{ marginBottom: 16 }}>
+      <Space direction="vertical" size={10} style={{ width: '100%' }}>
+        {!data.documents_available && <Alert type="info" showIcon message="Chưa có ADS SCRIPTS nên chưa đối chiếu được ID ads." />}
+        {data.publisher_note && <Alert type="error" showIcon message="ID ads thuộc tài khoản AdMob khác" description={data.publisher_note} />}
+        {data.app_id_match === false && <Alert type="error" showIcon message="AdMob App ID trong app không khớp ADS SCRIPTS." />}
+        {data.package_match === false && <Alert type="warning" showIcon message="Package của app không khớp working file." />}
+        {data.documents_available && (problems.length
+          ? <Alert type="error" showIcon message={`${problems.length} ID ads đang có vấn đề`}
+              description={<ul className="marketing-problems">{problems.map((item) => <li key={item.name}><Text strong>{item.name}</Text> <Text type="secondary">({item.screen})</Text> — {item.status}</li>)}</ul>} />
+          : <Alert type="success" showIcon message="Không thấy ID ads nào sai hoặc thiếu ở các màn đầu." />)}
+        <div className="marketing-grid">
+          {data.screens.map((screen) => (
+            <div className={`marketing-screen level-${screen.level}`} key={screen.key}>
+              <div className="marketing-screen-head"><Text strong>{screen.title}</Text></div>
+              <Space size={4} wrap>
+                <Tag color={screen.id_issues ? 'error' : 'success'}>{screen.id_issues ? `${screen.id_issues} ID có vấn đề` : 'ID đúng'}</Tag>
+                <Tag color={levelTags[screen.flow_level]}>Luồng quảng cáo: {screen.flow_label}</Tag>
+              </Space>
+              {screen.explanation && <Paragraph className="marketing-explanation">{screen.explanation}</Paragraph>}
+              {screen.placements.length > 0 && <Table size="small" pagination={false} rowKey="name" scroll={{ x: 'max-content' }} dataSource={screen.placements}
+                rowClassName={(row) => (row.problem ? 'marketing-row-problem' : '')}
+                columns={[
+                  { title: 'Vị trí', dataIndex: 'name', render: (value) => <Text code>{value}</Text> },
+                  { title: 'Loại', dataIndex: 'ad_type' },
+                  { title: 'Tình trạng', dataIndex: 'status', render: (value, row) => <Text type={row.problem ? 'danger' : undefined}>{row.problem ? '❌ ' : ''}{value}</Text> },
+                  { title: 'ID trong ADS SCRIPTS', dataIndex: 'document_id', render: (value) => <Text className="ad-id" copyable={Boolean(value)}>{value || '—'}</Text> },
+                  { title: 'ID trong app', dataIndex: 'app_id', render: (value) => <Text className="ad-id" copyable={Boolean(value)}>{value || '—'}</Text> },
+                ]} />}
+            </div>
+          ))}
+        </div>
+        <Text type="secondary">ID trong app lấy từ {data.id_source}. Chi tiết kỹ thuật cho dev ở các mục bên dưới.</Text>
+      </Space>
+    </Card>
+  );
+}
+
 function AgentPanel({ agents, engine }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -202,6 +245,7 @@ export default function App() {
   const [apk, setApk] = useState(null);
   const [ads, setAds] = useState(null);
   const [working, setWorking] = useState(null);
+  const [crossFlow, setCrossFlow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState(null);
   const [uploadPercent, setUploadPercent] = useState(null);
@@ -402,7 +446,7 @@ export default function App() {
       }
       setNotice(`Đang tải ${apk.name}…`);
       setUploadPercent(0);
-      const id = await uploadArchive(apk, documentIds, selectedEngine, setUploadPercent);
+      const id = await uploadArchive(apk, documentIds, selectedEngine, crossFlow, setUploadPercent);
       viewedJobRef.current = id;
       sessionStorage.setItem(jobStorageKey, id);
       poll(id);
@@ -464,7 +508,8 @@ export default function App() {
   const displayedEngine = report?.engine || job?.engine || selectedEngine;
   const reportEngineLabels = {
     'codex:gpt-6.1-sol:medium': 'Codex GPT-6.1 Sol · medium',
-    'claude:claude-haiku-5-5:low': 'Claude Haiku 5.5 · low',
+    'claude:claude-sonnet-5-5:medium': 'Claude Sonnet 5.5 · medium',
+    'claude:claude-haiku-5-5:low': 'Claude Haiku 5.5 · low (báo cáo cũ)',
     'codex:gpt-6-luna': 'Codex GPT-6 Luna (báo cáo cũ)',
     'claude:default': 'Claude (model mặc định cũ)',
   };
@@ -513,10 +558,11 @@ export default function App() {
                 onChange={setSelectedEngine} options={engines.map((item) => ({ value: item.id, label: `${item.label}${item.installed ? '' : ' — chưa cài'}`, disabled: !item.installed }))} />
               <Button onClick={refreshEngines} loading={enginesLoading} disabled={busy}>Phát hiện lại</Button>
             </Space>
-            <Text type="secondary">CLI cần được đăng nhập sẵn. Claude cố định Haiku 5.5 / low để tiết kiệm chi phí; Codex dùng GPT-6.1 Sol / medium.</Text>
+            <Text type="secondary">CLI cần được đăng nhập sẵn. Claude cố định Sonnet 5.5 / medium; Codex dùng GPT-6.1 Sol / medium.</Text>
             {engineError && <Alert type="error" showIcon message={engineError} />}
             {!enginesLoading && !engineError && !selectedEngine && <Alert type="warning" showIcon message="Cài và đăng nhập Codex CLI hoặc Claude CLI, sau đó khởi động lại server nếu PATH thay đổi và bấm Phát hiện lại." />}
           </div>
+          <Checkbox className="cross-flow-option" checked={crossFlow} disabled={busy} onChange={(event) => setCrossFlow(event.target.checked)}>Rà thêm lỗi chéo giữa các luồng (chậm hơn ~5 phút, tốn thêm token)</Checkbox>
           <div className="start-row"><Text type="secondary">{documentHint}</Text><Button id="start-button" type="primary" size="large" icon={busy ? <LoadingOutlined /> : <FileSearchOutlined />} disabled={!apk || busy || enginesLoading || !selectedEngine || documentsLoading || sheetMissing} onClick={beginAudit}>{busy ? 'Đang kiểm tra' : 'Bắt đầu kiểm tra'}</Button></div>
           <Paragraph type="secondary">Tự nhận dạng cột và dòng tiêu đề. Khi chưa hiểu mẫu, AI đã chọn sẽ hỗ trợ ánh xạ cột (tối đa 90 giây/tài liệu); giá trị vẫn lấy từ file gốc. Hai tài liệu cần thuộc cùng app.</Paragraph>
         </Card>
@@ -549,6 +595,7 @@ export default function App() {
         <section className="results-section" id="results">
           <div className="results-header"><div><Text className="eyebrow">KẾT QUẢ</Text><Title level={3}>Tổng quan kiểm tra</Title></div>{report && <Button href={`/api/jobs/${job.id}/report`} icon={<DownloadOutlined />}>Tải report.json</Button>}</div>
           <Alert className="ai-notice" type="info" showIcon icon={<InfoCircleOutlined />} message={ruleTotal ? `${engineLabel} đánh giá ${ruleTotal} rule ads` : `${engineLabel} đọc mã và đánh giá các rule ads`} description="PASS và FAIL cần bằng chứng file/dòng hợp lệ. Khi thiếu dữ liệu hoặc không thể kết nối AI, kết quả là Chưa đủ căn cứ (UNKNOWN), chưa phải lỗi APK được xác nhận. Nội dung mã và tài liệu được gửi tới nhà cung cấp AI đã chọn, sử dụng quota của tài khoản CLI." />
+          {report?.marketing && <MarketingSummary data={report.marketing} />}
           {report?.metrics?.documents?.parsed?.length > 0 && <Card size="small" title="Tài liệu đã đọc" style={{ marginBottom: 16 }}>
             <List size="small" dataSource={report.metrics.documents.parsed} renderItem={(document) => <List.Item>
               <Space wrap><Text strong>{document.kind === 'ads_scripts' ? 'ADS SCRIPTS' : 'Working file'}</Text>

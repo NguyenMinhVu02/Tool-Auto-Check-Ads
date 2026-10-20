@@ -20,6 +20,17 @@ Workspace mẫu chỉ chứa dữ liệu minh họa, không phải APK/app thậ
 
 Đã thêm chỉ mục mã/gói dẫn chứng theo rule, claim guard + review FAIL, metrics, checkpoint, lịch sử job bền và tùy chọn `--workers 2`. Xem [cơ chế, lệnh và giới hạn](docs/audit-optimization.md). `benchmark --quality` chạy bộ ca tổng hợp offline; `benchmark <target>` đo cold/warm, engine mặc định `none` để không tự gọi AI.
 
+## Tóm tắt cho Marketing
+
+Đầu báo cáo (web và `report.md`) có mục **Tóm tắt cho Marketing** cho 4 màn đầu: Splash, chọn ngôn ngữ, Onboarding, Welcome back/App Open. Mỗi màn có bảng vị trí quảng cáo với ID trong ADS SCRIPTS, ID trong app (`ad_config.json`) và tình trạng (Đúng ID / Sai ID / Thiếu / Không dùng), cộng kết luận luồng quảng cáo bằng lời dễ hiểu (`marketing_summary` do AI viết, không tên class/hàm). Phần đối chiếu ID là tất định, không phụ thuộc AI. Tool cũng báo khi toàn bộ ID trong app thuộc tài khoản AdMob khác ADS SCRIPTS.
+
+## Tiết kiệm token
+
+- Claude dùng Sonnet 5.5 effort `low`; lượt sửa bằng chứng/điều tra **nối tiếp phiên của rule** (`--session-id`/`--resume`) nên không gửi lại toàn bộ prompt; review FAIL vẫn mở phiên mới để đánh giá độc lập. Resume lỗi thì tự chạy lại bằng prompt đầy đủ. Transcript phiên bị xóa khi rule xong.
+- Phần prompt chung đặt trước, số ngân sách từng lượt đặt cuối để giữ tiền tố chung cho prompt cache.
+- Mỗi rule chỉ nhận placement/checklist/tham chiếu code liên quan (`context_scope.py`).
+- Rule rà lỗi chéo `ADS_CROSS_FLOW_BUGS` **tắt mặc định**; bật bằng ô chọn trên web hoặc `--cross-flow`.
+
 ## Web localhost
 
 ```bash
@@ -47,7 +58,7 @@ Trang lưu file đã tải, báo cáo và cache dưới `out/web/`, sau đó hi�
 ### AI đọc sâu và xử lý kết quả chưa đủ căn cứ
 
 1. Mỗi rule nhận **đoạn code base riêng**, mục tiêu kiểm tĩnh, các đường cần lần và các điểm khác biệt đã biết. Snapshot nằm trong `rulepacks/default/base-reference.json`, có commit và hash source, chạy được trên máy khác mà không cần checkout base. Code mẫu chỉ giải thích logic; bằng chứng PASS/FAIL phải đến từ APK.
-2. AI đọc workspace với **GPT-6.1 Sol / medium** hoặc Claude Haiku đã chọn. Với native CLI và ngân sách rule từ 20 trở lên, lượt đầu dùng khoảng 60%, dành phần còn lại cho sửa bằng chứng, điều tra hoặc review. Các rule mặc định có tổng ngân sách riêng 35–45 lượt; trần toàn audit vẫn là 400 lượt quan sát được.
+2. AI đọc workspace với **GPT-6.1 Sol / medium** hoặc Claude Sonnet 5.5 / low. Với native CLI và ngân sách rule từ 20 trở lên, lượt đầu dùng khoảng 60%, dành phần còn lại cho sửa bằng chứng, điều tra hoặc review. Các rule mặc định có tổng ngân sách riêng 35–45 lượt; trần toàn audit vẫn là 400 lượt quan sát được.
 3. Sai excerpt hoặc số liên kết claim/path được gửi lại AI cùng bảng chỉ số evidence và source quanh dòng lỗi. Tool không tự đổi số, xóa blocker hoặc coi excerpt khớp là chứng minh ngữ nghĩa.
 4. UNKNOWN có blocker/nhận định chưa chắc được **một lượt điều tra bổ sung có mục tiêu** nếu còn ngân sách: mở helper/lambda/callback/getter còn thiếu, theo phạm vi rule tĩnh. Nếu lượt đầu bị ngắt vì hết phần ngân sách riêng, lần tiếp theo nhận các kết quả đọc gần nhất đã giữ lại, tối đa khoảng 18 KB; không nhận kết luận từ lượt bị ngắt.
 5. Sau điều tra, kết quả mới vẫn qua guard evidence/claims; FAIL phải có review. Thiếu SDK/dữ liệu thực sự quyết định kết luận hoặc chưa đo hành vi runtime thì vẫn UNKNOWN. UNKNOWN có bằng chứng/claim không hợp lệ không được cache lại hoặc phục hồi từ checkpoint.
@@ -62,7 +73,7 @@ Metrics trên web/JSON ghi số lượt sửa bằng chứng, điều tra bổ s
 
 Script dừng nếu base đổi commit hoặc source liên quan có diff; cần review lại ranges/caveats trước khi nâng commit. Theo base hiện tại, vòng reload banner thuộc `BaseActivityWithBanner`; Splash load một lần không đủ làm FAIL nếu chưa chứng minh có yêu cầu reload riêng.
 
-Giao diện dùng React và các component Ant Design; font Poppins được phục vụ từ gói local. Mã frontend nằm trong `frontend/`, bản build phục vụ offline nằm trong `apk_audit/web_assets/`. Sau khi sửa frontend, chạy `cd frontend && npm ci && npm run build`; người dùng web không cần cài Node.js. Web tự phát hiện Codex/Claude CLI trên PATH của máy chạy server. Ô **AI dùng để audit** cho chọn engine, nút **Phát hiện lại** quét lại CLI; nếu có cả hai thì chọn Codex trước, chỉ có Claude thì chọn Claude. Nếu vừa sửa PATH, khởi động lại server từ terminal nhận PATH mới. Thiếu CLI thì nút bắt đầu bị khóa. Phát hiện binary không xác nhận đăng nhập hay quota. Codex dùng `gpt-6.1-sol` (reasoning `medium`), Claude cố định `claude-haiku-5-5` với effort `low`; truyền rõ model/effort, chỉ cho phép model này và tắt fallback để không tự tăng chi phí. Engine được cố định theo từng job, không tự chuyển provider khi lỗi. Cả hai chạy phiên chỉ đọc cho từng luật, có giới hạn thời gian và số lần gọi công cụ; mọi evidence được dẫn phải khớp file/dòng trước khi nhận `PASS` hoặc `FAIL`. Nội dung mã và tài liệu cần thiết được gửi tới nhà cung cấp AI đã chọn qua CLI; lượt audit có thể dùng quota/tính phí theo tài khoản. Native AI phải cung cấp claims/điều kiện và dẫn chứng; FAIL có thêm lượt review trong cùng ngân sách. Checker không tự chứng minh ngữ nghĩa hoặc runtime. Nếu thiếu bằng chứng hoặc CLI lỗi, luật trả `UNKNOWN`. File cần `jadx` và Java như CLI. Trang chỉ nhận file có đuôi `.apk`, `.xapk`, `.apkm`; nội dung archive vẫn được kiểm tra trước khi giải mã.
+Giao diện dùng React và các component Ant Design; font Poppins được phục vụ từ gói local. Mã frontend nằm trong `frontend/`, bản build phục vụ offline nằm trong `apk_audit/web_assets/`. Sau khi sửa frontend, chạy `cd frontend && npm ci && npm run build`; người dùng web không cần cài Node.js. Web tự phát hiện Codex/Claude CLI trên PATH của máy chạy server. Ô **AI dùng để audit** cho chọn engine, nút **Phát hiện lại** quét lại CLI; nếu có cả hai thì chọn Codex trước, chỉ có Claude thì chọn Claude. Nếu vừa sửa PATH, khởi động lại server từ terminal nhận PATH mới. Thiếu CLI thì nút bắt đầu bị khóa. Phát hiện binary không xác nhận đăng nhập hay quota. Codex dùng `gpt-6.1-sol` (reasoning `medium`), Claude cố định `claude-sonnet-5-5` với effort `low`; truyền rõ model/effort, chỉ cho phép model này và tắt fallback để không tự tăng chi phí. Engine được cố định theo từng job, không tự chuyển provider khi lỗi. Cả hai chạy phiên chỉ đọc cho từng luật, có giới hạn thời gian và số lần gọi công cụ; mọi evidence được dẫn phải khớp file/dòng trước khi nhận `PASS` hoặc `FAIL`. Nội dung mã và tài liệu cần thiết được gửi tới nhà cung cấp AI đã chọn qua CLI; lượt audit có thể dùng quota/tính phí theo tài khoản. Native AI phải cung cấp claims/điều kiện và dẫn chứng; FAIL có thêm lượt review trong cùng ngân sách. Checker không tự chứng minh ngữ nghĩa hoặc runtime. Nếu thiếu bằng chứng hoặc CLI lỗi, luật trả `UNKNOWN`. File cần `jadx` và Java như CLI. Trang chỉ nhận file có đuôi `.apk`, `.xapk`, `.apkm`; nội dung archive vẫn được kiểm tra trước khi giải mã.
 
 ### Dùng Claude CLI
 
@@ -76,7 +87,7 @@ uv run apk-audit doctor
 uv run apk-audit audit /path/to/app.apk --engine claude --out out/claude-app
 ```
 
-Trên web: tải lại trang, bấm **Phát hiện lại**, chọn **Claude CLI**, chọn APK/tài liệu và bấm **Bắt đầu kiểm tra**. Tool luôn truyền `--model claude-haiku-5-5 --effort low`, không dùng model mặc định trong cấu hình cá nhân. Khi OAuth hết hạn, đăng nhập lại rồi chạy lượt mới. Không nhập tài khoản hay API key vào web. Việc cài extension Claude/Antigravity trong IDE không tự tạo CLI `claude` trên PATH.
+Trên web: tải lại trang, bấm **Phát hiện lại**, chọn **Claude CLI**, chọn APK/tài liệu và bấm **Bắt đầu kiểm tra**. Tool luôn truyền `--model claude-sonnet-5-5 --effort low`, không dùng model mặc định trong cấu hình cá nhân. Khi OAuth hết hạn, đăng nhập lại rồi chạy lượt mới. Không nhập tài khoản hay API key vào web. Việc cài extension Claude/Antigravity trong IDE không tự tạo CLI `claude` trên PATH.
 
 Đọc APK có sẵn (cần Java và jadx trên PATH, hoặc biến `JADX_PATH`):
 
@@ -192,6 +203,6 @@ Thư viện được khóa trong `uv.lock`. Thiết kế gốc: `docs/2026-09-10
 ### Cấu hình model từ 2026-10-20
 
 - Codex: `gpt-6.1-sol`, `model_reasoning_effort="medium"`.
-- Claude: `claude-haiku-5-5`, effort `low`, model allowlist chỉ chứa Haiku5.5 và fallback rỗng. Nếu model không khả dụng thì báo lỗi/UNKNOWN, không tự chuyển lên Sonnet/Opus.
+- Claude: `claude-sonnet-5-5`, effort `low`, model allowlist chỉ chứa Sonnet 5.5 và fallback rỗng. Nếu model không khả dụng thì báo lỗi/UNKNOWN, không tự chuyển lên Sonnet/Opus.
 - Model/effort được đưa vào tên engine, report và khóa cache. Cache Luna/model mặc định cũ không được dùng lẫn. Sau khi cập nhật code cần restart server để nạp cấu hình mới.
 - Chọn model rẻ hơn làm thay đổi đơn giá, không đảm bảo ít token hơn hoặc giá của gói CLI cụ thể. Giá API và giới hạn xem [Haiku5.5](https://platform.claude.com/docs/en/models/haiku-5-5/overview), cấu hình effort xem [Codex config](https://developers.openai.com/codex/config-reference/).

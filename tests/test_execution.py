@@ -151,8 +151,8 @@ class PipelineOptimizationTests(unittest.TestCase):
     def test_crossflow_warm_cache_uses_semantic_prior_not_execution_flags(self):
         (self.pack/'rules/b.yaml').write_text('- id: ADS_CROSS_FLOW_BUGS\n  title: Cross\n  mode: agent\n  question: Inspect\n  verdict: {pass_when: "yes", fail_when: "no", unknown_when: unclear}\n')
         response=json.dumps({'rule_id':'ADS_CROSS_FLOW_BUGS','status':'UNKNOWN','evidence':[]})
-        first=run(self.ws,engine=ReplayEngine([self.payload,response]),**self.kwargs)
-        warm=run(self.ws,engine=ReplayEngine([]),**self.kwargs)
+        first=run(self.ws,engine=ReplayEngine([self.payload,response]),cross_flow=True,**self.kwargs)
+        warm=run(self.ws,engine=ReplayEngine([]),cross_flow=True,**self.kwargs)
         self.assertEqual(warm['summary']['from_cache'],2)
 
 
@@ -187,7 +187,7 @@ class CacheIdentityTests(unittest.TestCase):
         with patch('apk_audit.cache_identity.cli_version',return_value='Claude 2'):
             identity,reusable=engine_identity(ClaudeEngine())
         self.assertTrue(reusable)
-        self.assertEqual(identity['model'],'claude-haiku-5-5')
+        self.assertEqual(identity['model'],'claude-sonnet-5-5')
         self.assertEqual(identity['reasoning_effort'],'low')
 
     def test_cli_upgrade_is_seen_by_next_job_in_same_server(self):
