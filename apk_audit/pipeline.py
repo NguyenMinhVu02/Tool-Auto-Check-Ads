@@ -3,8 +3,9 @@ from pathlib import Path
 import time
 from .agent import evaluate, _verify_evidence
 from .cache_identity import engine_identity
+from .context_scope import SCOPE_VERSION, compact_prior, scope_documents, scope_inventory
 from .engine_common import ACTIVITY, policy_identity
-from .execution import RuleOutcome, execute_rules, MAX_WORKERS, valid_workers
+from .execution import CROSS_FLOW_RULE, RuleOutcome, execute_rules, MAX_WORKERS, valid_workers
 from .source_index import SourceIndex
 from .utils import digest_json
 import threading
@@ -16,6 +17,7 @@ from .engines import get_engine
 from .errors import AuditError
 from .facts import build_facts
 from .inventory import build_inventory, inventory_observations
+from .marketing import build_marketing_summary
 from .fetch import fetch
 from .playstore import resolve
 from .report import write_report
@@ -98,7 +100,8 @@ def _cached_finding(cached, rule, tools, strict):
 def run(target, *, rules=None, out=None, engine="codex", only=None, cache_dir=None,
         refresh=False, refresh_rule=None, max_tool_calls=400, trace=False,
         format="both", no_cache=False, ads_scripts=None, checklist=None, provider=None,
-        progress=None, rule_progress=None, workers=1, resume=False, ads_sheet=None, checklist_sheet=None):
+        progress=None, rule_progress=None, workers=1, resume=False, ads_sheet=None, checklist_sheet=None,
+        cross_flow=False):
     started = time.monotonic()
     if type(max_tool_calls) is not int or max_tool_calls < 0:
         raise AuditError("max_tool_calls phải >= 0")
@@ -117,6 +120,9 @@ def run(target, *, rules=None, out=None, engine="codex", only=None, cache_dir=No
             progress(name)
     pack = load_pack(rules)
     selected = [r for r in pack.rules if only is None or only in {r.id, r.area}]
+    if not cross_flow and only is None:
+        # Cross-flow re-reads every other rule's result; opt-in because it costs a full extra session.
+        selected = [r for r in selected if r.id != CROSS_FLOW_RULE]
     if only is not None and not selected:
         raise AuditError(f"Không có rule hoặc area: {only}", 5)
     if refresh_rule and refresh_rule not in {r.id for r in pack.rules}:
@@ -167,8 +173,12 @@ def run(target, *, rules=None, out=None, engine="codex", only=None, cache_dir=No
         "expected_count", "local_count", "missing_local", "extra_local", "mismatched_ids",
         "config_references", "code_references", "package_match", "app_id_match",
         "optional_placements", "disabled_placements", "uncertain_placements", "integration_policy", "document_warnings")}
-    context_base = pack.context + "\nDocuments:\n" + json.dumps(documents, ensure_ascii=False)
-    context_base += "\nDeterministic inventory (config local, chưa chứng minh runtime):\n" + json.dumps(inventory_context, ensure_ascii=False)
+    def context_for(rule):
+        # Rule-scoped slices: smaller prompts on every tool turn, less unrelated noise.
+        return (pack.context + "\nDocuments (lọc theo phạm vi rule; scope ghi số dòng giữ lại/tổng):\n"
+                + json.dumps(scope_documents(documents, rule.area), ensure_ascii=False)
+                + "\nDeterministic inventory (config local, chưa chứng minh runtime; lọc theo phạm vi rule):\n"
+                + json.dumps(scope_inventory(inventory_context, rule.area), ensure_ascii=False))
     noncacheable = {"engine_error", "global_budget", "tool_budget", "invalid_json", "invalid_tool_count",
                     "unverified_evidence", "unverified_claims", "review_error", "review_budget", "review_incomplete", "invalid_review", "repair_error", "repair_invalid_result", "investigation_invalid_result", "wrong_rule_id", "invalid_status"}
 
@@ -176,9 +186,7 @@ def run(target, *, rules=None, out=None, engine="codex", only=None, cache_dir=No
         if rule_progress:
             ACTIVITY.set(lambda **fields: rule_progress("activity", {"rule_id": rule.id, "title": rule.title, **fields}))
         if prior is not None:
-            prior = [{key: item.get(key) for key in (
-                "rule_id", "status", "reason", "reasoning", "evidence", "claims", "verification", "expected", "actual")}
-                for item in prior]
+            prior = compact_prior(prior)
         if rule.mode == "static":
             try:
                 return RuleOutcome(evaluate_static(rule, facts, documents))
@@ -186,7 +194,8 @@ def run(target, *, rules=None, out=None, engine="codex", only=None, cache_dir=No
                 return RuleOutcome(Finding.for_rule(rule, reason="rule_error", reasoning=str(exc), resolved_by="static"))
         bundle = source_index.bundle(rule, facts, inventory)
         reference = {'source': pack.references.get('source', {}), 'rule': pack.references.get('rules', {}).get(rule.id, {})}
-        rule_policy = {**policy, "bundle_policy":bundle.get("policy"), 'base_reference': digest_json(reference)}
+        rule_policy = {**policy, "bundle_policy":bundle.get("policy"), 'base_reference': digest_json(reference),
+                       'context_scope': SCOPE_VERSION}
         key = cache.key(facts, pack, rule, adapter.name, documents, dependencies=prior, policy=rule_policy, identity=identity)
         finding = None
         run_trace = {}
@@ -205,7 +214,7 @@ def run(target, *, rules=None, out=None, engine="codex", only=None, cache_dir=No
                 if finding:
                     run_trace = cached.get("trace",{})
         if finding is None:
-            context = context_base + "\nevidence_bundle (gợi ý heuristic, không chứng minh thiếu hành vi):\n" + json.dumps(bundle, ensure_ascii=False)
+            context = context_for(rule) + "\nevidence_bundle (gợi ý heuristic, không chứng minh thiếu hành vi):\n" + json.dumps(bundle, ensure_ascii=False)
             if reference['rule']:
                 context += '\nbase_reference (mã mẫu để hiểu logic, KHÔNG phải evidence của APK; integration_policy và rule hiện tại có ưu tiên):\n' + json.dumps(reference, ensure_ascii=False)
             if prior is not None:
@@ -271,6 +280,7 @@ def run(target, *, rules=None, out=None, engine="codex", only=None, cache_dir=No
         "apk_sha256":facts["source"].get("sha256"),"rulepack":{"name":pack.name,"version":pack.version,"fingerprint":pack.fingerprint},
         "engine":adapter.name,"docs_provided":{k:k in documents for k in ("ads_scripts","checklist")},"summary":summary,
         "findings":findings,"inventory":inventory,"observations":inventory_observations(inventory),"metrics":metrics,
+        "marketing":build_marketing_summary(documents,facts,inventory,findings),
         "warnings":warnings,"output":str(output),"tool_versions":facts["tool_versions"]}
     phase("report")
     write_report(report,output,format)

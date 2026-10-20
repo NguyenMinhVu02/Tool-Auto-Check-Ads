@@ -5,6 +5,7 @@ import time
 
 from .contracts import Finding
 
+CROSS_FLOW_RULE = 'ADS_CROSS_FLOW_BUGS'
 MAX_WORKERS = 10  # one per independent rule; cross-flow always runs after them
 
 
@@ -30,8 +31,8 @@ def execute_rules(rules, execute, *, max_tool_calls=400, workers=1, progress=Non
     used = 0
     reserved = 0
     completed = 0
-    normal = [(i,r) for i,r in enumerate(rules) if r.id != 'ADS_CROSS_FLOW_BUGS']
-    cross = [(i,r) for i,r in enumerate(rules) if r.id == 'ADS_CROSS_FLOW_BUGS']
+    normal = [(i,r) for i,r in enumerate(rules) if r.id != CROSS_FLOW_RULE]
+    cross = [(i,r) for i,r in enumerate(rules) if r.id == CROSS_FLOW_RULE]
 
     def emit(event, index, rule, outcome=None):
         if progress:
@@ -60,7 +61,7 @@ def execute_rules(rules, execute, *, max_tool_calls=400, workers=1, progress=Non
                         break  # Wait for unused reservations, don't issue premature UNKNOWN.
                     index,rule = queue.pop(0)
                     allocation = min(rule.budget.get('max_tool_calls',25),available) if rule.mode == 'agent' else 0
-                    prior = [results[i].finding.to_dict() for i,_ in normal if i in results] if rule.id == 'ADS_CROSS_FLOW_BUGS' else None
+                    prior = [results[i].finding.to_dict() for i,_ in normal if i in results] if rule.id == CROSS_FLOW_RULE else None
                     future = pool.submit(invoke,rule,allocation,prior)
                     active[future] = (index,rule,allocation)
                     reserved += allocation

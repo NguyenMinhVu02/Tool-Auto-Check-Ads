@@ -9,7 +9,8 @@ import threading
 from urllib.parse import unquote, urlsplit
 from uuid import uuid4
 
-from .documents import list_sheets
+from .documents import list_sheets, load_document
+from .marketing import build_marketing_summary
 from .errors import AuditError
 from .engines import detect_engines
 from .execution import MAX_WORKERS, valid_workers
@@ -148,7 +149,22 @@ class AuditJobs:
             self._validate_paths(job)
             if job["state"] != "done":
                 raise ValueError("Báo cáo chưa hoàn tất")
-            return self._path(job["report_path"], exists=True).read_bytes()
+            path = self._path(job["report_path"], exists=True)
+            documents = dict(job.get("documents") or {})
+            sheets = job.get("document_sheets") or {}
+        raw = path.read_bytes()
+        report = json.loads(raw)
+        if "marketing" in report or "inventory" not in report:
+            return raw
+        # Reports made before the Marketing summary existed: rebuild it from saved inputs.
+        try:
+            facts = json.loads((path.parent / "facts.json").read_text(encoding="utf-8"))
+            loaded = {"ads_scripts": load_document(self._path(documents["ads_scripts"], exists=True), "ads_scripts",
+                                                   sheet=sheets.get("ads_scripts"))} if documents.get("ads_scripts") else {}
+            report["marketing"] = build_marketing_summary(loaded, facts, report["inventory"], report["findings"])
+        except (OSError, ValueError, KeyError, AuditError):
+            return raw
+        return json.dumps(report, ensure_ascii=False).encode("utf-8")
 
     def resume(self, job_id):
         with self.lock:
@@ -197,7 +213,8 @@ class AuditJobs:
             self.documents[document_id] = (kind, path, sheets)
         return document_id, sheets
 
-    def reserve(self, filename, ads_id=None, checklist_id=None, engine=None, ads_sheet=None, checklist_sheet=None):
+    def reserve(self, filename, ads_id=None, checklist_id=None, engine=None, ads_sheet=None, checklist_sheet=None,
+                cross_flow=False):
         name = Path(unquote(filename).replace("\\", "/")).name
         if not name or Path(name).suffix.lower() not in ALLOWED_EXTENSIONS:
             raise ValueError("Chỉ nhận file .apk, .xapk hoặc .apkm")
@@ -232,7 +249,8 @@ class AuditJobs:
             job_id = uuid4().hex
             archive = self._path(self.output_root / "uploads" / (job_id + Path(name).suffix.lower()))
             self._path(self.output_root / job_id)
-            self.jobs[job_id] = {"id": job_id, "filename": name, "state": "uploading", "stage": "upload", "docs_used": bool(documents), "engine": engine}
+            self.jobs[job_id] = {"id": job_id, "filename": name, "state": "uploading", "stage": "upload", "docs_used": bool(documents), "engine": engine,
+                                 "cross_flow": bool(cross_flow)}
             self.jobs[job_id].update(documents=documents, document_sheets=sheets, archive_path=str(archive),
                                      output_path=str(self.output_root / job_id), upload_complete=False,
                                      resumable=False, interrupted=False,
@@ -309,6 +327,7 @@ class AuditJobs:
                 workers=self.workers,
                 resume=resumed,
                 engine=self.get(job_id)["engine"],
+                cross_flow=self.get(job_id).get("cross_flow", False),
                 ads_scripts=self._path(documents["ads_scripts"], exists=True) if documents else None,
                 checklist=self._path(documents["checklist"], exists=True) if documents else None,
                 ads_sheet=self.get(job_id).get("document_sheets", {}).get("ads_scripts"),
@@ -433,6 +452,7 @@ def make_handler(jobs):
                     self.headers.get("X-Audit-Engine"),
                     unquote(self.headers.get("X-Ads-Scripts-Sheet", "")) or None,
                     unquote(self.headers.get("X-Checklist-Sheet", "")) or None,
+                    self.headers.get("X-Cross-Flow") == "1",
                 )
             except (ValueError, OSError) as exc:
                 self._json(400, {"error": str(exc)})
@@ -466,7 +486,7 @@ def make_handler(jobs):
     return Handler
 
 
-def serve(port=8765, output_root="out/web", rules=None, workers=4):
+def serve(port=8765, output_root="out/web", rules=None, workers=6):
     jobs = AuditJobs(output_root, rules, workers=workers)
     server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(jobs))
     print(f"apk-audit web: http://127.0.0.1:{server.server_port}", flush=True)

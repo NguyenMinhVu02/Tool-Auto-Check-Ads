@@ -1,4 +1,5 @@
 from pathlib import Path
+from .marketing import marketing_markdown
 from .utils import write_json
 
 def write_report(report, output, format="both"):
@@ -12,6 +13,9 @@ def write_report(report, output, format="both"):
     lines = ["# APK audit", "", f"Đạt: {s['pass']} · Sai: {s['fail']} · Chưa rõ: {s['unknown']} · Bỏ qua: {s['skipped']}", ""]
     if not s["total"]:
         lines += ["> Chưa có luật để chấm. Báo cáo này không xác nhận app đạt chuẩn ads/init.", ""]
+    if report.get("marketing"):
+        lines += marketing_markdown(report["marketing"])
+        lines += ["## Chi tiết kỹ thuật (cho dev)", ""]
     for status, label in [("FAIL","Sai"),("UNKNOWN","Chưa rõ"),("SKIPPED","Bỏ qua"),("PASS","Đạt")]:
         lines += ["## " + label, ""]
         group = sorted((x for x in report["findings"] if x["status"] == status), key=lambda x:(x["area"],x["rule_id"]))

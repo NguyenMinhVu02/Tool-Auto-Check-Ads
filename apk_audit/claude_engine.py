@@ -1,6 +1,7 @@
 """Claude Code CLI adapter with read tools, structured output and bounded execution."""
 
 import json
+import os
 from pathlib import Path
 import queue
 import shutil
@@ -8,6 +9,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import uuid
 
 from .contracts import AgentResult
 from .engine_common import agent_error, audit_instruction, report_activity, retain_source_read, verdict_schema
@@ -15,32 +17,48 @@ from .errors import AuditError
 
 
 class ClaudeEngine:
-    model = 'claude-haiku-5-5'
+    model = 'claude-sonnet-5-5'
     reasoning_effort = 'low'
     name = f'claude:{model}:{reasoning_effort}'
-    label = 'Claude CLI (Haiku 5.5 · low)'
+    label = 'Claude CLI (Sonnet 5.5 · low)'
     requires_claims = True
+    # Follow-up repair/investigation turns continue the rule's own session, so the
+    # long audit prompt and the code already read stay in the prompt cache.
+    supports_resume = True
 
     def available(self):
         return shutil.which('claude') is not None
 
-    def run_agent(self, prompt, tools, max_tool_calls, timeout=600):
+    def run_agent(self, prompt, tools, max_tool_calls, timeout=600, resume=None):
         if max_tool_calls <= 0:
             return AgentResult('', exhausted_budget=True)
-        return self._run_structured(audit_instruction(prompt, max_tool_calls), tools,
-                                    verdict_schema(), max_tool_calls, timeout, 'Read,Glob,Grep')
+        session = resume or str(uuid.uuid4())
+        result = self._run_structured(audit_instruction(prompt, max_tool_calls), tools,
+                                      verdict_schema(), max_tool_calls, timeout, 'Read,Glob,Grep',
+                                      session=session, resume=bool(resume))
+        result.session_id = session
+        return result
+
+    @staticmethod
+    def close_session(session_id):
+        # Sessions are only kept for follow-ups inside one rule; drop the transcript afterwards.
+        root = Path(os.environ.get('CLAUDE_CONFIG_DIR') or Path.home() / '.claude') / 'projects'
+        for path in root.glob(f'*/{session_id}.jsonl'):
+            path.unlink(missing_ok=True)
 
     def map_document(self, instruction, tools, schema, timeout=90):
         return self._run_structured(instruction, tools, schema, 0, timeout, '')
 
-    def _run_structured(self, instruction, tools, schema, max_tool_calls, timeout, allowed_tools):
+    def _run_structured(self, instruction, tools, schema, max_tool_calls, timeout, allowed_tools,
+                        session=None, resume=False):
+        persistence = (['--resume', session] if resume else ['--session-id', session]) if session else ['--no-session-persistence']
         command = [
             'claude', '--print', '--output-format', 'stream-json', '--verbose',
             '--model', self.model, '--effort', self.reasoning_effort,
             '--settings', json.dumps({'availableModels': [self.model], 'fallbackModel': [],
                                       'switchModelsOnFlag': False}),
             '--json-schema', json.dumps(schema),
-            '--no-session-persistence', '--safe-mode', '--restricted',
+            *persistence, '--safe-mode', '--restricted',
             '--tools', allowed_tools, '--allowedTools', allowed_tools,
             '--permission-mode', 'dontAsk', '--disable-slash-commands',
             '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}',
@@ -64,7 +82,7 @@ class ClaudeEngine:
                     process.stdin.close()
                     process.stdout.close()
             if exhausted:
-                return AgentResult('', tool_calls=calls, exhausted_budget=True,
+                return AgentResult('', tool_calls=calls, exhausted_budget=True, session_id=session,
                                    events=(result or {}).get('_audit_events', []))
             usage = result.get('usage', {}) if isinstance(result, dict) else {}
             if process.returncode:

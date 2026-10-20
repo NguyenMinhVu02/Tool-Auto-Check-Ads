@@ -33,6 +33,49 @@ class AuditDepthTests(unittest.TestCase):
         self.assertIn('invalid_evidence_indices', trace['repair_prompt'])
         self.assertIn('evidence_catalog', trace['repair_prompt'])
 
+    def test_repair_resumes_rule_session_with_only_feedback_and_cleans_up(self):
+        calls, closed = [], []
+        class Resumable(LiveReplay):
+            supports_resume = True
+            def run_agent(inner, prompt, tools, allowance, resume=None):
+                calls.append((prompt, resume))
+                result = super(Resumable, inner).run_agent(prompt, tools, allowance)
+                result.session_id = resume or f'session-{len(calls)}'
+                return result
+            def close_session(inner, session_id):
+                closed.append(session_id)
+        first = verdict()
+        first['claims'][0]['evidence_indices'].append(53)
+        finding, trace = evaluate(self.rule, self.tools, Resumable([first, verdict()]), 'LONG_CONTEXT', 40)
+        self.assertEqual(finding.status, 'PASS')
+        self.assertIsNone(calls[0][1])
+        self.assertEqual(calls[1][1], 'session-1')
+        self.assertNotIn('LONG_CONTEXT', calls[1][0])
+        self.assertIn('invalid_evidence_indices', calls[1][0])
+        self.assertTrue(trace['attempts'][1]['resumed'])
+        self.assertEqual(set(closed), {'session-1'})
+
+    def test_failed_resume_falls_back_to_full_prompt(self):
+        calls = []
+        class Broken(LiveReplay):
+            supports_resume = True
+            def run_agent(inner, prompt, tools, allowance, resume=None):
+                calls.append(resume)
+                if resume:
+                    raise RuntimeError('No conversation found')
+                result = super(Broken, inner).run_agent(prompt, tools, allowance)
+                result.session_id = f'session-{len(calls)}'
+                return result
+            def close_session(inner, session_id):
+                pass
+        first = verdict()
+        first['claims'][0]['evidence_indices'].append(53)
+        finding, trace = evaluate(self.rule, self.tools, Broken([first, verdict()]), 'LONG_CONTEXT', 40)
+        self.assertEqual(finding.status, 'PASS')
+        self.assertEqual(calls, [None, 'session-1', None])
+        self.assertFalse(trace['attempts'][1]['resumed'])
+        self.assertIn('No conversation found', trace['attempts'][1]['resume_error'])
+
     def test_unknown_with_wrong_excerpt_is_repaired_instead_of_cached_as_inconclusive(self):
         first = dict(verdict(), status='UNKNOWN')
         first['evidence'][0]['excerpt'] = 'wrong source'
@@ -76,7 +119,7 @@ class AuditDepthTests(unittest.TestCase):
         prompts = []
         class Recording(LiveReplay):
             def run_agent(inner, prompt, *args, **kwargs):
-                prompts.append(json.loads(prompt.splitlines()[0]))
+                prompts.append(json.loads(prompt.splitlines()[-1]))
                 return super(Recording, inner).run_agent(prompt, *args, **kwargs)
         first = AgentResult('', tool_calls=25, exhausted_budget=True)
         finding, _ = evaluate(self.rule, self.tools, Recording([first, verdict()]), '', 40)

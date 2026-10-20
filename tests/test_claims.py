@@ -303,3 +303,21 @@ class ClaimTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ExcerptMatchTests(unittest.TestCase):
+    lines = ['class A {', '    void load() {', '        if (enabled) {', '            sdk.load(id);',
+             '        }', '        done();', '    }', '}']
+
+    def test_accepts_reindented_reflowed_and_elided_excerpts(self):
+        from apk_audit.agent import _excerpt_matches
+        self.assertTrue(_excerpt_matches('if (enabled) {\nsdk.load(id);', self.lines, 3))
+        self.assertTrue(_excerpt_matches('if (enabled) { sdk.load(id); }', self.lines, 3))
+        self.assertTrue(_excerpt_matches('void load() {\n...\ndone();', self.lines, 2))
+
+    def test_rejects_wrong_line_order_or_invented_code(self):
+        from apk_audit.agent import _excerpt_matches
+        self.assertFalse(_excerpt_matches('if (enabled) {\nsdk.load(id);', self.lines, 4))
+        self.assertFalse(_excerpt_matches('done();\n...\nsdk.load(id);', self.lines, 6))
+        self.assertFalse(_excerpt_matches('if (enabled) { sdk.show(id); }', self.lines, 3))
+        self.assertFalse(_excerpt_matches('...', self.lines, 3))

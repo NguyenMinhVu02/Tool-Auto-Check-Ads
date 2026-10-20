@@ -27,12 +27,12 @@ class ClaudeEngineTests(unittest.TestCase):
         result = self.run_cli('''import json, sys
 from pathlib import Path
 args = sys.argv[1:]
-assert '--print' in args and '--no-session-persistence' in args
-assert args[args.index('--model') + 1] == 'claude-haiku-5-5'
+assert '--print' in args and '--session-id' in args and '--no-session-persistence' not in args
+assert args[args.index('--model') + 1] == 'claude-sonnet-5-5'
 assert args[args.index('--effort') + 1] == 'low'
 settings = json.loads(args[args.index('--settings') + 1])
 assert settings['fallbackModel'] == []
-assert settings['availableModels'] == ['claude-haiku-5-5']
+assert settings['availableModels'] == ['claude-sonnet-5-5']
 assert '--fallback-model' not in args
 assert '--restricted' in args and '--safe-mode' in args
 assert args[args.index('--tools') + 1] == 'Read,Glob,Grep'

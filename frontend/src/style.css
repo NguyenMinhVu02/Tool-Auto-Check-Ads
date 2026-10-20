@@ -128,3 +128,15 @@ footer{text-align:center;color:#9eacc0;font-size:10px;padding-top:10px}
 .agent-history{margin:0;padding-left:16px;color:#6b7c93;font-family:ui-monospace,monospace;font-size:11px}
 .agent-history li{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media (prefers-reduced-motion:reduce){.agent-pulse{animation:none}}
+
+.cross-flow-option{display:block;margin:4px 0 10px}
+.marketing-card .ant-card-head{background:#f0f5ff}
+.marketing-problems{margin:4px 0 0;padding-left:18px}
+.marketing-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,520px),1fr));gap:12px}
+.marketing-screen{display:flex;flex-direction:column;gap:8px;min-width:0;padding:12px 14px;border:1px solid #dbe4f0;border-left-width:4px;border-radius:10px;background:#fff}
+.marketing-screen.level-ok{border-left-color:#26c593}
+.marketing-screen.level-issue{border-left-color:#e5484d}
+.marketing-screen.level-check{border-left-color:#f5a524}
+.marketing-explanation{margin:0!important;color:#3b4a5e}
+.marketing-row-problem td{background:#fff5f5!important}
+.ad-id{font-family:ui-monospace,monospace;font-size:11.5px;white-space:nowrap}

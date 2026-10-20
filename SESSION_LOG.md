@@ -22,6 +22,49 @@
 
 ## Lịch sử phiên
 
+### 2026-10-20 18:40 — Tiết kiệm token Claude và tóm tắt cho Marketing (Asia/Ho_Chi_Minh)
+
+- Bối cảnh: lượt Sonnet 5.5 medium (job 837e1e00) cho 5 PASS/2 FAIL/4 UNKNOWN trong 242s nhưng đốt hết phiên 5h; token chủ yếu là cache write ~1.07M do mỗi lượt sửa/review mở phiên mới, cache read ~2.35M, output ~126K.
+- Tiết kiệm token: Claude Sonnet effort low; agent nối tiếp phiên rule cho repair/investigation (chỉ gửi phần góp ý, review vẫn phiên mới, resume lỗi trước khi có tool call thì fallback prompt đầy đủ, close_session xóa ~/.claude/projects/*/<id>.jsonl). Prompt: phần chung trước, header ngân sách cuối. Cross-flow tắt mặc định (`cross_flow` trong pipeline, `--cross-flow`, header X-Cross-Flow, checkbox web). Đã kiểm live `claude -p --session-id` rồi `--resume` nhớ được ngữ cảnh; chưa đo token một lượt audit mới.
+- Marketing: `apk_audit/marketing.py` tạo `report.marketing` (4 màn đầu, bảng placement với ID tài liệu/app và tình trạng, nhãn màn = số ID lỗi + luồng quảng cáo theo rule, ghi chú khác tài khoản AdMob, danh sách ID có vấn đề). AI thêm trường `marketing_summary` (schema bắt buộc, lời dễ hiểu). report.md có mục Tóm tắt cho Marketing trước phần kỹ thuật. Web: thẻ "Tóm tắt cho Marketing · 4 màn đầu" ở đầu kết quả; báo cáo cũ được dựng lại phần này khi mở (từ facts.json + tài liệu đã lưu).
+- Kết quả trên job 837e1e00: 15 ID có vấn đề; toàn bộ ID app thuộc pub-7462273888693209, ADS SCRIPTS là pub-2864154863223892.
+- File: apk_audit/{agent,claude_engine,contracts,engine_common,execution,pipeline,cli,web,report,marketing(mới)}.py, frontend/src/{App.jsx,style.css} + build, tests/{test_audit_depth,test_claude_engine,test_execution,test_marketing(mới)}.py, README.md, SESSION_LOG.md.
+- Kiểm tra: 179/179 unittest đạt, frontend build đạt, restart server; API trả marketing cho báo cáo cũ. Chưa visual QA trình duyệt; chưa đo token/thời gian lượt Sonnet low mới; chưa commit.
+
+### 2026-10-20 17:30 — Tối ưu thời gian/token/độ chính xác (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: người dùng duyệt kế hoạch tối ưu (lọc context, workers, cross-flow gọn, review nhắm đúng, giảm UNKNOWN oan).
+- Đã làm:
+  - `apk_audit/context_scope.py`: lọc ADS SCRIPTS/checklist/inventory theo `rule.area` (placement theo tên, checklist theo từ khóa, bỏ trường rỗng/trùng; code_references nhóm theo file, tối đa 3 ref/placement). Prior cho cross-flow chỉ giữ verdict, reasoning 700 ký tự, 6 claim, 8 evidence (excerpt 160). `SCOPE_VERSION` vào cache policy.
+  - Đo trên APK AI Learn (replay, không gọi AI): prompt đầu 911.7KB → 652.2KB tổng 11 rule (-28%); code_references 8.5KB → 1.8KB; thêm phần code_references sau đó chưa đo lại tổng.
+  - `agent._excerpt_matches`: so excerpt theo dòng bỏ khoảng trắng, chấp nhận block bị gộp dòng (≤15 dòng) và "..." là đoạn bỏ (≤40 dòng), vẫn bắt đầu đúng dòng và đúng thứ tự. Trên 53 evidence bị đánh trượt ở lượt Claude trước: 37 nay hợp lệ, 16 vẫn bị chặn (code bị viết lại/gộp sai), 0 evidence hợp lệ bị đổi kết quả.
+  - Review FAIL giới hạn 12 lệnh, prompt chỉ đọc lại violation/gate. AUDIT_PROMPT hướng dẫn excerpt nguyên văn, "..." cho đoạn bỏ. PROMPT_POLICY_VERSION claims-review-6-scoped.
+  - Web mặc định 6 workers.
+- File: apk_audit/{context_scope(mới),pipeline,agent,web,cli}.py, tests/{test_context_scope(mới),test_claims}.py, SESSION_LOG.md.
+- Kiểm tra: 175/175 unittest đạt. Đang chạy Claude Haiku 10 workers so với baseline 606s/0P-2F-9U: out/claude-speed-test-v2.
+- Restart server với code tối ưu (người dùng yêu cầu chạy thử).
+- Nâng Claude engine: `claude-sonnet-5-5` effort `medium` (allowlist chỉ Sonnet 5.5); UI/README/test cập nhật, nhãn Haiku cũ giữ cho báo cáo cũ. Smoke `claude -p` Sonnet trả OK. 175/175 test, build đạt. Dừng lượt so sánh Haiku CLI (exit 143, không có kết quả). Restart server lần nữa.
+- Chưa: Codex live (quota tới 19:10), audit Sonnet thật, commit.
+
+### 2026-10-20 17:00 — Test tốc độ Claude 10 workers (Asia/Ho_Chi_Minh)
+
+- Người dùng muốn test bằng Claude và tối ưu tốc độ. Đang làm: CLI audit APK c7d5612c (AI Learn, 2 CSV cũ) `--engine claude --workers 10 --cache-dir out/web/cache`, output out/claude-speed-test, log /tmp/claude-1000/claude-speed.log. So với Codex 4 workers: 1028s tổng, rules 951s.
+- Quan sát Codex: mỗi rule ~1.37M input token (86% cached), review FAIL làm thêm một lượt dài.
+- Kết quả Claude Haiku low 10 workers: 606s tổng (rules 589s = rule thường chậm nhất 303s + cross-flow 286s chạy sau), 314 tool calls, 0 PASS/2 FAIL (SPLASH, WELCOME_RESUME)/9 UNKNOWN. 7 UNKNOWN do unverified_evidence/claims (bản nháp AI có dẫn chứng sai), cross-flow tool_budget. SPLASH FAIL trái với Codex PASS — chưa đối chiếu. Nhanh hơn ~1.7x nhưng chất lượng kém Codex rõ rệt. Exit 1 của CLI là do có FAIL, không phải lỗi chạy.
+
+### 2026-10-20 16:50 — Về main, cô lập Codex và báo lỗi quota (Asia/Ho_Chi_Minh)
+
+- Người dùng đã merge PR #1; chuyển sang main f63bbeb (stash/pop SESSION_LOG).
+- Codex audit chạy với `--ignore-rules`, tắt plugins/apps/hooks/multi_agent, `skills.include_instructions=false`, `include_apps_instructions=false`, `project_doc_max_bytes=0`. Đo bằng `codex debug prompt-input` trên examples/workspace: prompt nền ~51KB/77 tham chiếu SKILL.md xuống ~17KB/0 skill, không còn nạp AGENTS.md. Claude engine đã cô lập sẵn (--safe-mode/--restricted).
+- Lỗi Codex exit≠0 giờ lấy thông điệp từ sự kiện JSON `error`/`turn.failed` (vd usage limit + giờ thử lại) thay vì "exit 1".
+- File: apk_audit/engines.py, tests/test_codex_engine.py, SESSION_LOG.md. 169/169 unittest đạt. Restart server, HTTP 200.
+- Chưa kiểm live: Codex đang hết quota tới 19:10; cần một audit thật để xác nhận cờ mới không làm hỏng phiên. Chưa commit.
+
+### 2026-10-20 16:30 — Commit và push (Asia/Ho_Chi_Minh)
+
+- Theo yêu cầu người dùng: commit 4c1671e trên feat/audit-optimization (61 file), push lên origin (nhánh mới). 168/168 unittest đạt trước commit. Chưa tạo PR/merge main.
+- Việc tiếp theo đề xuất: hiện rõ lỗi quota Codex thay vì "exit 1"; chạy Codex audit không nạp skill cá nhân ~/.codex.
+
 ### 2026-10-20 16:20 — Phân tích kết quả audit AI Learn 4 workers (Asia/Ho_Chi_Minh)
 
 - Job c7d5612c (com.ai.learn.and.speak.language.ailearn, Codex Sol medium, 4 workers): 1 PASS / 3 FAIL / 7 UNKNOWN, 179 tool calls, 1028s tổng (rules 951s; tổng thời gian rule cộng dồn ~3500s nên song song giảm ~3.5x).
