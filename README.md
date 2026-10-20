@@ -1,6 +1,6 @@
 # apk-audit
 
-Khung CLI audit APK theo thiết kế v2. Bộ luật mặc định hiện chứa chuẩn **logic ads/init** rút từ `Example-AdLogic-Partner` tại commit `e8f4337` (xem [hợp đồng tham chiếu](docs/base-ads-contract.md)). Mặc định Codex CLI dùng `gpt-6-luna` đọc workspace đã giải mã và đánh giá 11 luật logic, gồm một lượt rà lỗi giao thoa giữa các luồng ads; cần cài và đăng nhập Codex CLI. Có thể chọn Claude CLI bằng `--engine claude` hoặc bộ chọn AI trên web. `--engine none` tắt AI và trả `UNKNOWN`. ID ads của base không dùng làm ID kỳ vọng cho app đối tác.
+Khung CLI audit APK theo thiết kế v2. Bộ luật mặc định hiện chứa chuẩn **logic ads/init** rút từ `Example-AdLogic-Partner` tại commit `e8f4337` (xem [hợp đồng tham chiếu](docs/base-ads-contract.md)). Mặc định Codex CLI dùng `gpt-6.1-sol` (reasoning `medium`) đọc workspace đã giải mã và đánh giá 11 luật logic, gồm một lượt rà lỗi giao thoa giữa các luồng ads; cần cài và đăng nhập Codex CLI. Có thể chọn Claude CLI bằng `--engine claude` hoặc bộ chọn AI trên web. `--engine none` tắt AI và trả `UNKNOWN`. ID ads của base không dùng làm ID kỳ vọng cho app đối tác.
 
 ## Chạy ngay
 
@@ -16,17 +16,53 @@ uv run apk-audit examples/workspace --out out/demo
 Kết quả: `out/demo/facts.json`, `xref_index.json`, `inventory.json`, `report.md`, `report.json`.
 Workspace mẫu chỉ chứa dữ liệu minh họa, không phải APK/app thật.
 
+## Tối ưu audit và kiểm chứng nhận định
+
+Đã thêm chỉ mục mã/gói dẫn chứng theo rule, claim guard + review FAIL, metrics, checkpoint, lịch sử job bền và tùy chọn `--workers 2`. Xem [cơ chế, lệnh và giới hạn](docs/audit-optimization.md). `benchmark --quality` chạy bộ ca tổng hợp offline; `benchmark <target>` đo cold/warm, engine mặc định `none` để không tự gọi AI.
+
 ## Web localhost
 
 ```bash
 uv run apk-audit serve
 ```
 
-Mở `http://127.0.0.1:8765`, chọn hoặc kéo APK/XAPK/APKM vào vùng tải lên, rồi bấm **Bắt đầu kiểm tra**. Chọn file không tự chạy. Hai ô ADS SCRIPTS và working file là tùy chọn: chỉ khi chọn **đủ cả hai**, web mới đưa chúng vào pipeline; thiếu một file thì bỏ qua cả cặp. Mỗi tài liệu nhận JSON object, CSV hai cột `key,value`, hoặc bảng ADS SCRIPTS/working file của Infinity, tối đa 5 MiB. ADS SCRIPTS nhận các cột `Ads type`, `Name` hoặc `Tên`, `ID`; đọc theo tên cột nên có thể đổi thứ tự. Working file nhận cả `Task/Task Detail` và `Content/Detail`. Header được chuẩn hóa dấu/khoảng trắng/hoa thường; tên placement và giá trị trong ô được giữ nguyên. Web đọc tài liệu trước khi giải mã và hiển thị riêng bước lỗi CSV. Web dùng font Poppins lưu sẵn trong gói để chạy offline; giấy phép ở `apk_audit/web_assets/fonts/OFL.txt`.
+Mở `http://127.0.0.1:8765`, chọn hoặc kéo APK/XAPK/APKM vào vùng tải lên, rồi bấm **Bắt đầu kiểm tra**. Chọn file không tự chạy. Hai ô ADS SCRIPTS và working file là tùy chọn: chỉ khi chọn **đủ cả hai**, web mới đưa chúng vào pipeline; thiếu một file thì bỏ qua cả cặp. Mỗi tài liệu nhận XLSX, JSON object, CSV hai cột `key,value`, hoặc bảng ADS SCRIPTS/working file của Infinity, tối đa 5 MiB. ADS SCRIPTS nhận các cột `Ads type`, `Name` hoặc `Tên`, `ID`; đọc theo tên cột nên có thể đổi thứ tự. Working file nhận cả `Task/Task Detail` và `Content/Detail`. Header được chuẩn hóa dấu/khoảng trắng/hoa thường; tên placement và giá trị trong ô được giữ nguyên. Web đọc tài liệu trước khi giải mã và hiển thị riêng bước lỗi tài liệu. Web dùng font Poppins lưu sẵn trong gói để chạy offline; giấy phép ở `apk_audit/web_assets/fonts/OFL.txt`.
 
-Trang lưu file đã tải, báo cáo và cache dưới `out/web/`, sau đó hiển thị kiểm kê ID, tổng quan và từng luật. Khi chạy, web hiển thị bước hiện tại và trong bước đối chiếu hiển thị số rule đã xong, rule đang chạy và kết quả gần nhất. Kết quả của rule không đổi được dùng lại từ cache ở lượt sau; sửa một rule không xóa cache các rule khác. Lượt đầu vẫn có thể mất nhiều phút vì AI đọc JADX tuần tự. Trình duyệt hỏi xác nhận nếu đóng tab, Back hoặc Reload trong lúc lượt kiểm tra đang chạy. Nếu vẫn Reload, trang lấy lại trạng thái lượt kiểm tra từ server. Việc tiếp tục hiển thị này chỉ hoạt động khi server chưa khởi động lại; job hiện được giữ trong bộ nhớ server. Server chỉ lắng nghe trên `127.0.0.1`, xử lý một file tại một thời điểm; dùng `Ctrl+C` để dừng. Có thể đổi cổng/thư mục bằng `--port` và `--out`, hoặc trỏ bộ luật bằng `--rules`.
+Trang lưu file đã tải, báo cáo và cache dưới `out/web/`, sau đó hiển thị kiểm kê ID, tổng quan và từng luật. Khi chạy, web hiển thị bước hiện tại và trong bước đối chiếu hiển thị số rule đã xong, rule đang chạy và kết quả gần nhất. Kết quả của rule không đổi được dùng lại từ cache ở lượt sau; sửa một rule không xóa cache các rule khác. Lượt đầu vẫn có thể mất nhiều phút vì AI đọc JADX tuần tự. Trình duyệt hỏi xác nhận nếu đóng tab, Back hoặc Reload trong lúc lượt kiểm tra đang chạy. Nếu vẫn Reload, trang lấy lại trạng thái lượt kiểm tra từ server. Job mới được lưu nguyên tử trên disk; sau restart có lịch sử và nút Tiếp tục cho lượt gián đoạn. Resume chỉ dùng kết quả đã hoàn tất khi fingerprint/cache/checkpoint còn hợp lệ, không tự chạy AI sau restart. Server chỉ lắng nghe trên `127.0.0.1`, xử lý một file tại một thời điểm (web mặc định chạy 4 rule đồng thời, chỉnh bằng `apk-audit serve --workers 1-10`; CLI `audit` mặc định 1); dùng `Ctrl+C` để dừng. Có thể đổi cổng/thư mục bằng `--port` và `--out`, hoặc trỏ bộ luật bằng `--rules`.
 
-Giao diện dùng React và các component Ant Design; font Poppins được phục vụ từ gói local. Mã frontend nằm trong `frontend/`, bản build phục vụ offline nằm trong `apk_audit/web_assets/`. Sau khi sửa frontend, chạy `cd frontend && npm ci && npm run build`; người dùng web không cần cài Node.js. Web tự phát hiện Codex/Claude CLI trên PATH của máy chạy server. Ô **AI dùng để audit** cho chọn engine, nút **Phát hiện lại** quét lại CLI; nếu có cả hai thì chọn Codex trước, chỉ có Claude thì chọn Claude. Nếu vừa sửa PATH, khởi động lại server từ terminal nhận PATH mới. Thiếu CLI thì nút bắt đầu bị khóa. Phát hiện binary không xác nhận đăng nhập hay quota. Codex dùng `gpt-6-luna`, Claude dùng model mặc định của CLI. Engine được cố định theo từng job, không tự chuyển provider khi lỗi. Cả hai chạy phiên chỉ đọc cho từng luật, có giới hạn thời gian và số lần gọi công cụ; mọi evidence được dẫn phải khớp file/dòng trước khi nhận `PASS` hoặc `FAIL`. Nội dung mã và tài liệu cần thiết được gửi tới nhà cung cấp AI đã chọn qua CLI; lượt audit có thể dùng quota/tính phí theo tài khoản. Nếu thiếu bằng chứng hoặc CLI lỗi, luật trả `UNKNOWN`. File cần `jadx` và Java như CLI. Trang chỉ nhận file có đuôi `.apk`, `.xapk`, `.apkm`; nội dung archive vẫn được kiểm tra trước khi giải mã.
+### Placement tùy chọn và ADS SCRIPTS có định dạng
+
+- **Inter cuối Onboarding không bắt buộc**, kể cả tài liệu cũ còn `inter_onboarding`. Thiếu/tắt/stub của slot này không phải lý do FAIL; nếu app thực sự dùng thì vẫn kiểm gate và điều hướng.
+- **Open Resume chỉ bắt buộc khi tài liệu xác định đang dùng và có ID.** Thiếu dòng `open_resume`, ID trống hoặc đánh dấu không dùng cho phép tắt App Open. Không lấy cờ `isEnable` trong APK làm trạng thái yêu cầu của tài liệu.
+- Web và CLI hỗ trợ **XLSX** cho cả hai tài liệu, tối đa 5 MiB/file trên web. Trong Google Sheets chọn **Tệp → Tải xuống → Microsoft Excel (.xlsx)**. Tool đọc màu nền trực tiếp của **ô ID** (không tính trắng/không màu) và gạch ngang ở **ô tên hoặc ID** thành trạng thái không dùng. Theo quy ước này, mọi màu nền khác trắng trên ô ID đều đánh dấu không dùng; không suy từ màu header/cột mô tả.
+- XLSX chọn sheet có header phù hợp trong 40 dòng đầu, giữ số dòng và tên sheet. Workbook nhiều app (nhiều sheet cùng mẫu): web hiện dropdown chọn sheet cho từng tài liệu ngay sau khi chọn file và khóa nút bắt đầu tới khi chọn đủ; CLI dùng `--ads-sheet`/`--checklist-sheet`. Sheet đã chọn được lưu trong job để resume. Giới hạn 20000 dòng/256 cột và 100 MiB sau giải nén. Không thực thi công thức; ID công thức hoặc vùng conditional formatting chưa xác định được trạng thái sẽ ghi `unknown`.
+- CSV tự tìm header phù hợp trong 40 dòng đầu, bỏ qua dòng tiêu đề/giới thiệu phía trên và giữ số dòng nguồn (kể cả ô nhiều dòng). ADS SCRIPTS và working file phải thuộc cùng ứng dụng và tải đúng ô tương ứng.
+- Parser nhận dấu phẩy/chấm phẩy/tab/pipe và tên cột tương đương như `Loại quảng cáo`, `Vị trí`, `Ad Unit ID`, `Nội dung`, `Chi tiết`. Nếu vẫn chưa hiểu cấu trúc, pipeline tự dùng **Codex/Claude đang chọn** để ánh xạ cột: một lần/tài liệu, tối đa 90 giây, preview giới hạn 40 dòng/64 cột/30000 ký tự (mỗi ô tối đa 120 ký tự). Không gọi AI ở bước tài liệu khi parser đã hiểu mẫu, `--static-only`, `--engine none` hoặc `--max-tool-calls 0`.
+- AI chỉ đề xuất chỉ số dòng/cột; loader kiểm tọa độ và cột bắt buộc rồi lấy giá trị từ file gốc, giữ ID và định dạng XLSX. Không tạo ID hoặc tự sửa dữ liệu. Nhiều sheet ứng dụng vẫn cần chọn/tách đúng sheet; chưa có dropdown. Khi AI không chắc, lỗi đăng nhập/quá thời gian hoặc ánh xạ không hợp lệ, bước tài liệu báo lỗi và chưa giải mã APK. Mapping là hỗ trợ nhận dạng, không phải chứng minh AI luôn hiểu đúng ý nghĩa tài liệu. Báo cáo web có mục **Tài liệu đã đọc**; `metrics.documents` ghi phương pháp, số dòng và AI usage nếu CLI cung cấp. Chi phí/latency của lượt ánh xạ là riêng với các lượt đánh giá rule.
+- CSV mất màu/gạch ngang: thêm `Status`/`Trạng thái` hoặc `Enabled` (`Enabled`/`TRUE` là dùng; `Disabled`/`FALSE`/`Không dùng` là tắt). Cũng hỗ trợ cột `Strikethrough`/`Gạch ngang`, `Highlighted`/`Bôi màu` dạng TRUE/FALSE. `open_resume` có ID nhưng CSV thiếu trạng thái sẽ không bị ép phải bật và cần bổ sung tài liệu.
+- JSON dạng `placements` hỗ trợ `enabled`, `status`, `strikethrough`, `highlighted`. Placement disabled/unknown không bị báo thiếu local hoặc ID lệch; inventory vẫn liệt kê riêng để đối chiếu. Rule pack mới là **0.4.0**; thay đổi context/policy làm mất hiệu lực verdict cache cũ mà không xóa lịch sử báo cáo.
+
+**UNKNOWN / Chưa đủ căn cứ** không có nghĩa APK có lỗi: giao diện phân biệt hết ngân sách đọc code, lỗi kiểm chứng đoạn trích/liên kết nhận định, lỗi CLI và thiếu đường gọi/điều kiện để kết luận. Sửa tài liệu/rule không tự sửa kết quả lịch sử; cần lượt audit mới sau khi khởi động lại backend.
+
+### AI đọc sâu và xử lý kết quả chưa đủ căn cứ
+
+1. Mỗi rule nhận **đoạn code base riêng**, mục tiêu kiểm tĩnh, các đường cần lần và các điểm khác biệt đã biết. Snapshot nằm trong `rulepacks/default/base-reference.json`, có commit và hash source, chạy được trên máy khác mà không cần checkout base. Code mẫu chỉ giải thích logic; bằng chứng PASS/FAIL phải đến từ APK.
+2. AI đọc workspace với **GPT-6.1 Sol / medium** hoặc Claude Haiku đã chọn. Với native CLI và ngân sách rule từ 20 trở lên, lượt đầu dùng khoảng 60%, dành phần còn lại cho sửa bằng chứng, điều tra hoặc review. Các rule mặc định có tổng ngân sách riêng 35–45 lượt; trần toàn audit vẫn là 400 lượt quan sát được.
+3. Sai excerpt hoặc số liên kết claim/path được gửi lại AI cùng bảng chỉ số evidence và source quanh dòng lỗi. Tool không tự đổi số, xóa blocker hoặc coi excerpt khớp là chứng minh ngữ nghĩa.
+4. UNKNOWN có blocker/nhận định chưa chắc được **một lượt điều tra bổ sung có mục tiêu** nếu còn ngân sách: mở helper/lambda/callback/getter còn thiếu, theo phạm vi rule tĩnh. Nếu lượt đầu bị ngắt vì hết phần ngân sách riêng, lần tiếp theo nhận các kết quả đọc gần nhất đã giữ lại, tối đa khoảng 18 KB; không nhận kết luận từ lượt bị ngắt.
+5. Sau điều tra, kết quả mới vẫn qua guard evidence/claims; FAIL phải có review. Thiếu SDK/dữ liệu thực sự quyết định kết luận hoặc chưa đo hành vi runtime thì vẫn UNKNOWN. UNKNOWN có bằng chứng/claim không hợp lệ không được cache lại hoặc phục hồi từ checkpoint.
+
+Metrics trên web/JSON ghi số lượt sửa bằng chứng, điều tra bổ sung, review và nguồn base. Đọc kỹ hơn có thể tốn thêm thời gian/quota; không tự đổi model, tăng effort hoặc bỏ trần ngân sách. Chỉ số tool dùng cơ chế quan sát CLI, có thể biết một lượt vượt ngưỡng sau khi nó đã bắt đầu; phần vượt được ghi rõ và không dùng verdict từ lần gọi bị ngắt.
+
+Để tạo lại snapshot từ đúng commit đã review:
+
+```bash
+.venv/bin/python scripts/snapshot_base_reference.py /path/to/Example-AdLogic-Partner
+```
+
+Script dừng nếu base đổi commit hoặc source liên quan có diff; cần review lại ranges/caveats trước khi nâng commit. Theo base hiện tại, vòng reload banner thuộc `BaseActivityWithBanner`; Splash load một lần không đủ làm FAIL nếu chưa chứng minh có yêu cầu reload riêng.
+
+Giao diện dùng React và các component Ant Design; font Poppins được phục vụ từ gói local. Mã frontend nằm trong `frontend/`, bản build phục vụ offline nằm trong `apk_audit/web_assets/`. Sau khi sửa frontend, chạy `cd frontend && npm ci && npm run build`; người dùng web không cần cài Node.js. Web tự phát hiện Codex/Claude CLI trên PATH của máy chạy server. Ô **AI dùng để audit** cho chọn engine, nút **Phát hiện lại** quét lại CLI; nếu có cả hai thì chọn Codex trước, chỉ có Claude thì chọn Claude. Nếu vừa sửa PATH, khởi động lại server từ terminal nhận PATH mới. Thiếu CLI thì nút bắt đầu bị khóa. Phát hiện binary không xác nhận đăng nhập hay quota. Codex dùng `gpt-6.1-sol` (reasoning `medium`), Claude cố định `claude-haiku-5-5` với effort `low`; truyền rõ model/effort, chỉ cho phép model này và tắt fallback để không tự tăng chi phí. Engine được cố định theo từng job, không tự chuyển provider khi lỗi. Cả hai chạy phiên chỉ đọc cho từng luật, có giới hạn thời gian và số lần gọi công cụ; mọi evidence được dẫn phải khớp file/dòng trước khi nhận `PASS` hoặc `FAIL`. Nội dung mã và tài liệu cần thiết được gửi tới nhà cung cấp AI đã chọn qua CLI; lượt audit có thể dùng quota/tính phí theo tài khoản. Native AI phải cung cấp claims/điều kiện và dẫn chứng; FAIL có thêm lượt review trong cùng ngân sách. Checker không tự chứng minh ngữ nghĩa hoặc runtime. Nếu thiếu bằng chứng hoặc CLI lỗi, luật trả `UNKNOWN`. File cần `jadx` và Java như CLI. Trang chỉ nhận file có đuôi `.apk`, `.xapk`, `.apkm`; nội dung archive vẫn được kiểm tra trước khi giải mã.
 
 ### Dùng Claude CLI
 
@@ -40,7 +76,7 @@ uv run apk-audit doctor
 uv run apk-audit audit /path/to/app.apk --engine claude --out out/claude-app
 ```
 
-Trên web: tải lại trang, bấm **Phát hiện lại**, chọn **Claude CLI**, chọn APK/tài liệu và bấm **Bắt đầu kiểm tra**. Khi OAuth hết hạn, đăng nhập lại rồi chạy lượt mới. Không nhập tài khoản hay API key vào web. Việc cài extension Claude/Antigravity trong IDE không tự tạo CLI `claude` trên PATH.
+Trên web: tải lại trang, bấm **Phát hiện lại**, chọn **Claude CLI**, chọn APK/tài liệu và bấm **Bắt đầu kiểm tra**. Tool luôn truyền `--model claude-haiku-5-5 --effort low`, không dùng model mặc định trong cấu hình cá nhân. Khi OAuth hết hạn, đăng nhập lại rồi chạy lượt mới. Không nhập tài khoản hay API key vào web. Việc cài extension Claude/Antigravity trong IDE không tự tạo CLI `claude` trên PATH.
 
 Đọc APK có sẵn (cần Java và jadx trên PATH, hoặc biến `JADX_PATH`):
 
@@ -135,13 +171,13 @@ Windows dùng `.venv/Scripts/python.exe`. Server không chỉnh cấu hình toà
 ## Chỗ nối tích hợp
 
 - `fetch.py:DownloadProvider`: adapter tải APK. Hiện link Play được parse package, rồi báo rõ chưa nối provider. Không scrape giả hoặc vượt CAPTCHA.
-- `engines.py:Engine`: nhận prompt, bộ tools, ngân sách; trả `AgentResult`. `CodexEngine` gọi Codex CLI với `gpt-6-luna`, phiên chỉ đọc và đầu ra JSON có schema; `none` và `replay` dùng cho kiểm thử/offline. `ClaudeEngine` gọi Claude CLI với JSON schema, chỉ cấp Read/Glob/Grep, tắt customization và MCP, không lưu phiên hội thoại. Cần bản Claude CLI hỗ trợ `--safe-mode`, `--restricted`, `--json-schema`, `--no-session-persistence`; nếu CLI cũ không nhận cờ, cập nhật CLI trước.
+- `engines.py:Engine`: nhận prompt, bộ tools, ngân sách; trả `AgentResult`. `CodexEngine` gọi Codex CLI với `gpt-6.1-sol` (reasoning `medium`), phiên chỉ đọc và đầu ra JSON có schema; `none` và `replay` dùng cho kiểm thử/offline. `ClaudeEngine` gọi Claude CLI với JSON schema, chỉ cấp Read/Glob/Grep, tắt customization và MCP, không lưu phiên hội thoại. Cần bản Claude CLI hỗ trợ `--safe-mode`, `--restricted`, `--json-schema`, `--no-session-persistence`; nếu CLI cũ không nhận cờ, cập nhật CLI trước.
 - `agent.py`: dựng prompt, thử lại JSON hỏng một lần, kiểm tra ID/status/ngân sách, mở file xác minh evidence. PASS/FAIL thiếu bằng chứng hợp lệ trở thành UNKNOWN.
-- `verdict_cache.py`: khóa gồm APK/workspace, pack context/extract, từng luật, engine, tài liệu và phiên bản tool; rule rà giao thoa thêm kết quả các rule trước. Cache lưu prompt và trace. Hai adapter đếm lời gọi công cụ từ event JSONL và dừng khi quá ngân sách. Claude dùng model mặc định nên nếu đổi model hoặc phiên bản CLI, dùng `--refresh` ở CLI hoặc xóa cache verdict local trước khi so sánh lại.
+- `verdict_cache.py`: khóa gồm APK/workspace, pack context/extract, từng luật, engine, tài liệu và phiên bản tool; rule rà giao thoa thêm kết quả các rule trước. Cache lưu prompt và trace. Hai adapter đếm lời gọi công cụ từ event JSONL và dừng khi quá ngân sách. Cache/checkpoint tách theo model và reasoning effort; model/CLI version chưa xác định thì không reuse verdict. Claude Haiku đã được chỉ định rõ nên có thể reuse khi CLI version được xác định. Cache có fingerprint prompt/schema/verifier/engine identity và revalidate khi đọc.
 - `unpack.py`: nhận dữ liệu jadx, lưu mã thoát và log. Chưa nối baksmali; có thể cung cấp workspace đã có thư mục `smali/`.
 - `apk_audit.run(...)`: API chung cho CLI và các cửa vào tương lai.
 
-Chưa triển khai: tải tự động apkcombo/apkpure, lấy version từ Play, nhóm phiên theo area/chạy song song, phát hiện mọi bug Java ngoài luồng ads, `ask` và skill `/audit-play`. Đã chạy pilot tĩnh với Cast TV nhưng chưa kiểm chứng runtime request/show ad và Firebase. Mã thoát 0 chỉ nghĩa không có FAIL, không bảo đảm mọi luật PASS.
+Chưa triển khai: tải tự động apkcombo/apkpure, lấy version từ Play, nhóm phiên AI theo area, phát hiện mọi bug Java ngoài luồng ads, `ask` và skill `/audit-play`. Đã chạy pilot tĩnh với Cast TV nhưng chưa kiểm chứng runtime request/show ad và Firebase. Mã thoát 0 chỉ nghĩa không có FAIL, không bảo đảm mọi luật PASS.
 
 ## Kiểm thử
 
@@ -149,6 +185,13 @@ Chưa triển khai: tải tự động apkcombo/apkpure, lấy version từ Play
 uv run --extra mcp python -m unittest discover -s tests -v
 ```
 
-Kiểm thử trên workspace giả lập, static checks, cache, evidence, path traversal, CLI, web và MCP. Đã chạy 24 kiểm thử trên Linux và một rule bằng Codex CLI `gpt-6-luna` trên workspace mẫu. MCP stdio và web được kiểm tra ngoài sandbox vì sandbox chặn socket localhost. Chưa xác nhận audit đầu-cuối trên APK đối tác thực tế hoặc trên Windows/macOS.
+Kiểm thử trên workspace giả lập, static checks, cache, evidence, path traversal, CLI, web và MCP. Bộ test mở rộng có fixture claim/review tổng hợp, scheduler/cache/index và persistence; xem nhật ký phiên để biết số test chạy gần nhất và smoke AI thật. MCP stdio và web được kiểm tra ngoài sandbox vì sandbox chặn socket localhost. Đã có pilot APK đối tác trên Linux; chưa xác nhận Windows/macOS hoặc accuracy trên tập APK chuẩn.
 
 Thư viện được khóa trong `uv.lock`. Thiết kế gốc: `docs/2026-09-10-apk-audit-design.md`; phạm vi bản khung: `docs/implementation-plan.md`.
+
+### Cấu hình model từ 2026-10-20
+
+- Codex: `gpt-6.1-sol`, `model_reasoning_effort="medium"`.
+- Claude: `claude-haiku-5-5`, effort `low`, model allowlist chỉ chứa Haiku5.5 và fallback rỗng. Nếu model không khả dụng thì báo lỗi/UNKNOWN, không tự chuyển lên Sonnet/Opus.
+- Model/effort được đưa vào tên engine, report và khóa cache. Cache Luna/model mặc định cũ không được dùng lẫn. Sau khi cập nhật code cần restart server để nạp cấu hình mới.
+- Chọn model rẻ hơn làm thay đổi đơn giá, không đảm bảo ít token hơn hoặc giá của gói CLI cụ thể. Giá API và giới hạn xem [Haiku5.5](https://platform.claude.com/docs/en/models/haiku-5-5/overview), cấu hình effort xem [Codex config](https://developers.openai.com/codex/config-reference/).

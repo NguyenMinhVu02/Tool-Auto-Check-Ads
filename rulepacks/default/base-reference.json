@@ -1,0 +1,425 @@
+{
+  "schema_version": 1,
+  "source": {
+    "repository": "Example-AdLogic-Partner",
+    "commit": "e8f4337afbc987c7c9df45a69317fb538ed6e1c6",
+    "file_sha256": {
+      "app/src/main/java/com/itg/template/app/GlobalApp.kt": "62a44d85f359ac4f0530ae63ac7dace1941f45ddb8e7fbc301edfb45bbff0985",
+      "app/src/main/java/com/itg/template/ads/AdRemoteConfig.kt": "0ec8affee551073fcc9ae36dbd73f44bbdee9677f2d40dc1407e4e1d9ee43437",
+      "app/src/main/java/com/itg/template/ads/RemoteConfigUtils.kt": "d3da54f58cf932892e1711a751afe65f2b009a50ca316ffee8c2b616f51e3f2a",
+      "app/src/main/java/com/itg/template/ads/AdsManager.kt": "bebb1e26cc37c0c8958e78abd2c3febd4679584fd3533b8e4f0970e1fad94b25",
+      "app/src/main/java/com/itg/template/ui/component/splash/SplashActivity.kt": "b1338ed1cc984875709f375ea848f2df908932d796dc2175ae13518c9122c958",
+      "app/src/main/java/com/itg/template/ui/component/language/LanguageActivity.kt": "7a637bb4f4830b0e80d3027de4e29faac9a10e5a4c08a55e4bb0e3706f00443b",
+      "app/src/main/java/com/itg/template/ui/component/onboarding/OnBoardingActivity.kt": "91a3daf64179b801f8375f50596a2bc73768a12546bec6e9302a7366abd1b18c",
+      "app/src/main/java/com/itg/template/ui/component/onboarding/adapter/OnboardingPageFragment.kt": "ec19a151c16a1c16619fcd912845c2dcc9adc640e11b1f066e501acd11ab5941",
+      "app/src/main/java/com/itg/template/app/ResumeAdsEntryRule.kt": "2bad0ffa92657e088f600af5aaf8d8860e9f9ad0e0bf9c10e4ceec19a9e346d7",
+      "app/src/main/java/com/itg/template/app/AppLifecycleObserver.kt": "ae3e9972bbeb4198fc85a1114149e25c08c76d1e39c139cc41991f30b9dd4f7e",
+      "app/src/main/java/com/itg/template/ui/component/welcome/WelcomeActivity.kt": "b60607e6a670d81566c1b906e0ac46bf6aee661e07dcbfc08190f5f948f0295a",
+      "app/src/main/java/com/itg/template/ui/bases/BaseActivityWithBanner.kt": "3b311b003f2fdf3a7a568650798a1aa90dbcd943c87cb2318a0af5177edbadca",
+      "app/src/main/java/com/itg/template/data/event/EventTracking.kt": "11b0c414aa49ecb186e75b1d1b457e2bdde415a82c0b94cf49ed1aaa512bfab4",
+      "app/src/main/java/com/itg/template/utils/ITGTrackingHelper.kt": "e7be20692f62974ae09f2d664e975e2d05c909ae763e35b780d4d55dad7cf430",
+      "app/src/main/java/com/itg/template/ui/component/main/MainActivity.kt": "23a1b170a5266f4281617504b255aa3657778fa59914e57f2c4e3f70192df0b9"
+    }
+  },
+  "rules": {
+    "ADS_INIT_ORDER": {
+      "static_goal": "Chứng minh thứ tự Application init và đăng ký lifecycle từ manifest tới lời gọi.",
+      "required_paths": [
+        "manifest → onCreate",
+        "config local → SDK init",
+        "lifecycle callbacks và policy resume"
+      ],
+      "base_caveats": [
+        "Không bắt buộc App Open hoạt động nếu integration_policy không yêu cầu. SDK init thành công thực tế không thuộc chứng minh tĩnh."
+      ],
+      "snippets": [
+        {
+          "file": "app/src/main/java/com/itg/template/app/GlobalApp.kt",
+          "start": 48,
+          "end": 97,
+          "excerpt": "    override fun onCreate() {\n        super.onCreate()\n        MobileAds.initialize(this) {}\n        DevConfig.init(\n            context = this,\n            nkhStudioVersion = BuildConfig.ERAIN_STUDIO_VERSION,\n            playServicesAdsVersion = BuildConfig.PLAY_SERVICES_ADS_VERSION,\n            gdprModuleVersion = BuildConfig.GDPR_MODULE_VERSION\n        )\n\n\n        instance = this\n        if (BuildConfig.DEBUG) {\n            Timber.plant(Timber.DebugTree())\n        }\n        initAdRemoteConfig()\n        initAds()\n\n        // Unconditionally register lifecycle observer and callbacks so dynamic welcome/resume toggling works during testing\n        ProcessLifecycleOwner.get().lifecycle.addObserver(AppLifecycleObserver())\n        registerActivityLifecycleCallbacks(AppActivityLifecycleCallbacks())\n    }\n\n    private fun initAdRemoteConfig() {\n        AdRemoteConfig.initializeFromAssets(this)\n    }\n\n    private fun initAds() {\n        val environment =\n            if (BuildConfig.DEBUG) ERainAdConfig.ENVIRONMENT_DEVELOP else ERainAdConfig.ENVIRONMENT_PRODUCTION\n        mERainAdConfig = ERainAdConfig(this, environment)\n\n        val adjustConfig = AdjustConfig(true, resources.getString(R.string.adjust_token))\n        mERainAdConfig.adjustConfig = adjustConfig\n        mERainAdConfig.facebookClientToken = resources.getString(R.string.facebook_client_token)\n        mERainAdConfig.adjustTokenTiktok = resources.getString(R.string.event_token)\n        mERainAdConfig.intervalInterstitialAd = 35\n\n        mERainAdConfig.idAdResume = \"\"\n\n        ERainAd.getInstance().init(this, mERainAdConfig)\n\n        Admob.getInstance().setDisableAdResumeWhenClickAds(true)\n        Admob.getInstance().setOpenActivityAfterShowInterAds(false)\n        AppOpenManager.getInstance().disableAppResumeWithActivity(SplashActivity::class.java)\n        AppOpenManager.getInstance().disableAppResumeWithActivity(LanguageActivity::class.java)\n        AppOpenManager.getInstance().disableAppResumeWithActivity(OnBoardingActivity::class.java)\n        AppOpenManager.getInstance().disableAppResumeWithActivity(ConfirmUninstallActivity::class.java)\n\n    }"
+        }
+      ]
+    },
+    "ADS_REMOTE_FALLBACK": {
+      "static_goal": "Chứng minh chọn local/release/debug, remote blank/parse lỗi, timer và chọn config trước load.",
+      "required_paths": [
+        "defaults/fetch → completed",
+        "resolver → parser → fallback assets",
+        "Splash timeout → config → load"
+      ],
+      "base_caveats": [
+        "completed trong base chỉ có nghĩa callback kết thúc, không chứng minh fetch thành công.",
+        "Base fallback cho chuỗi blank hoặc parse exception; không tự thêm yêu cầu JSON object rỗng phải fallback nếu rule/hợp đồng không quy định.",
+        "Không đòi giá trị Firebase live để chấm logic nhánh local/remote đã hiện rõ. Nếu giá trị SDK quyết định một nhánh chưa biết thật sự, ghi đúng nhánh đó."
+      ],
+      "snippets": [
+        {
+          "file": "app/src/main/java/com/itg/template/ads/RemoteConfigUtils.kt",
+          "start": 65,
+          "end": 106,
+          "excerpt": "\n    private fun getDefaultsFromAdConfig(context: Context): Map<String, Any> {\n        val defaults = mutableMapOf<String, Any>()\n        try {\n            if (!AdRemoteConfig.isInitialized()) {\n                AdRemoteConfig.initializeFromAssets(context)\n            }\n            val adConfig = AdRemoteConfig.getInstance()\n            adConfig.ads.forEach { (key, adUnitConfig) ->\n                val jsonString = adUnitConfigAdapter.toJson(adUnitConfig)\n                defaults[key] = jsonString\n            }\n        } catch (e: Exception) {\n            e.printStackTrace()\n        }\n        return defaults\n    }\n\n    private fun getFirebaseRemoteConfig(context: Context): FirebaseRemoteConfig {\n        remoteConfig = Firebase.remoteConfig\n\n        val configSettings = remoteConfigSettings {\n            minimumFetchIntervalInSeconds = if (BuildConfig.DEBUG) {\n                0\n            } else {\n                60 * 60\n            }\n        }\n        val defaults = getDefaultsFromAdConfig(context).toMutableMap()\n        remoteConfig.apply {\n            setConfigSettingsAsync(configSettings)\n            mapConditionForAd.forEach { (key, value) ->\n                defaults[key] = value\n            }\n            setDefaultsAsync(defaults)\n            fetchAndActivate().addOnCompleteListener {\n                listener.loadSuccess()\n                completed = true\n            }\n        }\n        return remoteConfig\n    }"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/ads/RemoteConfigUtils.kt",
+          "start": 130,
+          "end": 138,
+          "excerpt": "    fun getAdRemoteConfig(): String {\n        val defaultValue = loadDefaultAdRemoteConfig()\n        if (!completed) {\n            return defaultValue\n        } else {\n            val configValue = remoteConfig.getString(AD_REMOTE_CONFIG)\n            return configValue.ifBlank { defaultValue }\n        }\n    }"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/ads/RemoteConfigUtils.kt",
+          "start": 178,
+          "end": 191,
+          "excerpt": "    private fun loadDefaultAdRemoteConfig(): String {\n        val fileName = if (BuildConfig.DEBUG) {\n            AD_REMOTE_CONFIG_FILE_DEBUG\n        } else {\n            AD_REMOTE_CONFIG_FILE_RELEASE\n        }\n        return try {\n            GlobalApp.instance.assets.open(fileName).bufferedReader().use { reader ->\n                reader.readText()\n            }\n        } catch (ex: Exception) {\n            \"{}\"\n        }\n    }"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/ads/AdRemoteConfig.kt",
+          "start": 33,
+          "end": 47,
+          "excerpt": "        fun initialize(context: Context, json: String? = null) {\n            synchronized(this) {\n                instance = if (BuildConfig.DEBUG) {\n                    fromAssets(context, DEBUG_FILE_NAME)\n                } else {\n                    fromJsonOrAssets(context, json, RELEASE_FILE_NAME)\n                }\n            }\n        }\n\n        fun initializeFromAssets(context: Context) {\n            synchronized(this) {\n                val fileName = if (BuildConfig.DEBUG) DEBUG_FILE_NAME else RELEASE_FILE_NAME\n                instance = fromAssets(context, fileName)\n            }"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/ads/AdRemoteConfig.kt",
+          "start": 94,
+          "end": 106,
+          "excerpt": "        private fun fromJsonOrAssets(context: Context, json: String?, fileName: String = RELEASE_FILE_NAME): AdRemoteConfig {\n            if (!json.isNullOrBlank()) {\n                try {\n                    return fromJson(json)\n                } catch (e: Exception) {\n                    // Fallback to assets if JSON parsing fails\n                }\n            }\n            return fromAssets(context, fileName)\n        }\n\n        fun fromInputStreamOrAssets(context: Context, inputStream: InputStream?, fileName: String = RELEASE_FILE_NAME): AdRemoteConfig {\n            if (BuildConfig.DEBUG) {"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/ui/component/splash/SplashActivity.kt",
+          "start": 93,
+          "end": 114,
+          "excerpt": "    private fun loadingRemoteConfig() {\n        object : CountDownTimer(AppConstants.DEFAULT_TIME_SPLASH, 100) {\n            override fun onTick(millisUntilFinished: Long) {\n                if (getConfigSuccess && millisUntilFinished < AppConstants.DEFAULT_LIMIT_TIME_SPLASH) {\n                    checkRemoteConfigResult()\n                    cancel()\n                }\n            }\n\n            override fun onFinish() {\n                if (!getConfigSuccess) {\n                    checkRemoteConfigResult()\n                }\n            }\n        }.start()\n    }\n\n\n    private fun checkRemoteConfigResult() {\n        ITGTrackingHelper.logEvent(EventTracking.REQUEST_AD, null)\n        AdRemoteConfig.initialize(this, RemoteConfigUtils.getAdRemoteConfig())\n        loadSplashBanner()"
+        }
+      ]
+    },
+    "ADS_ID_SOURCE_AND_COVERAGE": {
+      "static_goal": "Nối key/alias trong getter tới config.id đưa vào SDK, đối chiếu ID của app theo tài liệu đang dùng.",
+      "required_paths": [
+        "ADS SCRIPTS active → assets/remote key",
+        "getter alias → config.id → SDK load"
+      ],
+      "base_caveats": [
+        "Tên key có hậu tố/ngày hoặc alias không phải lỗi nếu getter nối đúng slot; inventory lexical chỉ là đầu mối.",
+        "Không so ID với base. Slot disabled/unknown không yêu cầu coverage; inter_onboarding tùy chọn.",
+        "Dừng đường chứng minh tại config.id → SDK load. Callback/render/navigation thuộc rule khác, trừ khi cần để xác định ID thật.",
+        "Schema/key remote trong source có thể kiểm tĩnh; JSON Firebase đang triển khai chỉ là limitation nếu chưa được cung cấp, không phải blocker của nguồn ID tĩnh.",
+        "Nếu local ID lệch tài liệu và đường fallback local đã chứng minh, remote live chưa biết không tự xóa sự lệch local đã quan sát."
+      ],
+      "snippets": [
+        {
+          "file": "app/src/main/java/com/itg/template/ads/AdRemoteConfig.kt",
+          "start": 125,
+          "end": 162,
+          "excerpt": "        }\n        return adUnitConfig\n    }\n\n    val inter_splash: AdUnitConfig\n        get() = getAdUnit(\"inter_splash\")\n\n    val inter_splash_uninstall: AdUnitConfig\n        get() = getAdUnit(\"inter_splash_uninstall\")\n\n    val banner_splash: AdUnitConfig\n        get() = getAdUnit(\"banner_splash\")\n\n    val banner_splash_uninstall: AdUnitConfig\n        get() = getAdUnit(\"banner_splash_uninstall\")\n\n    val open_resume: AdUnitConfig\n        get() = getAdUnit(\"open_resume\")\n\n    val native_language_1: AdUnitConfig\n        get() = getAdUnit(\"native_language_1\")\n\n    val native_language_1_click: AdUnitConfig\n        get() = getAdUnit(\"native_language_1_click\")\n\n    val native_language_2: AdUnitConfig\n        get() = getAdUnit(\"native_language_2\")\n\n    val native_language_2_click: AdUnitConfig\n        get() = getAdUnit(\"native_language_2_click\")\n\n    val native_onboarding_1_1: AdUnitConfig\n        get() = getAdUnit(\"native_onboarding_1_1\")\n\n    val native_onboarding_2_1: AdUnitConfig\n        get() = getAdUnit(\"native_onboarding_2_1\")\n\n    val native_onboarding_1_4: AdUnitConfig"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/ads/AdsManager.kt",
+          "start": 54,
+          "end": 104,
+          "excerpt": "    private fun loadNativeInternal(\n        activity: Activity,\n        config: AdUnitConfig,\n        layoutRes: Int,\n        liveData: MutableLiveData<ApNativeAd?>,\n        shouldDisplay: Boolean = true,\n    ) {\n        if (!config.isEnable\n            || AppPurchase.getInstance().isPurchased(activity)\n            || !activity.isNetworkAvailable()\n            || !shouldDisplay\n        ) {\n            liveData.postValue(null)\n            return\n        }\n        ERainAd.getInstance()\n            .loadNativeAdResultCallback(activity, config.id, layoutRes, object : AdCallback() {\n                override fun onNativeAdLoaded(nativeAd: ApNativeAd) {\n                    super.onNativeAdLoaded(nativeAd)\n                    adConfigMap[nativeAd] = config\n                    liveData.postValue(nativeAd)\n                }\n\n                override fun onAdFailedToLoad(adError: LoadAdError?) {\n                    super.onAdFailedToLoad(adError)\n                    liveData.postValue(null)\n                }\n            })\n    }\n\n    fun loadNativeLanguage(activity: Activity, isFirst: Boolean, layoutRes: Int) {\n        val config =\n            if (isFirst) AdRemoteConfig.native_language_1 else AdRemoteConfig.native_language_2\n        loadNativeInternal(\n            activity,\n            config,\n            layoutRes,\n            nativeLanguageAdLive\n        )\n    }\n\n    fun loadNativeLanguageClick(activity: Activity, isFirst: Boolean, layoutRes: Int) {\n        val config =\n            if (isFirst) AdRemoteConfig.native_language_1_click else AdRemoteConfig.native_language_2_click\n        loadNativeInternal(\n            activity,\n            config,\n            layoutRes,\n            nativeLanguageClickAdLive\n        )\n    }"
+        }
+      ]
+    },
+    "ADS_SPLASH_PLACEMENT": {
+      "static_goal": "Kiểm chọn cặp banner/inter theo route, preload đúng Language, timeout và đường tiếp tục.",
+      "required_paths": [
+        "normal/uninstall → config pair",
+        "config chọn xong → preload Language",
+        "inter next/skip và timeout → navigation"
+      ],
+      "base_caveats": [
+        "Mã base hiện preload Language ngay sau config, không đợi onAdLoaded như tài liệu cũ.",
+        "Open Resume tuân integration_policy mới, không mặc định buộc bật từ đoạn code mẫu."
+      ],
+      "snippets": [
+        {
+          "file": "app/src/main/java/com/itg/template/ui/component/splash/SplashActivity.kt",
+          "start": 93,
+          "end": 173,
+          "excerpt": "    private fun loadingRemoteConfig() {\n        object : CountDownTimer(AppConstants.DEFAULT_TIME_SPLASH, 100) {\n            override fun onTick(millisUntilFinished: Long) {\n                if (getConfigSuccess && millisUntilFinished < AppConstants.DEFAULT_LIMIT_TIME_SPLASH) {\n                    checkRemoteConfigResult()\n                    cancel()\n                }\n            }\n\n            override fun onFinish() {\n                if (!getConfigSuccess) {\n                    checkRemoteConfigResult()\n                }\n            }\n        }.start()\n    }\n\n\n    private fun checkRemoteConfigResult() {\n        ITGTrackingHelper.logEvent(EventTracking.REQUEST_AD, null)\n        AdRemoteConfig.initialize(this, RemoteConfigUtils.getAdRemoteConfig())\n        loadSplashBanner()\n        if (!isFromUninstallShortcut) {\n            loadNativeLanguage(\n                this@SplashActivity, appSharedPref.firstLanguage, R.layout.layout_native_language\n            )\n        }\n        val splashInterConfig = if (isFromUninstallShortcut) {\n            AdRemoteConfig.inter_splash_uninstall\n        } else {\n            AdRemoteConfig.inter_splash\n        }\n        if (splashInterConfig.isEnable && isNetwork(this@SplashActivity)) {\n            ERainAd.getInstance().loadSplashInterstitialAds(\n                this, splashInterConfig.id, 30000, 5000, object : AdCallback() {\n                    override fun onNextAction() {\n                        super.onNextAction()\n                        ITGTrackingHelper.logEvent(EventTracking.SPLASH_USER_CLOSE_AD, null)\n                        moveActivity()\n                    }\n\n                    override fun onAdLoaded() {\n                        super.onAdLoaded()\n                        ITGTrackingHelper.logEvent(EventTracking.SPLASH_AD_LOAD, null)\n                    }\n                })\n        } else {\n            moveActivity()\n        }\n        if (ResumeAdsEntryRule.shouldEnableOpenResume()) {\n            AppOpenManager.getInstance().setAppResumeAdId(AdRemoteConfig.open_resume.id)\n            AppOpenManager.getInstance().enableAppResume()\n        } else {\n            AppOpenManager.getInstance().disableAppResume()\n        }\n    }\n\n    private fun loadSplashBanner() {\n        val bannerConfig = if (isFromUninstallShortcut) {\n            AdRemoteConfig.banner_splash_uninstall\n        } else {\n            AdRemoteConfig.banner_splash\n        }\n        AdsManager.loadBanner(\n            this, bannerConfig, mBinding.frBanner, isCollapse = false\n        )\n    }\n\n    private fun moveActivity() {\n        stopVideo()\n        when {\n            isFromUninstallShortcut -> Routes.startConfirmUninstallActivity(this)\n            shouldShowLanguageNextTime() || appSharedPref.firstOnBoarding -> Routes.startLanguageActivity(\n                this,\n                null\n            )\n\n            else -> Routes.startMainActivity(this)\n        }\n        finish()\n    }"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/ui/component/splash/SplashActivity.kt",
+          "start": 182,
+          "end": 199,
+          "excerpt": "    override fun onPause() {\n        super.onPause()\n        stopVideo()\n    }\n\n    override fun onResume() {\n        super.onResume()\n        ERainAd.getInstance().onCheckShowSplashWhenFail(this@SplashActivity, object : AdCallback() {\n                override fun onNextAction() {\n                    super.onNextAction()\n                    moveActivity()\n                }\n            }, 1000)\n    }\n\n    override fun loadSuccess() {\n        getConfigSuccess = true\n    }"
+        }
+      ]
+    },
+    "ADS_LANGUAGE_PLACEMENT": {
+      "static_goal": "Nối load language/click, observer swap, render/hide, preload page1 và delay Done.",
+      "required_paths": [
+        "click callback → remove observer → stream click",
+        "stream → lifecycle observer → render/null/offline",
+        "không từ Settings → preload page1",
+        "remote delay/fallback → Done"
+      ],
+      "base_caveats": [
+        "Tên Activity, stream, lambda có thể khác base; mở helper/lambda được gọi thay vì chỉ tìm tên mẫu.",
+        "Có đường đăng ký observer/load callback/render trong source là chứng minh tĩnh; không đòi ad fill runtime cho nhận định này."
+      ],
+      "snippets": [
+        {
+          "file": "app/src/main/java/com/itg/template/ui/component/language/LanguageActivity.kt",
+          "start": 53,
+          "end": 84,
+          "excerpt": "    private val languageAdapter: LanguageAdapter by lazy {\n        LanguageAdapter(\n            onItemLanguageClick = {\n                ITGTrackingHelper.logEvent(EventTracking.LANGUAGE_CLICK,null)\n                listenLanguageClickAd()\n                delayShowDoneButton()\n                selectedIso = it.iso\n                LanguageData.selectLanguage(it.iso)\n                resubmitLanguageData()\n            }\n        )\n    }\n\n    override fun initViews() {\n        ITGTrackingHelper.logEvent(EventTracking.LANGUAGE_FIRST,null)\n        isFromSetting = intent.getBooleanExtra(EXTRA_FROM_SETTING, false)\n        mBinding.tvTitle.setOnAdminAdToggleListener(){\n            Routes.startSplashActivity(this@LanguageActivity)\n            finish()\n        }\n        shouldDelayDoneButton = RemoteConfigUtils.shouldDelayLanguageDoneButton()\n        timeDelayDoneButton = RemoteConfigUtils.getTimeDelayButtonDoneLanguage()\n        initAdapter()\n        initLayout()\n\n        mBinding.root.postDelayed({\n            loadNativeLanguageClick(this, appSharedPref.firstLanguage, R.layout.layout_native_language_click)\n            initAds()\n        }, 100L)\n    }\n\n    override fun observerData() {"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/ui/component/language/LanguageActivity.kt",
+          "start": 121,
+          "end": 174,
+          "excerpt": "        if (fromSetting) {\n            mBinding.flAds.goneView()\n        } else {\n            AdsManager.loadNativeOnboarding1(\n                this,\n                appSharedPref.firstOnBoarding,\n                R.layout.layout_native_onboarding\n            )\n        }\n    }\n\n    private fun listenLanguageAd() {\n        AdsManager.nativeLanguageClickAdLive.removeObservers(this)\n        AdsManager.nativeLanguageAdLive.observe(this) { ad ->\n            if (ad != null) showNativeLanguage(ad) else mBinding.flAds.goneView()\n        }\n    }\n\n    private fun listenLanguageClickAd() {\n        AdsManager.nativeLanguageAdLive.removeObservers(this)\n        AdsManager.nativeLanguageClickAdLive.observe(this) { ad ->\n            if (ad != null) showNativeLanguage(ad) else mBinding.flAds.goneView()\n        }\n    }\n\n    private fun showNativeLanguage(ad: ApNativeAd) {\n        if (!isNetwork()) {\n            mBinding.flAds.goneView()\n            return\n        }\n        mBinding.flAds.visibleView()\n        populateNativeAdView(\n            this,\n            ad,\n            mBinding.flAds,\n            mBinding.shimmerAds.shimmerNativeSmall\n        )\n    }\n\n    private fun delayShowDoneButton() {\n        if (mBinding.tvDone.visibility == android.view.View.VISIBLE) return\n\n        if (shouldDelayDoneButton) {\n            Handler(Looper.getMainLooper()).postDelayed({\n                mBinding.ivDone.visibleView()\n                mBinding.tvDone.visibleView()\n            }, timeDelayDoneButton)\n        } else {\n            mBinding.ivDone.visibleView()\n            mBinding.tvDone.visibleView()\n        }\n    }\n\n    private fun resubmitLanguageData() {"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/ads/AdsManager.kt",
+          "start": 84,
+          "end": 116,
+          "excerpt": "    fun loadNativeLanguage(activity: Activity, isFirst: Boolean, layoutRes: Int) {\n        val config =\n            if (isFirst) AdRemoteConfig.native_language_1 else AdRemoteConfig.native_language_2\n        loadNativeInternal(\n            activity,\n            config,\n            layoutRes,\n            nativeLanguageAdLive\n        )\n    }\n\n    fun loadNativeLanguageClick(activity: Activity, isFirst: Boolean, layoutRes: Int) {\n        val config =\n            if (isFirst) AdRemoteConfig.native_language_1_click else AdRemoteConfig.native_language_2_click\n        loadNativeInternal(\n            activity,\n            config,\n            layoutRes,\n            nativeLanguageClickAdLive\n        )\n    }\n\n    fun loadNativeOnboarding1(activity: Activity, isFirst: Boolean, layoutRes: Int) {\n        val config =\n            if (isFirst) AdRemoteConfig.native_onboarding_1_1 else AdRemoteConfig.native_onboarding_2_1\n        loadNativeInternal(\n            activity,\n            config,\n            layoutRes,\n            nativeOnboarding1AdLive\n        )\n    }\n"
+        }
+      ]
+    },
+    "ADS_ONBOARDING_PLACEMENT": {
+      "static_goal": "Nối page thật sự được render với native page1/page4/full, view lifecycle và điều hướng tiếp.",
+      "required_paths": [
+        "Language → page1 preload",
+        "Onboarding → preload page4/full → page flags",
+        "page flags → observer → render/hide"
+      ],
+      "base_caveats": [
+        "inter_onboarding trong code mẫu là thông tin lịch sử: không yêu cầu ở cuối Onboarding theo policy mới.",
+        "Không bắt page full2 hoặc slot không có trong hành trình thực. Giải Kotlin mask theo đúng item, không áp mask page2 cho page1."
+      ],
+      "snippets": [
+        {
+          "file": "app/src/main/java/com/itg/template/ui/component/onboarding/OnBoardingActivity.kt",
+          "start": 40,
+          "end": 59,
+          "excerpt": "    override fun initViews() {\n        initPage()\n        initOnboardingItems()\n        applyUninstallWidgetShortcutsFromRemoteConfig()\n\n        mBinding.root.postDelayed({\n            AdsManager.loadNativeOnboarding4(\n                this,\n                appSharedPref.firstOnBoarding,\n                R.layout.layout_native_onboarding\n            )\n            AdsManager.loadNativeOnboardingFull(\n                this,\n                appSharedPref.firstOnBoarding,\n                R.layout.layout_native_onboarding_full\n            )\n\n            AdsManager.loadInterOnboarding(this)\n\n        }, 100L)"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/ui/component/onboarding/OnBoardingActivity.kt",
+          "start": 112,
+          "end": 171,
+          "excerpt": "    private fun initOnboardingItems() {\n        onboardingItems.clear()\n        onboardingItems.add(\n            OnboardingItem(\n                title = R.string.onboarding_title_1,\n                description = R.string.onboarding_title_1,\n                textButton = R.string.next,\n                imageResId = R.mipmap.ic_launcher,\n                positionIndicator = 0,\n                isHasNativeOnPage1 = true\n            )\n        )\n        onboardingItems.add(\n            OnboardingItem(\n                title = R.string.onboarding_title_2,\n                description = R.string.onboarding_title_2,\n                textButton = R.string.next,\n                imageResId = R.mipmap.ic_launcher,\n                positionIndicator = 1\n            )\n        )\n        onboardingItems.add(\n            OnboardingItem(\n                title = R.string.onboarding_title_3,\n                description = R.string.onboarding_title_3,\n                textButton = R.string.next,\n                imageResId = R.mipmap.ic_launcher,\n                positionIndicator = 2,\n            )\n        )\n\n        if (isNetwork(this@OnBoardingActivity) && ERainAd.getInstance().getShouldDisplayNativeOnboardingFull1(\n                AdRemoteConfig.native_onboarding_fullscreen_1_3.enableUaCheck))\n            onboardingItems.add(\n                OnboardingItem(\n                    isHasNativeFull = true\n                )\n            )\n\n\n        onboardingItems.add(\n            OnboardingItem(\n                title = R.string.onboarding_title_4,\n                description = R.string.onboarding_title_4,\n                textButton = R.string.next,\n                imageResId = R.mipmap.ic_launcher,\n                positionIndicator = 3,\n                isHasNativeOnPage4 = true\n            )\n        )\n        onboardingAdapter.submitData(onboardingItems)\n    }\n\n    private fun startNextActivity() {\n        appSharedPref.firstOnBoarding = false\n        AdsManager.showInterOnboarding(this) {\n            Routes.startMainActivity(this)\n            finish()\n        }\n    }"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/ui/component/onboarding/adapter/OnboardingPageFragment.kt",
+          "start": 64,
+          "end": 118,
+          "excerpt": "    private fun observeAdChannel() {\n        val liveData: MutableLiveData<ApNativeAd?> = when {\n            onboardingItem.isHasNativeOnPage1 -> AdsManager.nativeOnboarding1AdLive\n            onboardingItem.isHasNativeOnPage4 -> AdsManager.nativeOnboarding4AdLive\n            onboardingItem.isHasNativeFull -> AdsManager.nativeAdOnBoardingFullLive\n            else -> {\n                renderNoAd()\n                return\n            }\n        }\n        liveData.observe(viewLifecycleOwner) { ad -> renderAd(ad) }\n    }\n\n    private fun renderAd(ad: ApNativeAd?) {\n        if (onboardingItem.isHasNativeFull) {\n            if (ad != null) {\n                mBinding.layoutAdsFull.visibleView()\n                mBinding.imgCloseAdsFull.visibleView()\n                mBinding.layoutContent.invisibleView()\n                populateNativeAdView(\n                    requireActivity(),\n                    ad,\n                    mBinding.layoutAdsFull,\n                    mBinding.shimmerAdsFull.shimmerNativeFull\n                )\n            } else {\n                mBinding.layoutContent.visibleView()\n                mBinding.layoutAdsFull.invisibleView()\n                mBinding.layoutAds.invisibleView()\n                mBinding.imgCloseAdsFull.invisibleView()\n            }\n        } else if (onboardingItem.isHasNativeOnPage1 || onboardingItem.isHasNativeOnPage4) {\n            if (ad != null) {\n                mBinding.layoutAds.visibleView()\n                populateNativeAdView(\n                    requireActivity(),\n                    ad,\n                    mBinding.layoutAds,\n                    mBinding.shimmerAds.shimmerNativeMedium\n                )\n            } else {\n                mBinding.layoutAds.invisibleView()\n            }\n            mBinding.layoutContent.visibleView()\n            mBinding.layoutAdsFull.invisibleView()\n            mBinding.imgCloseAdsFull.invisibleView()\n        }\n    }\n\n    private fun renderNoAd() {\n        mBinding.layoutContent.visibleView()\n        mBinding.layoutAds.goneView()\n        mBinding.layoutAdsFull.invisibleView()\n        mBinding.imgCloseAdsFull.invisibleView()\n    }"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/ads/AdsManager.kt",
+          "start": 117,
+          "end": 139,
+          "excerpt": "    fun loadNativeOnboarding4(activity: Activity, isFirst: Boolean, layoutRes: Int) {\n        val config =\n            if (isFirst) AdRemoteConfig.native_onboarding_1_4 else AdRemoteConfig.native_onboarding_2_4\n        loadNativeInternal(\n            activity,\n            config,\n            layoutRes,\n            nativeOnboarding4AdLive,\n            ERainAd.getInstance().getShouldDisplayNativeOnboardingNormal2(config.enableUaCheck)\n        )\n    }\n\n    fun loadNativeOnboardingFull(activity: Activity, isFirst: Boolean, layoutRes: Int) {\n        val config =\n            if (isFirst) AdRemoteConfig.native_onboarding_fullscreen_1_3 else AdRemoteConfig.native_onboarding_fullscreen_2_3\n        loadNativeInternal(\n            activity,\n            config,\n            layoutRes,\n            nativeAdOnBoardingFullLive,\n            ERainAd.getInstance().getShouldDisplayNativeOnboardingFull1(config.enableUaCheck)\n        )\n    }"
+        }
+      ]
+    },
+    "ADS_WELCOME_RESUME": {
+      "static_goal": "Theo slot active trong tài liệu, kiểm route resume, loại trừ, gate và Welcome có nhánh thoát.",
+      "required_paths": [
+        "policy/applicability → lifecycle route",
+        "load → observer → button",
+        "CTA → inter callback hoặc skip → finish"
+      ],
+      "base_caveats": [
+        "Chấp nhận WelcomeBack chỉ inter nếu tài liệu app yêu cầu biến thể đó.",
+        "Không bắt native_welcome/open_resume thiếu hoặc disabled; code base không thay thế tài liệu app."
+      ],
+      "snippets": [
+        {
+          "file": "app/src/main/java/com/itg/template/app/ResumeAdsEntryRule.kt",
+          "start": 14,
+          "end": 28,
+          "excerpt": "object ResumeAdsEntryRule {\n    fun currentMode(): ResumeAdsEntryMode {\n        if (!AdRemoteConfig.isInitialized()) return ResumeAdsEntryMode.NONE\n\n        val canUseOpenResume = AdRemoteConfig.open_resume.isEnable\n        if (canUseOpenResume) return ResumeAdsEntryMode.OPEN_RESUME\n\n        val canUseWelcome = AdRemoteConfig.native_welcome.isEnable && AdRemoteConfig.inter_welcome.isEnable\n        return if (canUseWelcome) ResumeAdsEntryMode.WELCOME else ResumeAdsEntryMode.NONE\n    }\n\n    fun shouldEnableOpenResume(): Boolean = currentMode() == ResumeAdsEntryMode.OPEN_RESUME\n\n    fun shouldShowWelcomeOnResume(): Boolean =\n        currentMode() == ResumeAdsEntryMode.WELCOME && !AdRemoteConfig.open_resume.isEnable"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/app/AppLifecycleObserver.kt",
+          "start": 18,
+          "end": 45,
+          "excerpt": "\n    private val listActivityDisableResume = arrayListOf(\n        SplashActivity::class.java,\n        LanguageActivity::class.java,\n        OnBoardingActivity::class.java,\n        WelcomeActivity::class.java,\n        SurveyActivity::class.java,\n    )\n\n    override fun onStart(owner: LifecycleOwner) {\n        val currentActivity = GlobalApp.currentActivity\n        if (currentActivity != null) {\n            val isDisable = listActivityDisableResume.any { clazz ->\n                clazz.isInstance(currentActivity)\n            }\n            if (!isDisable && ResumeAdsEntryRule.shouldShowWelcomeOnResume()\n                && !AppOpenManager.getInstance().isInterstitialShowing\n                && !AppPurchase.getInstance().isPurchased(currentActivity.applicationContext)\n                && ERainAd.getInstance().getShouldDisplayInterWelcomeBack(AdRemoteConfig.inter_welcome.enableUaCheck)\n            ) {\n                if (AppOpenManager.getInstance().isDisableAdResumeByClickAction)\n                    AppOpenManager.getInstance().isDisableAdResumeByClickAction = false\n                else\n                    Routes.startWelcomeActivity(currentActivity)\n            }\n        }\n    }\n"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/ui/component/welcome/WelcomeActivity.kt",
+          "start": 20,
+          "end": 76,
+          "excerpt": "\n    override fun initViews() {\n        super.initViews()\n        AdsManager.loadNativeWelcome(this, R.layout.layout_native_welcome)\n        AdsManager.loadInterWelcome(this)\n        stateUi()\n    }\n\n    fun stateUi(){\n        showStart(ready = false)\n        mBinding.btnStart.postDelayed(\n            { showStart(ready = true) },\n            AppConstants.DEFAULT_TIME_DELAY_LOAD_INTER_WELCOME\n        )\n    }\n\n    override fun observerData() {\n        AdsManager.nativeWelcomeAdLive.observe(this) { renderWelcomeAd(it) }\n        AdsManager.interWelcomeAdLive.observe(this) { showStart(ready = true) }\n    }\n\n    override fun onClickViews() {\n        mBinding.btnStart.click {\n            if (!mBinding.tvStart.isShown) return@click\n            AdsManager.showInterWelcome(this) { finish() }\n        }\n    }\n\n    override fun onDestroy() {\n        mBinding.btnStart.handler?.removeCallbacksAndMessages(null)\n        super.onDestroy()\n    }\n    private fun showStart(ready: Boolean) {\n        if (isFinishing || isDestroyed || mBinding.tvStart.isShown) return\n        if (!ready) {\n            mBinding.progressStart.visibleView()\n            mBinding.tvStart.goneView()\n            return\n        }\n        mBinding.btnStart.handler?.removeCallbacksAndMessages(null)\n        mBinding.progressStart.goneView()\n        mBinding.tvStart.visibleView()\n    }\n\n    private fun renderWelcomeAd(ad: ApNativeAd?) {\n        if (ad == null || !isNetwork()) {\n            mBinding.frAds.goneView()\n            return\n        }\n        mBinding.frAds.visibleView()\n        populateNativeAdView(\n            this,\n            ad,\n            mBinding.frAds,\n            mBinding.shimmerAds.shimmerNativeLarge)\n    }\n}"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/ads/AdsManager.kt",
+          "start": 270,
+          "end": 323,
+          "excerpt": "    fun loadInterWelcome(context: Context, ignoreLimit: Boolean = false) {\n        val cached = interWelcomeAdLive.value?.takeIf { it.isReady }\n        val request = MutableLiveData<ApInterstitialAd?>()\n        interWelcomeAdLive = request\n        fun emit(ad: ApInterstitialAd?) {\n            request.value = ad\n        }\n        val config = AdRemoteConfig.inter_welcome\n        if (!config.isEnable\n            || AppPurchase.getInstance().isPurchased(context)\n            || (!ignoreLimit && !ERainAd.getInstance()\n                .getShouldDisplayInterWelcomeBack(config.enableUaCheck))\n        ) {\n            emit(null)\n            return\n        }\n        if (cached != null) {\n            emit(cached)\n            return\n        }\n        var loaded: ApInterstitialAd? = null\n        loaded = ERainAd.getInstance().getInterstitialAds(context, config.id, object : AdCallback() {\n            override fun onApInterstitialLoad(apInterstitialAd: ApInterstitialAd?) {\n                super.onApInterstitialLoad(apInterstitialAd)\n                emit(apInterstitialAd ?: loaded)\n            }\n\n            override fun onAdFailedToLoad(adError: LoadAdError?) {\n                super.onAdFailedToLoad(adError)\n                emit(null)\n            }\n        })\n        if (loaded?.isReady == true) emit(loaded)\n    }\n\n    fun showInterWelcome(context: Context, ignoreLimit: Boolean = false, onAction: () -> Unit) {\n        val interstitial = interWelcomeAdLive.value\n        val allowShow = ignoreLimit || ERainAd.getInstance()\n            .getShouldDisplayInterWelcomeBack(AdRemoteConfig.inter_welcome.enableUaCheck)\n        if (interstitial != null && interstitial.isReady && !AppPurchase.getInstance()\n                .isPurchased(context) && allowShow\n        ) {\n            ERainAd.getInstance()\n                .forceShowInterstitial(context, interstitial, object : AdCallback() {\n                    override fun onNextAction() {\n                        super.onNextAction()\n                        interWelcomeAdLive = MutableLiveData()\n                        onAction()\n                    }\n                }, false)\n        } else {\n            onAction()\n        }\n    }"
+        }
+      ]
+    },
+    "ADS_LOAD_OBSERVE_GATES": {
+      "static_goal": "Lần helper load dùng chung tới các màn active: gate → update stream → observer → render/hide.",
+      "required_paths": [
+        "config enable/purchase/network/UA → SDK load",
+        "success/failure/skip → stream",
+        "mỗi slot active → observer và view lifecycle → render/hide"
+      ],
+      "base_caveats": [
+        "Không cần đọc lại cùng helper cho mỗi slot; lập bảng slot→helper→stream→observer và mở những call site khác helper hoặc còn thiếu.",
+        "Không đòi observer phát liên tục thực tế để chấm cấu trúc tĩnh; callback SDK không giải mã được chỉ chặn claim cần nội bộ đó."
+      ],
+      "snippets": [
+        {
+          "file": "app/src/main/java/com/itg/template/ads/AdsManager.kt",
+          "start": 54,
+          "end": 82,
+          "excerpt": "    private fun loadNativeInternal(\n        activity: Activity,\n        config: AdUnitConfig,\n        layoutRes: Int,\n        liveData: MutableLiveData<ApNativeAd?>,\n        shouldDisplay: Boolean = true,\n    ) {\n        if (!config.isEnable\n            || AppPurchase.getInstance().isPurchased(activity)\n            || !activity.isNetworkAvailable()\n            || !shouldDisplay\n        ) {\n            liveData.postValue(null)\n            return\n        }\n        ERainAd.getInstance()\n            .loadNativeAdResultCallback(activity, config.id, layoutRes, object : AdCallback() {\n                override fun onNativeAdLoaded(nativeAd: ApNativeAd) {\n                    super.onNativeAdLoaded(nativeAd)\n                    adConfigMap[nativeAd] = config\n                    liveData.postValue(nativeAd)\n                }\n\n                override fun onAdFailedToLoad(adError: LoadAdError?) {\n                    super.onAdFailedToLoad(adError)\n                    liveData.postValue(null)\n                }\n            })\n    }"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/ads/AdsManager.kt",
+          "start": 117,
+          "end": 139,
+          "excerpt": "    fun loadNativeOnboarding4(activity: Activity, isFirst: Boolean, layoutRes: Int) {\n        val config =\n            if (isFirst) AdRemoteConfig.native_onboarding_1_4 else AdRemoteConfig.native_onboarding_2_4\n        loadNativeInternal(\n            activity,\n            config,\n            layoutRes,\n            nativeOnboarding4AdLive,\n            ERainAd.getInstance().getShouldDisplayNativeOnboardingNormal2(config.enableUaCheck)\n        )\n    }\n\n    fun loadNativeOnboardingFull(activity: Activity, isFirst: Boolean, layoutRes: Int) {\n        val config =\n            if (isFirst) AdRemoteConfig.native_onboarding_fullscreen_1_3 else AdRemoteConfig.native_onboarding_fullscreen_2_3\n        loadNativeInternal(\n            activity,\n            config,\n            layoutRes,\n            nativeAdOnBoardingFullLive,\n            ERainAd.getInstance().getShouldDisplayNativeOnboardingFull1(config.enableUaCheck)\n        )\n    }"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/ui/component/language/LanguageActivity.kt",
+          "start": 132,
+          "end": 158,
+          "excerpt": "    private fun listenLanguageAd() {\n        AdsManager.nativeLanguageClickAdLive.removeObservers(this)\n        AdsManager.nativeLanguageAdLive.observe(this) { ad ->\n            if (ad != null) showNativeLanguage(ad) else mBinding.flAds.goneView()\n        }\n    }\n\n    private fun listenLanguageClickAd() {\n        AdsManager.nativeLanguageAdLive.removeObservers(this)\n        AdsManager.nativeLanguageClickAdLive.observe(this) { ad ->\n            if (ad != null) showNativeLanguage(ad) else mBinding.flAds.goneView()\n        }\n    }\n\n    private fun showNativeLanguage(ad: ApNativeAd) {\n        if (!isNetwork()) {\n            mBinding.flAds.goneView()\n            return\n        }\n        mBinding.flAds.visibleView()\n        populateNativeAdView(\n            this,\n            ad,\n            mBinding.flAds,\n            mBinding.shimmerAds.shimmerNativeSmall\n        )\n    }"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/ui/component/onboarding/adapter/OnboardingPageFragment.kt",
+          "start": 64,
+          "end": 118,
+          "excerpt": "    private fun observeAdChannel() {\n        val liveData: MutableLiveData<ApNativeAd?> = when {\n            onboardingItem.isHasNativeOnPage1 -> AdsManager.nativeOnboarding1AdLive\n            onboardingItem.isHasNativeOnPage4 -> AdsManager.nativeOnboarding4AdLive\n            onboardingItem.isHasNativeFull -> AdsManager.nativeAdOnBoardingFullLive\n            else -> {\n                renderNoAd()\n                return\n            }\n        }\n        liveData.observe(viewLifecycleOwner) { ad -> renderAd(ad) }\n    }\n\n    private fun renderAd(ad: ApNativeAd?) {\n        if (onboardingItem.isHasNativeFull) {\n            if (ad != null) {\n                mBinding.layoutAdsFull.visibleView()\n                mBinding.imgCloseAdsFull.visibleView()\n                mBinding.layoutContent.invisibleView()\n                populateNativeAdView(\n                    requireActivity(),\n                    ad,\n                    mBinding.layoutAdsFull,\n                    mBinding.shimmerAdsFull.shimmerNativeFull\n                )\n            } else {\n                mBinding.layoutContent.visibleView()\n                mBinding.layoutAdsFull.invisibleView()\n                mBinding.layoutAds.invisibleView()\n                mBinding.imgCloseAdsFull.invisibleView()\n            }\n        } else if (onboardingItem.isHasNativeOnPage1 || onboardingItem.isHasNativeOnPage4) {\n            if (ad != null) {\n                mBinding.layoutAds.visibleView()\n                populateNativeAdView(\n                    requireActivity(),\n                    ad,\n                    mBinding.layoutAds,\n                    mBinding.shimmerAds.shimmerNativeMedium\n                )\n            } else {\n                mBinding.layoutAds.invisibleView()\n            }\n            mBinding.layoutContent.visibleView()\n            mBinding.layoutAdsFull.invisibleView()\n            mBinding.imgCloseAdsFull.invisibleView()\n        }\n    }\n\n    private fun renderNoAd() {\n        mBinding.layoutContent.visibleView()\n        mBinding.layoutAds.goneView()\n        mBinding.layoutAdsFull.invisibleView()\n        mBinding.imgCloseAdsFull.invisibleView()\n    }"
+        }
+      ]
+    },
+    "ADS_FIREBASE_EVENTS": {
+      "static_goal": "Nối tên event qua wrapper/alias tới hành động UI/callback tương ứng.",
+      "required_paths": [
+        "constant hoặc dynamic name → wrapper → Firebase.logEvent",
+        "screen/click/load callback → wrapper",
+        "page type → event"
+      ],
+      "base_caveats": [
+        "Tên class wrapper không phải API bắt buộc; lần caller của wrapper/alias trong app và callback/lambda đích.",
+        "Không có lexical hit chưa chứng minh thiếu event. Muốn FAIL thiếu event phải đọc call site UI/callback hoàn chỉnh và wrapper liên quan.",
+        "Base dùng position cố định nhưng page full thêm có điều kiện; kiểm theo loại page thật, không coi mapping cứng là chuẩn.",
+        "Không cần chứng minh Firebase server nhận event để chấm lời gọi tĩnh đúng thời điểm; runtime delivery chỉ là limitation."
+      ],
+      "snippets": [
+        {
+          "file": "app/src/main/java/com/itg/template/data/event/EventTracking.kt",
+          "start": 1,
+          "end": 18,
+          "excerpt": "package com.itg.template.data.event\n\nobject EventTracking {\n    const val SPLASH = \"splash_scr_view\"\n    const val REQUEST_AD = \"splash_request_ad\"\n    const val SPLASH_AD_LOAD = \"splash_ad_load\"\n    const val SPLASH_USER_CLOSE_AD = \"splash_user_close_ad\"\n    const val LANGUAGE_FIRST = \"language_scr_view\"\n    const val LANGUAGE_CLICK = \"language_scr_click\"\n    const val ONBOARDING_FIRST = \"obd_1_scr_view\"\n    const val ONBOARDING_SECOND = \"obd_2_scr_view\"\n    const val ONBOARDING_THIRD = \"obd_3_scr_view\"\n    const val ONBOARDING_4th = \"obd_4th_scr_view\"\n    const val ONBOARDING_FULL1= \"obd_full_1_scr_view\"\n    const val ONBOARDING_FULL2 = \"obd_full_2_scr_view\"\n\n    const val HOME_SCREEN = \"home_scr_view\"\n}"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/utils/ITGTrackingHelper.kt",
+          "start": 52,
+          "end": 55,
+          "excerpt": "    fun logEvent(eventName: String, params: Bundle?): ITGTrackingHelper {\n        Firebase.analytics.logEvent(eventName, params)\n        return this\n    }"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/ui/component/language/LanguageActivity.kt",
+          "start": 53,
+          "end": 68,
+          "excerpt": "    private val languageAdapter: LanguageAdapter by lazy {\n        LanguageAdapter(\n            onItemLanguageClick = {\n                ITGTrackingHelper.logEvent(EventTracking.LANGUAGE_CLICK,null)\n                listenLanguageClickAd()\n                delayShowDoneButton()\n                selectedIso = it.iso\n                LanguageData.selectLanguage(it.iso)\n                resubmitLanguageData()\n            }\n        )\n    }\n\n    override fun initViews() {\n        ITGTrackingHelper.logEvent(EventTracking.LANGUAGE_FIRST,null)\n        isFromSetting = intent.getBooleanExtra(EXTRA_FROM_SETTING, false)"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/ui/component/splash/SplashActivity.kt",
+          "start": 111,
+          "end": 138,
+          "excerpt": "    private fun checkRemoteConfigResult() {\n        ITGTrackingHelper.logEvent(EventTracking.REQUEST_AD, null)\n        AdRemoteConfig.initialize(this, RemoteConfigUtils.getAdRemoteConfig())\n        loadSplashBanner()\n        if (!isFromUninstallShortcut) {\n            loadNativeLanguage(\n                this@SplashActivity, appSharedPref.firstLanguage, R.layout.layout_native_language\n            )\n        }\n        val splashInterConfig = if (isFromUninstallShortcut) {\n            AdRemoteConfig.inter_splash_uninstall\n        } else {\n            AdRemoteConfig.inter_splash\n        }\n        if (splashInterConfig.isEnable && isNetwork(this@SplashActivity)) {\n            ERainAd.getInstance().loadSplashInterstitialAds(\n                this, splashInterConfig.id, 30000, 5000, object : AdCallback() {\n                    override fun onNextAction() {\n                        super.onNextAction()\n                        ITGTrackingHelper.logEvent(EventTracking.SPLASH_USER_CLOSE_AD, null)\n                        moveActivity()\n                    }\n\n                    override fun onAdLoaded() {\n                        super.onAdLoaded()\n                        ITGTrackingHelper.logEvent(EventTracking.SPLASH_AD_LOAD, null)\n                    }\n                })"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/ui/component/onboarding/OnBoardingActivity.kt",
+          "start": 98,
+          "end": 109,
+          "excerpt": "            override fun onPageSelected(position: Int) {\n                ITGTrackingHelper.logEvent(when(position){\n                    0 -> { EventTracking.ONBOARDING_FIRST}\n                    1 -> { EventTracking.ONBOARDING_SECOND}\n                    2 -> { EventTracking.ONBOARDING_FULL1}\n                    3 -> { EventTracking.ONBOARDING_THIRD}\n                    4 -> { EventTracking.ONBOARDING_FULL2}\n                    5 -> { EventTracking.ONBOARDING_4th}\n                    else -> EventTracking.ONBOARDING_FIRST\n                }, null)\n            }\n        })"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/ui/component/main/MainActivity.kt",
+          "start": 76,
+          "end": 82,
+          "excerpt": "\n    override fun initViews() {\n        super.initViews()\n        ITGTrackingHelper.logEvent(EventTracking.HOME_SCREEN,null)\n        noInternetDialog = NoInternetDialog(this)\n        forceUpdateDialog = ForceUpdateDialog(this)\n        checkInternet()"
+        }
+      ]
+    },
+    "ADS_BANNER_RELOAD": {
+      "static_goal": "Kiểm đúng slot/container/gate; reload trên màn có vòng reload được yêu cầu và cleanup lifecycle.",
+      "required_paths": [
+        "screen → banner config → container/load",
+        "interval → timer → reload",
+        "pause/destroy → cleanup"
+      ],
+      "base_caveats": [
+        "Base có vòng reload ở BaseActivityWithBanner; Splash chỉ gọi loadBanner một lần. Không suy reload Splash bắt buộc chỉ vì config có interval.",
+        "Nếu báo thiếu reload phải xác định màn đó có yêu cầu reload từ hợp đồng/rule và lần cơ chế scheduler; không kết luận từ thiếu một tham số trong call load."
+      ],
+      "snippets": [
+        {
+          "file": "app/src/main/java/com/itg/template/ui/component/splash/SplashActivity.kt",
+          "start": 150,
+          "end": 159,
+          "excerpt": "    private fun loadSplashBanner() {\n        val bannerConfig = if (isFromUninstallShortcut) {\n            AdRemoteConfig.banner_splash_uninstall\n        } else {\n            AdRemoteConfig.banner_splash\n        }\n        AdsManager.loadBanner(\n            this, bannerConfig, mBinding.frBanner, isCollapse = false\n        )\n    }"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/ads/AdsManager.kt",
+          "start": 380,
+          "end": 414,
+          "excerpt": "    fun loadBanner(\n        activity: AppCompatActivity,\n        adUnitConfig: AdUnitConfig,\n        frAds: FrameLayout,\n        isCollapse: Boolean,\n    ) {\n        if (adUnitConfig.isEnable) {\n            removeBannerView(activity, frAds)\n            if (isCollapse) ERainAd.getInstance().loadCollapsibleBanner(\n                activity,\n                adUnitConfig.id,\n                AppConstant.CollapsibleGravity.BOTTOM,\n                object : AdCallback() {\n                    override fun onAdFailedToLoad(i: LoadAdError?) {\n                        super.onAdFailedToLoad(i)\n                        frAds.goneView()\n                        Timber.tag(\"AdsManager_Banner\")\n                            .d(\"Load banner on ${activity.javaClass.simpleName} failed by : ${i?.message}\")\n                    }\n                })\n            else ERainAd.getInstance()\n                .loadBanner(activity, adUnitConfig.id, object : AdCallback() {\n                    override fun onAdFailedToLoad(i: LoadAdError?) {\n                        super.onAdFailedToLoad(i)\n                        frAds.goneView()\n                        Timber.tag(\"AdsManager_Banner\")\n                            .d(\"Load banner on ${activity.javaClass.simpleName} failed by : ${i?.message}\")\n                    }\n                })\n        } else {\n            frAds.removeAllViews()\n            frAds.goneView()\n        }\n    }\n"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/ui/bases/BaseActivityWithBanner.kt",
+          "start": 36,
+          "end": 74,
+          "excerpt": "        override fun run() {\n            if (isDestroyed || isFinishing) return\n            val shouldReloadBanner = shouldReloadBanner()\n\n            if (timeNeedReloadBanner < System.currentTimeMillis() && shouldReloadBanner) {\n                loadBanner()\n            }\n\n            if (shouldReloadBanner) {\n                reloadBannerHandler?.removeCallbacks(reloadBannerRunnable)\n                reloadBannerHandler?.postDelayed(this, DISTANCE_TIME_NEED_CHECK_RELOAD_BANNER)\n            } else {\n                cleanupHandler()\n            }\n        }\n    }\n\n    override fun onCreate(savedInstanceState: Bundle?) {\n        super.onCreate(savedInstanceState)\n        loadBanner()\n    }\n\n    override fun onResume() {\n        super.onResume()\n        reloadBannerIfNeeded()\n    }\n\n    override fun onPause() {\n        cleanupHandler()\n        super.onPause()\n    }\n\n    override fun onDestroy() {\n        cleanupHandler()\n        super.onDestroy()\n    }\n\n    private fun loadBanner() {\n        val frAds = findViewById<FrameLayout>(R.id.fr_banner)"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/ui/bases/BaseActivityWithBanner.kt",
+          "start": 73,
+          "end": 129,
+          "excerpt": "    private fun loadBanner() {\n        val frAds = findViewById<FrameLayout>(R.id.fr_banner)\n\n        if (!shouldShowBanner()) {\n            timeNeedReloadBanner = 0\n            frAds?.goneView()\n            cleanupHandler()\n            return\n        }\n\n        frAds?.visibleView()\n        val adUnitConfig = bannerConfig.adUnitConfig\n        AdsManager.loadBanner(\n            this@BaseActivityWithBanner,\n            adUnitConfig,\n            frAds,\n            bannerConfig.isCollapse\n        )\n\n        val distanceReloadBanner = adUnitConfig.reloadIntervalSeconds ?: 0\n        if (distanceReloadBanner > 0) {\n            timeNeedReloadBanner = System.currentTimeMillis() + distanceReloadBanner * 1000L\n        }\n    }\n\n    private fun reloadBannerIfNeeded() {\n        if (shouldReloadBanner()) {\n            if (reloadBannerHandler == null) {\n                reloadBannerHandler = Handler(Looper.getMainLooper())\n            }\n            reloadBannerHandler?.postDelayed(\n                reloadBannerRunnable,\n                DISTANCE_TIME_NEED_CHECK_RELOAD_BANNER\n            )\n        } else {\n            cleanupHandler()\n        }\n    }\n\n    private fun shouldShowBanner(): Boolean {\n        val isAdEnabled = bannerConfig.adUnitConfig.isEnable\n                && !AppPurchase.getInstance().isPurchased(this)\n        val frAds = findViewById<FrameLayout>(R.id.fr_banner)\n        return isAdEnabled && frAds != null\n    }\n\n    private fun shouldReloadBanner(): Boolean {\n        val shouldShowBanner = shouldShowBanner()\n        val distanceReloadBanner = bannerConfig.adUnitConfig.reloadIntervalSeconds ?: 0\n        return shouldShowBanner && distanceReloadBanner > 0\n    }\n\n    private fun cleanupHandler() {\n        reloadBannerHandler?.removeCallbacksAndMessages(null)\n        reloadBannerHandler = null\n    }\n}"
+        }
+      ]
+    },
+    "ADS_CROSS_FLOW_BUGS": {
+      "static_goal": "Rà đường callback/lifecycle thực sự của hành trình chính, tìm lỗi mới có đường tái tạo tĩnh.",
+      "required_paths": [
+        "manager callback/skip → navigation",
+        "resume/pause/destroy → cleanup hoặc retry",
+        "config → preload → screen còn sống"
+      ],
+      "base_caveats": [
+        "Không lặp finding chuyên biệt; không lặp lỗi inter optional hoặc open_resume không được yêu cầu.",
+        "PASS chỉ giới hạn các đường trọng yếu đã lần đủ; không khẳng định toàn APK không bug. UNKNOWN phải chỉ ra call site/nhánh cụ thể còn thiếu."
+      ],
+      "snippets": [
+        {
+          "file": "app/src/main/java/com/itg/template/ads/AdsManager.kt",
+          "start": 305,
+          "end": 323,
+          "excerpt": "    fun showInterWelcome(context: Context, ignoreLimit: Boolean = false, onAction: () -> Unit) {\n        val interstitial = interWelcomeAdLive.value\n        val allowShow = ignoreLimit || ERainAd.getInstance()\n            .getShouldDisplayInterWelcomeBack(AdRemoteConfig.inter_welcome.enableUaCheck)\n        if (interstitial != null && interstitial.isReady && !AppPurchase.getInstance()\n                .isPurchased(context) && allowShow\n        ) {\n            ERainAd.getInstance()\n                .forceShowInterstitial(context, interstitial, object : AdCallback() {\n                    override fun onNextAction() {\n                        super.onNextAction()\n                        interWelcomeAdLive = MutableLiveData()\n                        onAction()\n                    }\n                }, false)\n        } else {\n            onAction()\n        }\n    }"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/ui/bases/BaseActivityWithBanner.kt",
+          "start": 36,
+          "end": 74,
+          "excerpt": "        override fun run() {\n            if (isDestroyed || isFinishing) return\n            val shouldReloadBanner = shouldReloadBanner()\n\n            if (timeNeedReloadBanner < System.currentTimeMillis() && shouldReloadBanner) {\n                loadBanner()\n            }\n\n            if (shouldReloadBanner) {\n                reloadBannerHandler?.removeCallbacks(reloadBannerRunnable)\n                reloadBannerHandler?.postDelayed(this, DISTANCE_TIME_NEED_CHECK_RELOAD_BANNER)\n            } else {\n                cleanupHandler()\n            }\n        }\n    }\n\n    override fun onCreate(savedInstanceState: Bundle?) {\n        super.onCreate(savedInstanceState)\n        loadBanner()\n    }\n\n    override fun onResume() {\n        super.onResume()\n        reloadBannerIfNeeded()\n    }\n\n    override fun onPause() {\n        cleanupHandler()\n        super.onPause()\n    }\n\n    override fun onDestroy() {\n        cleanupHandler()\n        super.onDestroy()\n    }\n\n    private fun loadBanner() {\n        val frAds = findViewById<FrameLayout>(R.id.fr_banner)"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/ui/component/splash/SplashActivity.kt",
+          "start": 182,
+          "end": 211,
+          "excerpt": "    override fun onPause() {\n        super.onPause()\n        stopVideo()\n    }\n\n    override fun onResume() {\n        super.onResume()\n        ERainAd.getInstance().onCheckShowSplashWhenFail(this@SplashActivity, object : AdCallback() {\n                override fun onNextAction() {\n                    super.onNextAction()\n                    moveActivity()\n                }\n            }, 1000)\n    }\n\n    override fun loadSuccess() {\n        getConfigSuccess = true\n    }\n\n    override fun onDestroy() {\n        super.onDestroy()\n        if (::consentHandler.isInitialized) {\n            consentHandler.clear()\n        }\n        stopVideo()\n        simpleExoPlayer?.release()\n        simpleExoPlayer = null\n        mBinding.playerView.player = null\n    }\n}"
+        },
+        {
+          "file": "app/src/main/java/com/itg/template/app/AppLifecycleObserver.kt",
+          "start": 27,
+          "end": 45,
+          "excerpt": "    override fun onStart(owner: LifecycleOwner) {\n        val currentActivity = GlobalApp.currentActivity\n        if (currentActivity != null) {\n            val isDisable = listActivityDisableResume.any { clazz ->\n                clazz.isInstance(currentActivity)\n            }\n            if (!isDisable && ResumeAdsEntryRule.shouldShowWelcomeOnResume()\n                && !AppOpenManager.getInstance().isInterstitialShowing\n                && !AppPurchase.getInstance().isPurchased(currentActivity.applicationContext)\n                && ERainAd.getInstance().getShouldDisplayInterWelcomeBack(AdRemoteConfig.inter_welcome.enableUaCheck)\n            ) {\n                if (AppOpenManager.getInstance().isDisableAdResumeByClickAction)\n                    AppOpenManager.getInstance().isDisableAdResumeByClickAction = false\n                else\n                    Routes.startWelcomeActivity(currentActivity)\n            }\n        }\n    }\n"
+        }
+      ]
+    }
+  }
+}

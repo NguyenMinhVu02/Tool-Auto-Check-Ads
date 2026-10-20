@@ -2,6 +2,7 @@
 
 import re
 from xml.etree import ElementTree
+from .placement_policy import integration_policy, normalize_ads_document
 
 
 PACKAGE = re.compile(r"\b(?:[A-Za-z_][A-Za-z_0-9]*\.)+[A-Za-z_][A-Za-z_0-9]*\b")
@@ -41,24 +42,32 @@ def _manifest_app_id(workspace, facts):
     return None
 
 
-def build_inventory(workspace, facts, documents):
-    ads = documents.get("ads_scripts", {})
+def build_inventory(workspace, facts, documents, files=None):
+    ads = normalize_ads_document(documents.get("ads_scripts", {}))
     rows = ads.get("placements") if isinstance(ads, dict) else None
     config = facts.get("assets", {}).get("json", {}).get("ad_config.json", {})
     if not isinstance(config, dict):
         config = {}
-    expected = {row["name"]: row for row in rows or [] if isinstance(row, dict) and row.get("name")}
+    documented = {row["name"]: row for row in rows or [] if isinstance(row, dict) and row.get("name")}
+    expected = {key: row for key, row in documented.items() if row['state'] == 'active'}
     local = {key: value for key, value in config.items() if isinstance(value, dict) and "id" in value}
+    optional = {key for key in documented.keys() | local.keys() if key.casefold() == 'inter_onboarding'}
     shared = sorted(expected.keys() & local.keys())
     expected_package = _working_package(documents)
     expected_app_id = ads.get("app_id") if isinstance(ads, dict) else None
     actual_app_id = _manifest_app_id(workspace, facts) if expected_app_id else None
     inventory = {
-        "documents_available": bool(expected),
+        "documents_available": isinstance(rows, list),
+        "documented_count": len(documented),
         "expected_count": len(expected),
         "local_count": len(local),
-        "missing_local": sorted(expected.keys() - local.keys()),
-        "extra_local": sorted(local.keys() - expected.keys()) if expected else [],
+        "missing_local": sorted(expected.keys() - local.keys() - optional),
+        "extra_local": sorted(local.keys() - documented.keys() - optional) if documented else [],
+        "optional_placements": sorted(optional),
+        "disabled_placements": sorted(key for key, row in documented.items() if row['state'] == 'disabled'),
+        "uncertain_placements": sorted(key for key, row in documented.items() if row['state'] == 'unknown'),
+        "integration_policy": integration_policy(ads),
+        "document_warnings": ads.get('warnings', []) if isinstance(ads, dict) else [],
         "matching_ids": [key for key in shared if expected[key].get("id") and expected[key]["id"] == local[key].get("id")],
         "mismatched_ids": [key for key in shared if expected[key].get("id") and expected[key]["id"] != local[key].get("id")],
         "empty_expected_ids": [key for key in shared if not expected[key].get("id")],
@@ -67,11 +76,12 @@ def build_inventory(workspace, facts, documents):
         "code_references": {},
         "config_references": {},
     }
-    keys = sorted(expected.keys() | local.keys())
+    keys = sorted(documented.keys() | local.keys())
     config_names = {"ad_config.json", "ad_config_debug.json", "ad_remote_config"}
     if keys or config_names:
         pattern = re.compile('"(' + '|'.join(re.escape(key) for key in sorted(set(keys) | config_names)) + ')"')
-        for path in (workspace / "sources").rglob("*.java"):
+        for path in ((workspace / "sources").rglob("*.java") if files is None else
+                     (p for p in files if p.suffix == ".java" and p.is_relative_to(workspace / "sources"))):
             try:
                 with path.open(encoding="utf-8", errors="replace") as source:
                     for line_number, line in enumerate(source, 1):
@@ -95,6 +105,12 @@ def inventory_observations(inventory):
                          ("empty_expected_ids", "ID trống trong ADS SCRIPTS")):
         if inventory[field]:
             lines.append(label + ": " + ", ".join(inventory[field]))
+    for field, label in (("optional_placements", "Placement tùy chọn, không bắt buộc có local/load/show"),
+                         ("disabled_placements", "Placement không dùng theo ADS SCRIPTS"),
+                         ("uncertain_placements", "Chưa xác định trạng thái sử dụng trong tài liệu")):
+        if inventory.get(field):
+            lines.append(label + ": " + ", ".join(inventory[field]))
+    lines.extend(inventory.get('document_warnings', []))
     if inventory["package_match"] is not None:
         lines.append("Package APK " + ("khớp" if inventory["package_match"] else "không khớp") + " working file.")
     if inventory["app_id_match"] is not None:

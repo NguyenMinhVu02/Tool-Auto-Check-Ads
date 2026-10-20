@@ -10,12 +10,16 @@ import threading
 import time
 
 from .contracts import AgentResult
-from .engine_common import audit_instruction, verdict_schema
+from .engine_common import agent_error, audit_instruction, report_activity, retain_source_read, verdict_schema
 from .errors import AuditError
 
 
 class ClaudeEngine:
-    name = 'claude:default'
+    model = 'claude-haiku-5-5'
+    reasoning_effort = 'low'
+    name = f'claude:{model}:{reasoning_effort}'
+    label = 'Claude CLI (Haiku 5.5 · low)'
+    requires_claims = True
 
     def available(self):
         return shutil.which('claude') is not None
@@ -23,11 +27,21 @@ class ClaudeEngine:
     def run_agent(self, prompt, tools, max_tool_calls, timeout=600):
         if max_tool_calls <= 0:
             return AgentResult('', exhausted_budget=True)
+        return self._run_structured(audit_instruction(prompt, max_tool_calls), tools,
+                                    verdict_schema(), max_tool_calls, timeout, 'Read,Glob,Grep')
+
+    def map_document(self, instruction, tools, schema, timeout=90):
+        return self._run_structured(instruction, tools, schema, 0, timeout, '')
+
+    def _run_structured(self, instruction, tools, schema, max_tool_calls, timeout, allowed_tools):
         command = [
             'claude', '--print', '--output-format', 'stream-json', '--verbose',
-            '--json-schema', json.dumps(verdict_schema()),
+            '--model', self.model, '--effort', self.reasoning_effort,
+            '--settings', json.dumps({'availableModels': [self.model], 'fallbackModel': [],
+                                      'switchModelsOnFlag': False}),
+            '--json-schema', json.dumps(schema),
             '--no-session-persistence', '--safe-mode', '--restricted',
-            '--tools', 'Read,Glob,Grep', '--allowedTools', 'Read,Glob,Grep',
+            '--tools', allowed_tools, '--allowedTools', allowed_tools,
             '--permission-mode', 'dontAsk', '--disable-slash-commands',
             '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}',
         ]
@@ -40,7 +54,7 @@ class ClaudeEngine:
                 except OSError as exc:
                     raise AuditError(f'Không chạy được Claude CLI: {exc}', 6) from exc
                 try:
-                    process.stdin.write(audit_instruction(prompt, max_tool_calls).encode('utf-8'))
+                    process.stdin.write(instruction.encode('utf-8'))
                     process.stdin.close()
                     result, calls, exhausted = self._collect(process, max_tool_calls, timeout)
                 finally:
@@ -50,17 +64,19 @@ class ClaudeEngine:
                     process.stdin.close()
                     process.stdout.close()
             if exhausted:
-                return AgentResult('', tool_calls=calls, exhausted_budget=True)
+                return AgentResult('', tool_calls=calls, exhausted_budget=True,
+                                   events=(result or {}).get('_audit_events', []))
+            usage = result.get('usage', {}) if isinstance(result, dict) else {}
             if process.returncode:
                 detail = stderr_path.read_text(encoding='utf-8', errors='replace')[-1000:].strip()
                 if not detail and result:
                     detail = str(result.get('result') or result.get('errors') or '')[-1000:]
-                raise AuditError('Claude CLI lỗi: ' + (detail or f'exit {process.returncode}'), 6)
+                raise agent_error('Claude CLI lỗi: ' + (detail or f'exit {process.returncode}'), calls, usage)
             if not result:
-                raise AuditError('Claude CLI không trả kết quả; kiểm tra phiên đăng nhập và phiên bản CLI.', 6)
+                raise agent_error('Claude CLI không trả kết quả; kiểm tra phiên đăng nhập và phiên bản CLI.', calls, usage)
             if result.get('is_error') or result.get('subtype') != 'success':
                 detail = result.get('errors') or result.get('result') or result.get('subtype', 'error')
-                raise AuditError('Claude CLI không hoàn thành: ' + str(detail)[-1000:], 6)
+                raise agent_error('Claude CLI không hoàn thành: ' + str(detail)[-1000:], calls, usage)
             payload = result.get('structured_output')
             if not isinstance(payload, dict):
                 try:
@@ -68,8 +84,9 @@ class ClaudeEngine:
                 except (ValueError, TypeError):
                     payload = None
             if not isinstance(payload, dict):
-                raise AuditError('Claude CLI không trả kết quả JSON theo schema.', 6)
-            return AgentResult(json.dumps(payload, ensure_ascii=False), tool_calls=calls)
+                raise agent_error('Claude CLI không trả kết quả JSON theo schema.', calls, usage)
+            return AgentResult(json.dumps(payload, ensure_ascii=False), tool_calls=calls, usage=usage,
+                               events=result.get('_audit_events', []))
 
     @staticmethod
     def _collect(process, max_tool_calls, timeout):
@@ -86,15 +103,17 @@ class ClaudeEngine:
         reader.start()
         deadline = time.monotonic() + timeout
         seen = set()
+        events = []
+        commands = {}
         result = None
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise AuditError('Claude CLI quá thời gian chờ.', 6)
+                raise agent_error('Claude CLI quá thời gian chờ.', len(seen))
             try:
                 line = messages.get(timeout=remaining)
             except queue.Empty as exc:
-                raise AuditError('Claude CLI quá thời gian chờ.', 6) from exc
+                raise agent_error('Claude CLI quá thời gian chờ.', len(seen)) from exc
             if line is None:
                 break
             try:
@@ -109,8 +128,20 @@ class ClaudeEngine:
                 for block in content if isinstance(content, list) else []:
                     if isinstance(block, dict) and block.get('type') == 'tool_use':
                         seen.add(block.get('id') or f'unnamed-{len(seen)}')
+                        commands[block.get('id')] = str(block.get('name', '')) + ' ' + json.dumps(block.get('input', {}), ensure_ascii=False)[:1000]
+                        report_activity(tool_calls=len(seen), command=commands[block.get('id')][:300])
                         if len(seen) > max_tool_calls:
-                            return None, len(seen), True
+                            return {'_audit_events': events}, len(seen), True
+            elif event.get('type') == 'user':
+                message = event.get('message', {})
+                content = message.get('content', []) if isinstance(message, dict) else []
+                for block in content if isinstance(content, list) else []:
+                    if isinstance(block, dict) and block.get('type') == 'tool_result':
+                        output = block.get('content', '')
+                        retain_source_read(events, commands.get(block.get('tool_use_id'), 'tool result'),
+                                           output if isinstance(output, str) else json.dumps(output, ensure_ascii=False))
             elif event.get('type') == 'result':
                 result = event
+        if result is not None:
+            result['_audit_events'] = events
         return result, len(seen), False

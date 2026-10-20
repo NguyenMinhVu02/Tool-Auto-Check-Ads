@@ -2,6 +2,19 @@
 
 Nguồn: repository `Example-AdLogic-Partner`, nhánh `main`, commit `e8f4337` (2026-09-24). Đây là mô tả hành vi mã nguồn tại commit này, không phải danh sách tên hàm bắt buộc. Đánh giá theo luồng dữ liệu, điều kiện, thứ tự và vị trí màn hình. Class/method có thể đổi tên. Chỉ báo FAIL khi có bằng chứng trong APK; thiếu mã do obfuscation hoặc SDK ngoài APK thì UNKNOWN. Giá trị ID AdMob trong base là mẫu, tuyệt đối không so khớp với APK đối tác. ID kỳ vọng của ứng dụng cần lấy từ ADS SCRIPTS riêng; Firebase/project/token từ working checklist riêng. Khi thiếu hai tài liệu đó, chỉ đánh giá logic và inventory, không phán đúng/sai ID cụ thể.
 
+## Điều chỉnh theo yêu cầu đối tác ngày 20/10/2026 (ưu tiên hơn mô tả base)
+
+- Không bắt buộc inter_onboarding ở cuối Onboarding, kể cả tài liệu cũ còn dòng này. Thiếu config/ID/helper, disabled hoặc stub bỏ qua load/show không phải lỗi. Nếu app thực sự dùng inter thì vẫn kiểm gate và callback điều hướng.
+- open_resume chỉ bắt buộc khi ADS SCRIPTS có ID và placement được xác định đang dùng. Thiếu slot/ID, ô ID tô màu, tên/ID gạch ngang hoặc trạng thái disabled cho phép tắt App Open hoàn toàn. Không FAIL vì currentMode cố định false trong trường hợp này.
+- Dùng state trong Documents và integration_policy của inventory. Placement disabled không phải yêu cầu coverage. Với trạng thái unknown, không tự biến thành bắt buộc: cần làm rõ tài liệu trước khi kết luận vi phạm.
+- XLSX giữ màu nền ô ID và gạch ngang tên/ID; CSV không giữ định dạng. CSV cần Status/Enabled rõ ràng cho open_resume có ID; thiếu trạng thái thì không suy ra App Open bắt buộc. Màu/gạch ngang không thể khôi phục từ ID trong CSV.
+
+## Phạm vi kiểm tra tĩnh và code base theo rule
+
+`base-reference.json` cung cấp excerpt, file/dòng, hash và commit base theo từng rule. Đây là ví dụ logic, không phải bằng chứng APK, không thay ADS SCRIPTS và không ghi đè các điều chỉnh của người dùng. AI phải nối source của APK với các required_paths, mở helper/lambda còn thiếu. Không viện dẫn reflection/JNI/SDK như blocker nếu chưa có đường thực thi thực tế cần đến chúng. Nhận định runtime chỉ là limitation của phần kiểm tĩnh đã đủ bằng chứng; thiếu mã quyết định logic vẫn là blocker.
+
+Với banner, vòng reload trong base thuộc BaseActivityWithBanner, không phải Splash. Splash chỉ load một lần không đủ để FAIL; cần chứng minh hợp đồng/màn thực sự yêu cầu reload rồi mới kiểm scheduler/cleanup.
+
 ## Khởi tạo
 
 Application được khai báo trong manifest. Trong `onCreate`, khởi tạo Mobile Ads, DevConfig với ba version BuildConfig (ERAIN_STUDIO_VERSION, PLAY_SERVICES_ADS_VERSION, GDPR_MODULE_VERSION), đọc cấu hình ads cục bộ, dựng ERainAdConfig theo debug/release, đặt Adjust/Facebook/TikTok token từ resource, đặt khoảng cách interstitial 35 giây, gọi ERainAd.init, cấu hình App Open, đăng ký ProcessLifecycleOwner observer và ActivityLifecycleCallbacks. Consent ở Splash: chỉ request khi chưa xác nhận, không phải global user và có mạng; kết thúc/timeout phải tiếp tục luồng. Không suy ra consent hợp lệ chỉ từ timeout.
@@ -14,7 +27,7 @@ Application được khai báo trong manifest. Trong `onCreate`, khởi tạo Mo
 
 - Splash thường: sau consent + chờ Remote Config, chọn `inter_splash`, `banner_splash`, preload `native_language_1` hoặc `_2` theo firstLanguage và cấu hình `open_resume`. Luồng uninstall shortcut chọn `inter_splash_uninstall`, `banner_splash_uninstall`, không preload Language. Timer splash 6500 ms, xét config sau ít nhất khoảng 1500 ms khi còn dưới 5000 ms; quá hạn vẫn dùng fallback. Splash inter dùng timeout 30000/5000 ms. Banner trong container Splash. Đóng/fail inter mới chuyển màn; nhánh không load cũng chuyển màn.
 - Language: nhận native đã preload từ Splash, sau `postDelayed(100 ms)` load `native_language_1_click` hoặc `_2_click` và preload `native_onboarding_1_1` hoặc `_2_1` nếu không vào từ Settings. Click ngôn ngữ đổi observer từ native đầu sang native click; hủy observer cũ. Native non-null thì populate, null/mất mạng thì ẩn. Nút Done có delay từ Remote Config, mặc định 2000 ms.
-- Onboarding: page 1 dùng native preload từ Language. Sau `postDelayed(100 ms)` load `native_onboarding_1_4`/`_2_4`, `native_onboarding_fullscreen_1_3`/`_2_3`, và `inter_onboarding`. Page 4 dùng native page 4; page full tùy gate UA. Fragment page observe native bằng `viewLifecycleOwner`, non-null render, null ẩn. Khi rời onboarding, inter sẵn sàng và được phép thì show rồi mới vào Home; nếu không thì vào Home. `native_onboarding_fullscreen_1_4`/`_2_4` có khai báo/helper nhưng không nằm trong luồng chính hiện tại: không bắt app khác load thừa slot này.
+- Onboarding: page 1 dùng native preload từ Language. Sau `postDelayed(100 ms)` load `native_onboarding_1_4`/`_2_4`, `native_onboarding_fullscreen_1_3`/`_2_3`. Page 4 dùng native page 4; page full tùy gate UA. Fragment page observe native bằng `viewLifecycleOwner`, non-null render, null ẩn. Khi rời Onboarding được phép vào Home trực tiếp; inter_onboarding tùy chọn. Nếu dùng inter thì show khi sẵn sàng/được phép và điều hướng qua callback; nếu không thì vào Home. `native_onboarding_fullscreen_1_4`/`_2_4` có khai báo/helper nhưng không nằm trong luồng chính hiện tại: không bắt app khác load thừa slot này.
 - Welcome/Resume: `open_resume` có ưu tiên; nếu bật thì không đi Welcome. Welcome chỉ khi open_resume tắt và cả `native_welcome`, `inter_welcome` bật, qua gate lifecycle/purchase/UA. Welcome load 2 placement khi mở, observe native và inter, chờ tối đa khoảng 500 ms để mở nút Start; click show inter nếu sẵn sàng, callback close/fail hoặc nhánh không ad đều thoát. Không stack App Open và Welcome inter.
 - Banner màn khác: `isEnable`, chưa purchase, có container; `reloadIntervalSeconds` điều khiển reload; dọn handler lúc pause/destroy.
 
@@ -27,6 +40,6 @@ Các tên event trong base: `splash_scr_view` khi vào Splash; `splash_request_a
 ## Giới hạn/cảnh báo nguồn
 
 - Base hiện preload Language trong `checkRemoteConfigResult`, trước callback `onAdLoaded`, trong khi README/skill cũ mô tả preload trong callback. Lấy mã HEAD làm bằng chứng, ghi khác biệt; chưa áp đặt thời điểm chi tiết như điều kiện PASS tuyệt đối nếu preload vẫn đúng trước Language.
-- `showInterOnboarding` ở base có điều kiện `&& ignoreLimit`, trong khi caller thường dùng mặc định false. Đây là lỗi/điểm chưa nhất quán, không dùng làm quy tắc cho app khác. Tiêu chí là có nhánh show hợp lệ và fallback điều hướng.
+- `showInterOnboarding` ở base có điều kiện `&& ignoreLimit`, trong khi caller thường dùng mặc định false. Không dùng làm quy tắc bắt app khác triển khai inter cuối Onboarding; chỉ kiểm an toàn khi app thực sự dùng inter.
 - Mapping event `onPageSelected(position)` trong base dùng vị trí cứng trong khi full page chỉ thêm có điều kiện và full2 không được thêm. Vì vậy không coi mapping position cứng là chuẩn; kiểm event theo loại page được render, hoặc UNKNOWN nếu APK không đủ dữ liệu.
 - APK static chỉ chứng minh đường đi trong mã và assets; không chứng minh Firebase thực nhận event, Remote Config live trả giá trị nào, ad thật có fill/show, hoặc observer nhận liên tục khi runtime. Những mục này cần thử runtime và không được chấm PASS tuyệt đối từ sự hiện diện của chuỗi.

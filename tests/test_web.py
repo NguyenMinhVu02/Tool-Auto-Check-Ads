@@ -69,6 +69,40 @@ class WebTests(unittest.TestCase):
             self.assertEqual(report["package"], "demo.app")
             self.assertEqual(report["summary"]["unknown"], 1)
 
+    def test_history_sanitizes_paths_and_explicit_resume_accepts_empty_body(self):
+        job_id, archive = self.jobs.reserve('interrupted.apk')
+        archive.parent.mkdir(parents=True)
+        archive.write_bytes(b'archive')
+        self.jobs.update(job_id, state='running', upload_complete=True)
+        restored = AuditJobs(self.root)
+        self.server.RequestHandlerClass = make_handler(restored)
+        history = json.load(self.request('/api/jobs'))['jobs']
+        self.assertEqual(history[0]['id'], job_id)
+        self.assertTrue(history[0]['resumable'])
+        for key in ('documents', 'archive_path', 'output_path', 'report_path'):
+            self.assertNotIn(key, history[0])
+            self.assertNotIn(key, json.load(self.request(f'/api/jobs/{job_id}')))
+        entered, finish = threading.Event(), threading.Event()
+        def stop_run(*args, **kwargs):
+            self.assertTrue(kwargs['resume'])
+            entered.set()
+            finish.wait(5)
+            raise ValueError('test complete')
+        with patch('apk_audit.web.run', side_effect=stop_run):
+            try:
+                response = self.request(f'/api/jobs/{job_id}/resume', b'')
+                self.assertEqual(response.status, 202)
+                self.assertTrue(entered.wait(2))
+                with self.assertRaises(HTTPError) as busy:
+                    self.request(f'/api/jobs/{job_id}/resume', b'')
+                self.assertEqual(busy.exception.code, 409)
+            finally:
+                finish.set()
+            for _ in range(50):
+                if restored.active is None:
+                    break
+                time.sleep(.02)
+
     def test_rejects_wrong_extension_and_empty_upload(self):
         with self.assertRaises(HTTPError) as wrong:
             self.request("/api/jobs", b"bytes", "../../bad.txt")
@@ -114,8 +148,8 @@ class WebTests(unittest.TestCase):
 
     def test_invalid_or_missing_engine_rejected_before_consuming_documents(self):
         from io import BytesIO
-        ads = self.jobs.store_document('ads_scripts', 'ads.csv', BytesIO(b'a'), 1)
-        working = self.jobs.store_document('checklist', 'working.csv', BytesIO(b'b'), 1)
+        ads, _ = self.jobs.store_document('ads_scripts', 'ads.csv', BytesIO(b'a'), 1)
+        working, _ = self.jobs.store_document('checklist', 'working.csv', BytesIO(b'b'), 1)
         for engine in ('claude;echo injected', 'none', ''):
             with self.subTest(engine=engine), self.assertRaises(HTTPError) as response:
                 self.request('/api/jobs', b'bytes', 'demo.apk', {
@@ -130,6 +164,20 @@ class WebTests(unittest.TestCase):
         self.assertEqual(set(self.jobs.documents), {ads, working})
         self.assertFalse((self.root / 'uploads').exists())
 
+    def test_multi_sheet_documents_need_valid_sheet_choice(self):
+        from io import BytesIO
+        from unittest import mock
+        with mock.patch('apk_audit.web.list_sheets', return_value=['App A', 'App B']):
+            ads, sheets = self.jobs.store_document('ads_scripts', 'ads.xlsx', BytesIO(b'a'), 1)
+            working, _ = self.jobs.store_document('checklist', 'working.xlsx', BytesIO(b'b'), 1)
+        self.assertEqual(sheets, ['App A', 'App B'])
+        for ads_sheet, checklist_sheet in ((None, 'App A'), ('App C', 'App A')):
+            with self.subTest(ads_sheet=ads_sheet), self.assertRaisesRegex(ValueError, '(?i)sheet'):
+                self.jobs.reserve('demo.apk', ads, working, 'claude', ads_sheet, checklist_sheet)
+        self.assertEqual(set(self.jobs.documents), {ads, working})
+        job_id, _ = self.jobs.reserve('demo.apk', ads, working, 'claude', 'App B', 'App B')
+        self.assertEqual(self.jobs.get(job_id)['document_sheets'], {'ads_scripts': 'App B', 'checklist': 'App B'})
+
     def test_running_job_exposes_current_stage(self):
         reached_rules = threading.Event()
         finish = threading.Event()
@@ -138,6 +186,10 @@ class WebTests(unittest.TestCase):
             for stage in ("unpack", "facts", "rules"):
                 progress(stage)
             rule_progress("start", {"index": 1, "total": 2, "completed": 0, "rule_id": "RULE_A", "title": "Rule A"})
+            rule_progress("activity", {"rule_id": "RULE_A", "title": "Rule A", "phase": "initial", "attempt": 1, "allowance": 20, "tool_calls": 0, "command": None})
+            for index in range(1, 9):
+                rule_progress("activity", {"rule_id": "RULE_A", "title": "Rule A", "tool_calls": index, "command": f"rg ads{index}"})
+            rule_progress("activity", {"rule_id": "UNKNOWN_RULE", "title": "X", "command": "ignored"})
             reached_rules.set()
             self.assertTrue(finish.wait(5))
             rule_progress("complete", {"index": 1, "total": 2, "completed": 1, "rule_id": "RULE_A", "title": "Rule A", "status": "FAIL", "from_cache": False})
@@ -155,6 +207,10 @@ class WebTests(unittest.TestCase):
             job = json.load(self.request(f"/api/jobs/{job_id}"))
             self.assertEqual((job["state"], job["stage"]), ("running", "rules"))
             self.assertEqual((job["rule_completed"], job["rule_total"], job["current_rule"]), (0, 2, "RULE_A"))
+            agent = job["current_rules"][0]
+            self.assertEqual((agent["phase"], agent["tool_calls"], agent["allowance"], agent["command"]), ("initial", 8, 20, "rg ads8"))
+            self.assertEqual(agent["recent_commands"], [f"rg ads{i}" for i in range(3, 9)])
+            self.assertEqual(len(job["current_rules"]), 1)
             finish.set()
             for _ in range(50):
                 job = json.load(self.request(f"/api/jobs/{job_id}"))

@@ -6,6 +6,7 @@ from .config import doctor
 from .errors import AuditError
 from .facts import build_facts
 from .pipeline import run, prepare
+from .execution import MAX_WORKERS
 from .rules.loader import load_pack
 
 def parser():
@@ -15,11 +16,13 @@ def parser():
     audit.add_argument("target")
     audit.add_argument("--rules", type=Path)
     audit.add_argument("--out", type=Path)
-    audit.add_argument("--engine", choices=["none","claude","codex"], default="codex", help="codex: gpt-6-luna (mặc định); claude: model mặc định Claude CLI; none: tắt AI")
+    audit.add_argument("--engine", choices=["none","claude","codex"], default="codex", help="codex: gpt-6.1-sol / medium (mặc định); claude: Haiku 5.5 / low; none: tắt AI")
     audit.add_argument("--static-only", action="store_true")
     audit.add_argument("--only")
     audit.add_argument("--max-tool-calls", type=int, default=400)
     audit.add_argument("--refresh", action="store_true")
+    audit.add_argument("--resume", action="store_true", help="Tiếp tục các rule đã lưu checkpoint đúng đầu vào")
+    audit.add_argument("--workers", type=int, choices=range(1, MAX_WORKERS + 1), default=1, metavar="1-10", help="Số rule độc lập chạy đồng thời (mặc định 1)")
     audit.add_argument("--refresh-rule")
     audit.add_argument("--trace", action="store_true")
     audit.add_argument("--format", choices=["md","json","both"], default="both")
@@ -28,6 +31,8 @@ def parser():
     audit.add_argument("--cache-dir", type=Path)
     audit.add_argument("--ads-scripts", type=Path)
     audit.add_argument("--checklist", type=Path)
+    audit.add_argument("--ads-sheet", help="Tên sheet XLSX của ADS SCRIPTS khi workbook có nhiều app")
+    audit.add_argument("--checklist-sheet", help="Tên sheet XLSX của working file khi workbook có nhiều app")
     facts = sub.add_parser("facts", help="In facts JSON từ APK/workspace")
     facts.add_argument("target")
     facts.add_argument("--rules", type=Path)
@@ -45,11 +50,23 @@ def parser():
     web.add_argument("--port", type=int, default=8765)
     web.add_argument("--out", type=Path, default=Path("out/web"))
     web.add_argument("--rules", type=Path)
+    web.add_argument("--workers", type=int, choices=range(1, MAX_WORKERS + 1), default=4, metavar="1-10", help="Số rule chạy đồng thời (mặc định 4)")
+    bench = sub.add_parser("benchmark", help="Đo cold/warm audit hoặc bộ ca claim tổng hợp")
+    bench.add_argument("target", nargs="?")
+    bench.add_argument("--quality", action="store_true", help="Chạy ca tổng hợp offline, không gọi AI")
+    bench.add_argument("--rules", type=Path)
+    bench.add_argument("--out", type=Path, default=Path("out/benchmark"))
+    bench.add_argument("--engine", choices=["none","codex","claude"], default="none")
+    bench.add_argument("--workers", type=int, choices=range(1, MAX_WORKERS + 1), default=1, metavar="1-10")
+    bench.add_argument("--repeats", type=int, default=2)
+    bench.add_argument("--cache-dir", type=Path)
+    bench.add_argument("--ads-scripts", type=Path)
+    bench.add_argument("--checklist", type=Path)
     return result
 
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
-    commands = {"audit","facts","mcp","rules","doctor","ask","serve"}
+    commands = {"audit","facts","mcp","rules","doctor","ask","serve","benchmark"}
     if argv and argv[0] not in commands and argv[0] not in {"-h","--help"}:
         argv.insert(0,"audit")
     args = vars(parser().parse_args(argv))
@@ -74,11 +91,24 @@ def main(argv=None):
             from .mcp_server import serve
             workspace, _ = prepare(args["workspace"])
             serve(workspace)
+        elif command == "benchmark":
+            from .benchmark import benchmark, quality_suite
+            if args.pop("quality"):
+                from .utils import write_json
+                result = quality_suite()
+                write_json(args["out"] / "quality.json", result)
+                print(json.dumps(result, ensure_ascii=False))
+                return 0 if result["matched"] == result["total"] else 1
+            if not args["target"]:
+                raise AuditError("benchmark cần target hoặc --quality")
+            target = args.pop("target")
+            result = benchmark(target, **args)
+            print(json.dumps({"runs":[r["summary"] for r in result["runs"]],"comparisons":result["comparisons"]},ensure_ascii=False))
         elif command == "ask":
             raise AuditError("ask chưa nối adapter AI; dùng apk-audit mcp --workspace với MCP client.", 6)
         elif command == "serve":
             from .web import serve
-            serve(port=args["port"], output_root=args["out"], rules=args["rules"])
+            serve(port=args["port"], output_root=args["out"], rules=args["rules"], workers=args["workers"])
         else:
             quiet = args.pop("quiet")
             if args.pop("static_only"):

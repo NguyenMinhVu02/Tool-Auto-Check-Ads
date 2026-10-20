@@ -9,7 +9,9 @@
     khoảng interstitial, App Open và lifecycle callbacks theo thứ tự an toàn không?
     Chấp nhận tên class/hàm tương đương; chỉ đánh giá điều kiện có trong APK.
     Sai nguồn release/debug thuộc ADS_REMOTE_FALLBACK; không chấm FAIL riêng ở rule này
-    nếu thứ tự khởi tạo vẫn đúng. Nếu ADS SCRIPTS không có App Open, ID rỗng chỉ là
+    nếu thứ tự khởi tạo vẫn đúng. open_resume chỉ bắt buộc khi integration_policy xác định
+    required=true. Nếu ADS SCRIPTS không có App Open, không có ID, đánh dấu không dùng
+    hoặc chưa xác định trạng thái sử dụng, không FAIL chỉ vì App Open bị tắt. ID rỗng chỉ là
     quan sát phụ trừ khi chứng minh được đường thực thi đến AppOpenAd.load sau tất cả
     gate, danh sách màn loại trừ và cờ được thay đổi ở Splash. Cờ đăng ký lifecycle
     không đủ để kết luận đường load này có thể chạy.
@@ -18,7 +20,7 @@
     fail_when: "Có bằng chứng load trước init/config, thiếu đăng ký lifecycle cần cho resume, hoặc đường App Open theo hợp đồng thực sự tới lệnh load với ID rỗng sau mọi gate. Không dùng sai nguồn config hay chỉ cờ đăng ký callback làm lý do FAIL của rule này."
     unknown_when: "Không thấy Application/SDK do obfuscation hoặc bước được thực hiện ngoài mã đã giải mã."
   start_hints: ["resources/AndroidManifest.xml", "sources/"]
-  budget: {max_tool_calls: 25}
+  budget: {max_tool_calls: 35}
 
 - id: ADS_REMOTE_FALLBACK
   title: Remote Config, timeout và fallback local
@@ -33,9 +35,9 @@
   verdict:
     pass_when: "Có chọn nguồn config nhất quán, timeout và fallback local cho các nhánh lỗi quan sát được."
     fail_when: "Có bằng chứng release dùng config debug, remote bị đọc nhưng không áp dụng, hoặc lỗi/timeout dẫn đến config rỗng, crash hay load trước khi chọn config."
-    unknown_when: "Không thể xác định nhánh timeout hoặc dữ liệu config do giải mã thiếu; remote live không quan sát được."
+    unknown_when: "Không xác định được nhánh chọn config/fallback/timeout do mã thiếu; remote live chưa quan sát chỉ là giới hạn ngoài phần kiểm logic tĩnh."
   start_hints: ["resources/assets/ad_config.json", "sources/"]
-  budget: {max_tool_calls: 25}
+  budget: {max_tool_calls: 40}
 
 - id: ADS_ID_SOURCE_AND_COVERAGE
   title: Phân phối ID theo local/remote và inventory placement
@@ -48,12 +50,21 @@
     bỏ qua config. Đối chiếu ID chính xác với ads_scripts nếu tài liệu được cung cấp;
     nếu thiếu tài liệu, chỉ kết luận về logic và báo slot thiếu/thừa/không dùng dạng inventory,
     không kết luận ID của app đúng hay sai so với ID mẫu base.
+    Loại placement disabled/unknown khỏi yêu cầu coverage theo integration_policy;
+    inter_onboarding là tùy chọn, không FAIL do thiếu config/load/show của slot này.
+    Không coi missing_local là lỗi nếu chưa lần alias/key tương đương đến ID thật.
+    Phạm vi rule là nguồn ID, key/schema trong code, getter/alias và ID truyền vào lệnh SDK load.
+    Không bắt bao phủ toàn bộ callback/render/show/navigation của từng slot ở rule ID; các phần
+    đó thuộc rule placement/render. Không cần JSON Firebase live để chấm logic parse/schema/key
+    đã thể hiện trong source; chưa có remote snapshot chỉ giới hạn kết luận về dữ liệu triển khai.
+    Nếu tài liệu còn cả dòng cũ/mới mà chưa rõ quan hệ thay thế hoặc trạng thái không dùng,
+    nêu blocker hợp đồng cụ thể; không tự coi tất cả là slot độc lập hoặc tự loại dòng cũ.
   verdict:
     pass_when: "Mỗi slot đang dùng lấy ID từ đúng config; nếu có ads_scripts thì ID và coverage khớp tài liệu."
     fail_when: "Có bằng chứng slot lấy ID của slot khác, hard-code sai nguồn, hoặc lệch ads_scripts đã cung cấp."
-    unknown_when: "Không đủ call graph hoặc thiếu ads_scripts để kết luận ID cụ thể; đưa danh sách slot cần kiểm tra."
+    unknown_when: "Chưa nối được nguồn ID tới lệnh load hoặc hợp đồng thiếu/không rõ trạng thái dòng cũ-mới. Remote live và hành vi render chưa đo không tự chặn kết luận về nguồn ID tĩnh."
   start_hints: ["resources/assets/ad_config.json", "sources/"]
-  budget: {max_tool_calls: 30}
+  budget: {max_tool_calls: 45}
 
 - id: ADS_SPLASH_PLACEMENT
   title: Splash, uninstall shortcut và preload Language
@@ -63,14 +74,16 @@
   question: >-
     Kiểm Splash thường và shortcut uninstall riêng: banner/inter đúng cặp config;
     native Language preload cho nhánh thường trước khi vào Language, không load ở uninstall;
-    Open Resume được bật/tắt từ config; timeout hoặc không có inter vẫn điều hướng.
+    Open Resume chỉ yêu cầu bật/tắt theo config khi integration_policy.open_resume.required=true;
+    trạng thái disabled/not_required/unknown không được dùng lý do hard-code false hoặc
+    không bật App Open để FAIL. Timeout hoặc không có inter vẫn điều hướng.
     So cả vị trí render banner, không yêu cầu tên hàm y hệt base.
   verdict:
     pass_when: "Các nhánh dùng đúng slot, preload ở hành trình cần thiết và điều hướng không bị kẹt."
     fail_when: "Có bằng chứng load sai slot/thiếu preload hoặc callback khiến Splash kẹt."
     unknown_when: "Không tìm đủ nhánh hoặc dữ liệu đã làm rối."
   start_hints: ["sources/", "resources/AndroidManifest.xml"]
-  budget: {max_tool_calls: 25}
+  budget: {max_tool_calls: 40}
 
 - id: ADS_LANGUAGE_PLACEMENT
   title: Language native, click native và preload Onboarding
@@ -86,27 +99,30 @@
     fail_when: "Có bằng chứng click không đổi slot, observer chồng hoặc mất preload/render fallback."
     unknown_when: "Không xác định được liên kết slot với màn hoặc trạng thái observer."
   start_hints: ["sources/"]
-  budget: {max_tool_calls: 25}
+  budget: {max_tool_calls: 45}
 
 - id: ADS_ONBOARDING_PLACEMENT
-  title: Onboarding page 1, page 4, full và inter trước Home
+  title: Onboarding page 1, page 4, full và điều hướng Home
   mode: agent
   area: onboarding
   severity: high
   question: >-
     Xác định từng page thật sự được render và ID/slot của native page 1, page 4, full;
-    preload page 4/full/inter sau khi vào Onboarding, page 1 từ Language. Native full
-    có gate UA; fragment dùng vòng đời view để observe. Inter nếu sẵn sàng/được phép
-    thì show rồi mới sang Home; nhánh không ad cũng sang Home. Không bắt full2 nếu
+    preload page 4/full sau khi vào Onboarding, page 1 từ Language. Native full
+    có gate UA; fragment dùng vòng đời view để observe. Không yêu cầu inter_onboarding
+    ở cuối Onboarding, kể cả ADS SCRIPTS còn khai báo slot đó. Không FAIL do slot này
+    thiếu ID/config, disabled, getter rỗng hoặc load/show là stub. Nếu app có dùng inter,
+    kiểm gate và callback điều hướng an toàn; nếu không dùng thì chuyển Home bình thường.
+    Không bắt full2 nếu
     màn này không có trong hành trình thật. Với constructor Kotlin synthetic, giải mã mask
     cho từng item theo positionIndicator; page 1 là item positionIndicator=0, không được
     lấy mask của page 2 (positionIndicator=1) để kết luận page 1 bị tắt native.
   verdict:
-    pass_when: "Các slot có màn tương ứng, load/observe/show đúng điểm và mọi nhánh đều tiến đến Home."
-    fail_when: "Có bằng chứng sai slot, thiếu gate, show không thể đạt hoặc điều hướng bị kẹt."
+    pass_when: "Các native có màn tương ứng, load/observe/show đúng điểm và điều hướng Home an toàn; inter cuối Onboarding không bắt buộc."
+    fail_when: "Có bằng chứng native sai slot/thiếu gate, hoặc đường quảng cáo thực sự được dùng gây điều hướng kẹt. Không FAIL vì inter_onboarding không được triển khai hoặc bị tắt."
     unknown_when: "Không thể nối page động với placement hoặc hành vi SDK nằm ngoài APK."
   start_hints: ["sources/"]
-  budget: {max_tool_calls: 30}
+  budget: {max_tool_calls: 40}
 
 - id: ADS_WELCOME_RESUME
   title: Welcome và App Open loại trừ nhau
@@ -115,17 +131,21 @@
   severity: high
   question: >-
     Theo ADS SCRIPTS của app, xác định slot Welcome/Resume thực sự được yêu cầu.
+    Dùng integration_policy.open_resume: chỉ required=true mới yêu cầu đường App Open.
+    Thiếu ID, không có slot hoặc ID bị tô màu/gạch ngang/đánh dấu không dùng cho phép
+    tắt hoàn toàn App Open. CSV mất định dạng và thiếu Status/Enabled thì trạng thái
+    unknown: cần tài liệu rõ hơn, không FAIL vì currentMode truyền false.
     Nếu có App Open và native_welcome/inter_welcome trong hợp đồng, kiểm chúng loại trừ
     nhau, gate và luồng native/inter. Nếu hợp đồng chỉ có inter_welcome_back thì đánh giá
     biến thể WelcomeBack này, không coi thiếu native_welcome/open_resume là lỗi.
     Kiểm màn loại trừ, purchase, inter đang show, gate UA, load/show và nhánh thoát khi
     không có ad. Không yêu cầu Welcome luôn được bật trong defaults.
   verdict:
-    pass_when: "Các slot có trong hợp đồng dùng đúng gate và Welcome thoát được khi không có ad; nếu App Open có trong hợp đồng thì hai đường resume loại trừ nhau."
+    pass_when: "Các slot đang dùng theo hợp đồng có đúng gate và Welcome thoát được khi không có ad; nếu App Open được yêu cầu hoạt động thì hai đường resume loại trừ nhau."
     fail_when: "Có bằng chứng hai quảng cáo cùng được phép show, sai màn resume, thiếu gate của slot có trong hợp đồng hoặc Welcome không thoát khi không có ad."
-    unknown_when: "Không thể chứng minh lifecycle runtime hoặc SDK nội bộ."
+    unknown_when: "Không nối được route lifecycle, gate hoặc callback cần cho kết luận tĩnh do thiếu mã; chưa chạy runtime không tự làm rule UNKNOWN."
   start_hints: ["sources/"]
-  budget: {max_tool_calls: 25}
+  budget: {max_tool_calls: 40}
 
 - id: ADS_LOAD_OBSERVE_GATES
   title: Gate load và quan sát native liên tục
@@ -140,9 +160,9 @@
   verdict:
     pass_when: "Luồng load-update-observe-render/hide hiện diện cho các slot đang dùng."
     fail_when: "Có đường load bỏ gate hoặc UI giữ ad/shimmer khi stream null, hoặc observer bị ngắt."
-    unknown_when: "Mã bị làm rối hoặc không chứng minh được cập nhật runtime liên tục."
+    unknown_when: "Không nối được load-update-observe-render/hide qua mã, gồm helper/lambda liên quan; chưa đo emission runtime không tự làm rule UNKNOWN."
   start_hints: ["sources/"]
-  budget: {max_tool_calls: 30}
+  budget: {max_tool_calls: 45}
 
 - id: ADS_FIREBASE_EVENTS
   title: Firebase tracking theo hành động và màn hình
@@ -160,9 +180,9 @@
   verdict:
     pass_when: "Các event liên quan màn/nhánh có call site đúng thời điểm và page động map đúng."
     fail_when: "Có bằng chứng event thiếu ở call site, gửi sai nhánh, hoặc page động gán sai event."
-    unknown_when: "Chỉ thấy hằng số/event string mà không chứng minh được call site hoặc callback runtime."
+    unknown_when: "Chỉ thấy hằng số/event string mà chưa nối được call site UI/callback tới wrapper gửi event. Không yêu cầu chứng minh Firebase server nhận event để chấm logic tĩnh."
   start_hints: ["sources/"]
-  budget: {max_tool_calls: 30}
+  budget: {max_tool_calls: 45}
 
 - id: ADS_BANNER_RELOAD
   title: Banner placement và reload theo config
@@ -173,12 +193,15 @@
     Banner Splash/Home dùng slot đúng container; với màn có reload, kiểm isEnable,
     purchase, container, reloadIntervalSeconds và dọn handler khi pause/destroy.
     Nếu app không có banner ngoài Splash, chỉ đánh giá slot tồn tại; không bắt thêm màn.
+    Base Splash chỉ load banner, vòng reload thuộc BaseActivityWithBanner ở màn khác.
+    Không buộc Splash reload chỉ vì có trường interval; phải xác định yêu cầu reload từ
+    hợp đồng/màn thực sự trước khi báo thiếu scheduler.
   verdict:
     pass_when: "Banner đang dùng có đúng config, gate và lifecycle reload."
-    fail_when: "Có bằng chứng banner sai slot, reloadIntervalSeconds được cấu hình nhưng không dùng, reload bất tận hoặc thiếu cleanup gây leak."
+    fail_when: "Có bằng chứng banner sai slot, interval không được áp dụng ở màn thực sự yêu cầu reload, hoặc timer hoạt động sai/thiếu cleanup gây leak. Không FAIL chỉ vì Splash load một lần."
     unknown_when: "Không xác định được container hoặc vòng đời qua mã đã giải mã."
   start_hints: ["sources/", "resources/AndroidManifest.xml"]
-  budget: {max_tool_calls: 20}
+  budget: {max_tool_calls: 35}
 
 - id: ADS_CROSS_FLOW_BUGS
   title: Lỗi giao thoa giữa các luồng ads và điều hướng
@@ -190,7 +213,8 @@
     load sau khi màn đã đóng, callback kép, show lặp, observer giữ màn cũ, timer không dọn,
     nhánh purchase/offline/fail/timeout bị kẹt hoặc load sai ID. Lần theo ít nhất hai call site
     hoặc một call site với callback/nhánh lỗi trước khi kết luận. Không lặp lại lỗi đã có trong
-    các finding trước. Trước khi nói màn bị kẹt khi xuống nền, lần qua cả onResume/onStart,
+    các finding trước. Không tái báo thiếu inter_onboarding hoặc open_resume bị tắt khi
+    integration_policy không yêu cầu. Trước khi nói màn bị kẹt khi xuống nền, lần qua cả onResume/onStart,
     Runnable được postDelayed và cờ retry trong manager; helper/Runnable đã làm rối vẫn phải
     mở mã đích, không coi tên hàm lạ là không có retry. Mã bị làm rối hoặc không thấy lỗi
     không đồng nghĩa PASS.
@@ -199,4 +223,4 @@
     fail_when: "Có lỗi mới cụ thể, tái tạo được bằng đường đi mã và bằng chứng file/dòng."
     unknown_when: "Không tìm được lỗi mới có bằng chứng hoặc không thể chứng minh hành vi do mã giải biên dịch thiếu."
   start_hints: ["sources/", "resources/assets/ad_config.json"]
-  budget: {max_tool_calls: 35}
+  budget: {max_tool_calls: 45}

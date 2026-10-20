@@ -7,7 +7,11 @@ name = "apk-audit"
 version = "0.1.0"
 description = "Local APK audit framework with pluggable rule packs"
 requires-python = ">=3.11"
-dependencies = ["PyYAML>=6,<7", "platformdirs>=4,<5"]
+dependencies = [
+    "PyYAML>=6,<7",
+    "openpyxl>=3.1,<4",
+    "platformdirs>=4,<5",
+]
 
 [project.optional-dependencies]
 mcp = ["fastmcp>=2,<4"]
@@ -17,3 +21,6 @@ apk-audit = "apk_audit.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["apk_audit"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"rulepacks/default" = "apk_audit/rulepacks/default"

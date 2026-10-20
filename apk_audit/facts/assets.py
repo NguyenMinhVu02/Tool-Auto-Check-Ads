@@ -1,10 +1,10 @@
 import json
 from ..utils import source_files, read_text, digest_file
 
-def extract_assets(root):
+def extract_assets(root, files=None):
     result = {"files": [], "json": {}}
     warnings = []
-    for path in source_files(root):
+    for path in (source_files(root) if files is None else files):
         rel = path.relative_to(root).as_posix()
         if not (rel.startswith("resources/assets/") or rel.startswith("assets/")):
             continue

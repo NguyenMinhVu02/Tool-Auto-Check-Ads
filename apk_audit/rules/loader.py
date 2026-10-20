@@ -1,5 +1,6 @@
 from dataclasses import fields
 from pathlib import Path
+import json
 import re
 import yaml
 from ..contracts import Rule, RulePack
@@ -8,11 +9,18 @@ from ..utils import digest_json, source_files, read_text
 
 CHECKS = {"manifest_meta", "manifest_has", "string_present", "string_absent", "asset_json_path", "asset_json_match", "sdk_version"}
 
+PACKAGE_ROOT = Path(__file__).resolve().parents[1]
+
+def default_pack_dir():
+    # Wheel ships the pack inside the package; source checkouts keep it at the repo root.
+    for candidate in (PACKAGE_ROOT / "rulepacks" / "default", PACKAGE_ROOT.parent / "rulepacks" / "default"):
+        if (candidate / "pack.yaml").is_file():
+            return candidate
+    raise AuditError("Không tìm thấy bộ luật mặc định; cài lại gói hoặc truyền --rules", 5)
+
 def load_pack(directory=None):
-    if directory is None and Path("rulepacks/default/pack.yaml").is_file():
-        directory = Path("rulepacks/default")
     if directory is None:
-        return RulePack("empty", "0.1.0", digest_json({"empty": True}))
+        directory = default_pack_dir()
     root = Path(directory).resolve()
     try:
         metadata = yaml.safe_load((root / "pack.yaml").read_text(encoding="utf-8"))
@@ -63,7 +71,13 @@ def load_pack(directory=None):
                 ids.add(rule.id)
                 rules.append(rule)
         context = (root / "context.md").read_text(encoding="utf-8") if (root / "context.md").exists() else ""
+        references = json.loads((root / 'base-reference.json').read_text(encoding='utf-8')) if (root / 'base-reference.json').exists() else {}
+        if references and (not isinstance(references, dict) or references.get('schema_version') != 1
+                           or not isinstance(references.get('rules'), dict) or not isinstance(references.get('source'), dict)):
+            raise ValueError('base-reference.json cần schema_version 1, source và rules dạng object')
+        if references and any(not isinstance(value, dict) for value in references['rules'].values()):
+            raise ValueError('Mỗi rule reference phải là object')
         fingerprint = digest_json([(p.relative_to(root).as_posix(), read_text(p)) for p in source_files(root)])
-        return RulePack(metadata["name"], metadata["version"], fingerprint, rules, context, extract)
+        return RulePack(metadata["name"], metadata["version"], fingerprint, rules, context, extract, references)
     except (OSError, ValueError, TypeError, KeyError, yaml.YAMLError, re.error) as exc:
         raise AuditError(f"Bộ luật không hợp lệ: {exc}", 5) from exc
