@@ -1,0 +1,1183 @@
+{
+  "description": "Synthetic claim contract fixtures with scripted model results; these are not APK accuracy measurements.",
+  "cases": [
+    {
+      "id": "static-pass",
+      "workspace": {
+        "Flow.java": "if (enabled) load();\nonLoaded() { show(); }\n"
+      },
+      "result": {
+        "rule_id": "CLAIMS",
+        "status": "PASS",
+        "reasoning": "Synthetic flow",
+        "hint": "Flow.java:1",
+        "evidence": [
+          {
+            "file": "Flow.java",
+            "line": 1,
+            "excerpt": "if (enabled) load();"
+          },
+          {
+            "file": "Flow.java",
+            "line": 2,
+            "excerpt": "onLoaded() { show(); }"
+          }
+        ],
+        "claims": [
+          {
+            "id": "c1",
+            "statement": "The enabled flow loads then shows.",
+            "kind": "compliance",
+            "evidence_indices": [
+              0,
+              1
+            ],
+            "scope": "static",
+            "applicability": "applicable",
+            "path": [
+              {
+                "role": "gate",
+                "evidence_indices": [
+                  0
+                ]
+              },
+              {
+                "role": "callback",
+                "evidence_indices": [
+                  1
+                ]
+              }
+            ],
+            "conditions": [
+              "enabled"
+            ],
+            "unresolved": [],
+            "limitations": []
+          }
+        ]
+      },
+      "expected_status": "PASS",
+      "expected_reason": ""
+    },
+    {
+      "id": "static-fail-reviewed",
+      "workspace": {
+        "Flow.java": "if (enabled) load();\nonLoaded() { show(); }\n"
+      },
+      "result": {
+        "rule_id": "CLAIMS",
+        "status": "FAIL",
+        "reasoning": "Synthetic flow",
+        "hint": "Flow.java:1",
+        "evidence": [
+          {
+            "file": "Flow.java",
+            "line": 1,
+            "excerpt": "if (enabled) load();"
+          },
+          {
+            "file": "Flow.java",
+            "line": 2,
+            "excerpt": "onLoaded() { show(); }"
+          }
+        ],
+        "claims": [
+          {
+            "id": "c1",
+            "statement": "The enabled flow loads then shows.",
+            "kind": "violation",
+            "evidence_indices": [
+              0,
+              1
+            ],
+            "scope": "static",
+            "applicability": "applicable",
+            "path": [
+              {
+                "role": "gate",
+                "evidence_indices": [
+                  0
+                ]
+              },
+              {
+                "role": "callback",
+                "evidence_indices": [
+                  1
+                ]
+              }
+            ],
+            "conditions": [
+              "enabled"
+            ],
+            "unresolved": [],
+            "limitations": []
+          }
+        ]
+      },
+      "expected_status": "FAIL",
+      "expected_reason": "",
+      "review": {
+        "rule_id": "CLAIMS",
+        "status": "FAIL",
+        "reasoning": "Synthetic flow",
+        "hint": "Flow.java:1",
+        "evidence": [
+          {
+            "file": "Flow.java",
+            "line": 1,
+            "excerpt": "if (enabled) load();"
+          },
+          {
+            "file": "Flow.java",
+            "line": 2,
+            "excerpt": "onLoaded() { show(); }"
+          }
+        ],
+        "claims": [
+          {
+            "id": "c1",
+            "statement": "The enabled flow loads then shows.",
+            "kind": "violation",
+            "evidence_indices": [
+              0,
+              1
+            ],
+            "scope": "static",
+            "applicability": "applicable",
+            "path": [
+              {
+                "role": "gate",
+                "evidence_indices": [
+                  0
+                ]
+              },
+              {
+                "role": "callback",
+                "evidence_indices": [
+                  1
+                ]
+              }
+            ],
+            "conditions": [
+              "enabled"
+            ],
+            "unresolved": [],
+            "limitations": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "runtime",
+      "workspace": {
+        "Flow.java": "if (enabled) load();\nonLoaded() { show(); }\n"
+      },
+      "result": {
+        "rule_id": "CLAIMS",
+        "status": "PASS",
+        "reasoning": "Synthetic flow",
+        "hint": "Flow.java:1",
+        "evidence": [
+          {
+            "file": "Flow.java",
+            "line": 1,
+            "excerpt": "if (enabled) load();"
+          },
+          {
+            "file": "Flow.java",
+            "line": 2,
+            "excerpt": "onLoaded() { show(); }"
+          }
+        ],
+        "claims": [
+          {
+            "id": "c1",
+            "statement": "The enabled flow loads then shows.",
+            "kind": "compliance",
+            "evidence_indices": [
+              0,
+              1
+            ],
+            "scope": "runtime",
+            "applicability": "applicable",
+            "path": [
+              {
+                "role": "gate",
+                "evidence_indices": [
+                  0
+                ]
+              },
+              {
+                "role": "callback",
+                "evidence_indices": [
+                  1
+                ]
+              }
+            ],
+            "conditions": [
+              "enabled"
+            ],
+            "unresolved": [],
+            "limitations": []
+          }
+        ]
+      },
+      "expected_status": "UNKNOWN",
+      "expected_reason": "unverified_claims"
+    },
+    {
+      "id": "unknown-applicability",
+      "workspace": {
+        "Flow.java": "if (enabled) load();\nonLoaded() { show(); }\n"
+      },
+      "result": {
+        "rule_id": "CLAIMS",
+        "status": "PASS",
+        "reasoning": "Synthetic flow",
+        "hint": "Flow.java:1",
+        "evidence": [
+          {
+            "file": "Flow.java",
+            "line": 1,
+            "excerpt": "if (enabled) load();"
+          },
+          {
+            "file": "Flow.java",
+            "line": 2,
+            "excerpt": "onLoaded() { show(); }"
+          }
+        ],
+        "claims": [
+          {
+            "id": "c1",
+            "statement": "The enabled flow loads then shows.",
+            "kind": "compliance",
+            "evidence_indices": [
+              0,
+              1
+            ],
+            "scope": "static",
+            "applicability": "unknown",
+            "path": [
+              {
+                "role": "gate",
+                "evidence_indices": [
+                  0
+                ]
+              },
+              {
+                "role": "callback",
+                "evidence_indices": [
+                  1
+                ]
+              }
+            ],
+            "conditions": [
+              "enabled"
+            ],
+            "unresolved": [],
+            "limitations": []
+          }
+        ]
+      },
+      "expected_status": "UNKNOWN",
+      "expected_reason": "unverified_claims"
+    },
+    {
+      "id": "undecoded-sdk",
+      "workspace": {
+        "Flow.java": "if (enabled) load();\nonLoaded() { show(); }\n"
+      },
+      "result": {
+        "rule_id": "CLAIMS",
+        "status": "PASS",
+        "reasoning": "Synthetic flow",
+        "hint": "Flow.java:1",
+        "evidence": [
+          {
+            "file": "Flow.java",
+            "line": 1,
+            "excerpt": "if (enabled) load();"
+          },
+          {
+            "file": "Flow.java",
+            "line": 2,
+            "excerpt": "onLoaded() { show(); }"
+          }
+        ],
+        "claims": [
+          {
+            "id": "c1",
+            "statement": "The enabled flow loads then shows.",
+            "kind": "compliance",
+            "evidence_indices": [
+              0,
+              1
+            ],
+            "scope": "static",
+            "applicability": "applicable",
+            "path": [
+              {
+                "role": "gate",
+                "evidence_indices": [
+                  0
+                ]
+              },
+              {
+                "role": "callback",
+                "evidence_indices": [
+                  1
+                ]
+              }
+            ],
+            "conditions": [
+              "enabled"
+            ],
+            "unresolved": [
+              "SDK implementation not decoded"
+            ],
+            "limitations": []
+          }
+        ]
+      },
+      "expected_status": "UNKNOWN",
+      "expected_reason": "unverified_claims"
+    },
+    {
+      "id": "missing-applicability",
+      "workspace": {
+        "Flow.java": "if (enabled) load();\nonLoaded() { show(); }\n"
+      },
+      "result": {
+        "rule_id": "CLAIMS",
+        "status": "PASS",
+        "reasoning": "Synthetic flow",
+        "hint": "Flow.java:1",
+        "evidence": [
+          {
+            "file": "Flow.java",
+            "line": 1,
+            "excerpt": "if (enabled) load();"
+          },
+          {
+            "file": "Flow.java",
+            "line": 2,
+            "excerpt": "onLoaded() { show(); }"
+          }
+        ],
+        "claims": [
+          {
+            "id": "c1",
+            "statement": "The enabled flow loads then shows.",
+            "kind": "compliance",
+            "evidence_indices": [
+              0,
+              1
+            ],
+            "scope": "static",
+            "path": [
+              {
+                "role": "gate",
+                "evidence_indices": [
+                  0
+                ]
+              },
+              {
+                "role": "callback",
+                "evidence_indices": [
+                  1
+                ]
+              }
+            ],
+            "conditions": [
+              "enabled"
+            ],
+            "unresolved": [],
+            "limitations": []
+          }
+        ]
+      },
+      "expected_status": "UNKNOWN",
+      "expected_reason": "unverified_claims"
+    },
+    {
+      "id": "missing-path",
+      "workspace": {
+        "Flow.java": "if (enabled) load();\nonLoaded() { show(); }\n"
+      },
+      "result": {
+        "rule_id": "CLAIMS",
+        "status": "PASS",
+        "reasoning": "Synthetic flow",
+        "hint": "Flow.java:1",
+        "evidence": [
+          {
+            "file": "Flow.java",
+            "line": 1,
+            "excerpt": "if (enabled) load();"
+          },
+          {
+            "file": "Flow.java",
+            "line": 2,
+            "excerpt": "onLoaded() { show(); }"
+          }
+        ],
+        "claims": [
+          {
+            "id": "c1",
+            "statement": "The enabled flow loads then shows.",
+            "kind": "compliance",
+            "evidence_indices": [
+              0,
+              1
+            ],
+            "scope": "static",
+            "applicability": "applicable",
+            "conditions": [
+              "enabled"
+            ],
+            "unresolved": [],
+            "limitations": []
+          }
+        ]
+      },
+      "expected_status": "UNKNOWN",
+      "expected_reason": "unverified_claims"
+    },
+    {
+      "id": "malformed-evidence",
+      "workspace": {
+        "Flow.java": "if (enabled) load();\nonLoaded() { show(); }\n"
+      },
+      "result": {
+        "rule_id": "CLAIMS",
+        "status": "PASS",
+        "reasoning": "Synthetic flow",
+        "hint": "Flow.java:1",
+        "evidence": [
+          {
+            "file": "Flow.java",
+            "line": 1,
+            "excerpt": "if (enabled) load();"
+          },
+          {
+            "file": "Flow.java",
+            "line": 2,
+            "excerpt": "onLoaded() { show(); }"
+          },
+          "invalid evidence shape"
+        ],
+        "claims": [
+          {
+            "id": "c1",
+            "statement": "The enabled flow loads then shows.",
+            "kind": "compliance",
+            "evidence_indices": [
+              0,
+              1
+            ],
+            "scope": "static",
+            "applicability": "applicable",
+            "path": [
+              {
+                "role": "gate",
+                "evidence_indices": [
+                  0
+                ]
+              },
+              {
+                "role": "callback",
+                "evidence_indices": [
+                  1
+                ]
+              }
+            ],
+            "conditions": [
+              "enabled"
+            ],
+            "unresolved": [],
+            "limitations": []
+          }
+        ]
+      },
+      "expected_status": "UNKNOWN",
+      "expected_reason": "unverified_evidence",
+      "max_tool_calls": 1
+    },
+    {
+      "id": "irrelevant-claim",
+      "workspace": {
+        "Flow.java": "if (enabled) load();\nonLoaded() { show(); }\n"
+      },
+      "result": {
+        "rule_id": "CLAIMS",
+        "status": "PASS",
+        "reasoning": "Synthetic flow",
+        "hint": "Flow.java:1",
+        "evidence": [
+          {
+            "file": "Flow.java",
+            "line": 1,
+            "excerpt": "if (enabled) load();"
+          },
+          {
+            "file": "Flow.java",
+            "line": 2,
+            "excerpt": "onLoaded() { show(); }"
+          }
+        ],
+        "claims": [
+          {
+            "id": "c1",
+            "statement": "The enabled flow loads then shows.",
+            "kind": "compliance",
+            "evidence_indices": [
+              0,
+              1
+            ],
+            "scope": "static",
+            "applicability": "not_applicable",
+            "path": [
+              {
+                "role": "gate",
+                "evidence_indices": [
+                  0
+                ]
+              },
+              {
+                "role": "callback",
+                "evidence_indices": [
+                  1
+                ]
+              }
+            ],
+            "conditions": [
+              "enabled"
+            ],
+            "unresolved": [],
+            "limitations": []
+          }
+        ]
+      },
+      "expected_status": "UNKNOWN",
+      "expected_reason": "unverified_claims"
+    },
+    {
+      "id": "correct-excerpt-wrong-claim",
+      "workspace": {
+        "Flow.java": "if (enabled) load();\nonLoaded() { show(); }\n"
+      },
+      "result": {
+        "rule_id": "CLAIMS",
+        "status": "FAIL",
+        "reasoning": "Synthetic flow",
+        "hint": "Flow.java:1",
+        "evidence": [
+          {
+            "file": "Flow.java",
+            "line": 1,
+            "excerpt": "if (enabled) load();"
+          },
+          {
+            "file": "Flow.java",
+            "line": 2,
+            "excerpt": "onLoaded() { show(); }"
+          }
+        ],
+        "claims": [
+          {
+            "id": "c1",
+            "statement": "The disabled path always shows an ad.",
+            "kind": "violation",
+            "evidence_indices": [
+              0,
+              1
+            ],
+            "scope": "static",
+            "applicability": "applicable",
+            "path": [
+              {
+                "role": "gate",
+                "evidence_indices": [
+                  0
+                ]
+              },
+              {
+                "role": "callback",
+                "evidence_indices": [
+                  1
+                ]
+              }
+            ],
+            "conditions": [
+              "enabled"
+            ],
+            "unresolved": [],
+            "limitations": []
+          }
+        ]
+      },
+      "expected_status": "UNKNOWN",
+      "expected_reason": "review_unknown",
+      "review": {
+        "rule_id": "CLAIMS",
+        "status": "UNKNOWN",
+        "reasoning": "The excerpt only describes the enabled branch; disabled behavior is not supported.",
+        "hint": "Flow.java:1",
+        "evidence": [
+          {
+            "file": "Flow.java",
+            "line": 1,
+            "excerpt": "if (enabled) load();"
+          },
+          {
+            "file": "Flow.java",
+            "line": 2,
+            "excerpt": "onLoaded() { show(); }"
+          }
+        ],
+        "claims": [
+          {
+            "id": "c1",
+            "statement": "The enabled flow loads then shows.",
+            "kind": "violation",
+            "evidence_indices": [
+              0,
+              1
+            ],
+            "scope": "static",
+            "applicability": "applicable",
+            "path": [
+              {
+                "role": "gate",
+                "evidence_indices": [
+                  0
+                ]
+              },
+              {
+                "role": "callback",
+                "evidence_indices": [
+                  1
+                ]
+              }
+            ],
+            "conditions": [
+              "enabled"
+            ],
+            "unresolved": [],
+            "limitations": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "review-budget",
+      "workspace": {
+        "Flow.java": "if (enabled) load();\nonLoaded() { show(); }\n"
+      },
+      "result": {
+        "rule_id": "CLAIMS",
+        "status": "FAIL",
+        "reasoning": "Synthetic flow",
+        "hint": "Flow.java:1",
+        "evidence": [
+          {
+            "file": "Flow.java",
+            "line": 1,
+            "excerpt": "if (enabled) load();"
+          },
+          {
+            "file": "Flow.java",
+            "line": 2,
+            "excerpt": "onLoaded() { show(); }"
+          }
+        ],
+        "claims": [
+          {
+            "id": "c1",
+            "statement": "The enabled flow loads then shows.",
+            "kind": "violation",
+            "evidence_indices": [
+              0,
+              1
+            ],
+            "scope": "static",
+            "applicability": "applicable",
+            "path": [
+              {
+                "role": "gate",
+                "evidence_indices": [
+                  0
+                ]
+              },
+              {
+                "role": "callback",
+                "evidence_indices": [
+                  1
+                ]
+              }
+            ],
+            "conditions": [
+              "enabled"
+            ],
+            "unresolved": [],
+            "limitations": []
+          }
+        ]
+      },
+      "expected_status": "UNKNOWN",
+      "expected_reason": "review_budget",
+      "max_tool_calls": 1
+    },
+    {
+      "id": "pass-with-violation",
+      "workspace": {
+        "Flow.java": "if (enabled) load();\nonLoaded() { show(); }\n"
+      },
+      "result": {
+        "rule_id": "CLAIMS",
+        "status": "PASS",
+        "reasoning": "Synthetic flow",
+        "hint": "Flow.java:1",
+        "evidence": [
+          {
+            "file": "Flow.java",
+            "line": 1,
+            "excerpt": "if (enabled) load();"
+          },
+          {
+            "file": "Flow.java",
+            "line": 2,
+            "excerpt": "onLoaded() { show(); }"
+          }
+        ],
+        "claims": [
+          {
+            "id": "c1",
+            "statement": "The enabled flow loads then shows.",
+            "kind": "violation",
+            "evidence_indices": [
+              0,
+              1
+            ],
+            "scope": "static",
+            "applicability": "applicable",
+            "path": [
+              {
+                "role": "gate",
+                "evidence_indices": [
+                  0
+                ]
+              },
+              {
+                "role": "callback",
+                "evidence_indices": [
+                  1
+                ]
+              }
+            ],
+            "conditions": [
+              "enabled"
+            ],
+            "unresolved": [],
+            "limitations": []
+          }
+        ]
+      },
+      "expected_status": "UNKNOWN",
+      "expected_reason": "unverified_claims"
+    },
+    {
+      "id": "static-scope-outside-runtime-limitations",
+      "workspace": {
+        "Flow.java": "if (enabled) load();\nonLoaded() { show(); }\n"
+      },
+      "result": {
+        "rule_id": "CLAIMS",
+        "status": "FAIL",
+        "reasoning": "Synthetic flow",
+        "hint": "Flow.java:1",
+        "evidence": [
+          {
+            "file": "Flow.java",
+            "line": 1,
+            "excerpt": "if (enabled) load();"
+          },
+          {
+            "file": "Flow.java",
+            "line": 2,
+            "excerpt": "onLoaded() { show(); }"
+          }
+        ],
+        "claims": [
+          {
+            "id": "c1",
+            "statement": "The enabled flow loads then shows.",
+            "kind": "violation",
+            "evidence_indices": [
+              0,
+              1
+            ],
+            "scope": "static",
+            "applicability": "applicable",
+            "path": [
+              {
+                "role": "gate",
+                "evidence_indices": [
+                  0
+                ]
+              },
+              {
+                "role": "callback",
+                "evidence_indices": [
+                  1
+                ]
+              }
+            ],
+            "conditions": [
+              "enabled"
+            ],
+            "unresolved": [],
+            "limitations": [
+              "No runtime proof, outside static contract"
+            ]
+          }
+        ]
+      },
+      "expected_status": "FAIL",
+      "expected_reason": "",
+      "review": {
+        "rule_id": "CLAIMS",
+        "status": "FAIL",
+        "reasoning": "Synthetic flow",
+        "hint": "Flow.java:1",
+        "evidence": [
+          {
+            "file": "Flow.java",
+            "line": 1,
+            "excerpt": "if (enabled) load();"
+          },
+          {
+            "file": "Flow.java",
+            "line": 2,
+            "excerpt": "onLoaded() { show(); }"
+          }
+        ],
+        "claims": [
+          {
+            "id": "c1",
+            "statement": "The enabled flow loads then shows.",
+            "kind": "violation",
+            "evidence_indices": [
+              0,
+              1
+            ],
+            "scope": "static",
+            "applicability": "applicable",
+            "path": [
+              {
+                "role": "gate",
+                "evidence_indices": [
+                  0
+                ]
+              },
+              {
+                "role": "callback",
+                "evidence_indices": [
+                  1
+                ]
+              }
+            ],
+            "conditions": [
+              "enabled"
+            ],
+            "unresolved": [],
+            "limitations": [
+              "No runtime proof, outside static contract"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "valid-violation-invalid-ancillary-reviewed",
+      "workspace": {
+        "Flow.java": "if (enabled) load();\nonLoaded() { show(); }\n"
+      },
+      "result": {
+        "rule_id": "CLAIMS",
+        "status": "FAIL",
+        "reasoning": "Kết luận: FAIL\nDraft includes one supported static violation plus an unproven runtime claim.",
+        "hint": "Flow.java:1",
+        "evidence": [
+          {
+            "file": "Flow.java",
+            "line": 1,
+            "excerpt": "if (enabled) load();"
+          },
+          {
+            "file": "Flow.java",
+            "line": 2,
+            "excerpt": "onLoaded() { show(); }"
+          }
+        ],
+        "claims": [
+          {
+            "id": "c1",
+            "statement": "The enabled flow loads then shows.",
+            "kind": "violation",
+            "evidence_indices": [
+              0,
+              1
+            ],
+            "scope": "static",
+            "applicability": "applicable",
+            "path": [
+              {
+                "role": "gate",
+                "evidence_indices": [
+                  0
+                ]
+              },
+              {
+                "role": "callback",
+                "evidence_indices": [
+                  1
+                ]
+              }
+            ],
+            "conditions": [
+              "enabled"
+            ],
+            "unresolved": [],
+            "limitations": []
+          },
+          {
+            "id": "runtime-ancillary",
+            "statement": "Runtime behavior not measured",
+            "kind": "uncertain",
+            "evidence_indices": [
+              0,
+              1
+            ],
+            "scope": "runtime",
+            "applicability": "applicable",
+            "path": [
+              {
+                "role": "gate",
+                "evidence_indices": [
+                  0
+                ]
+              },
+              {
+                "role": "callback",
+                "evidence_indices": [
+                  1
+                ]
+              }
+            ],
+            "conditions": [
+              "enabled"
+            ],
+            "unresolved": [
+              "Runtime not measured"
+            ],
+            "limitations": []
+          }
+        ]
+      },
+      "expected_status": "FAIL",
+      "expected_reason": "",
+      "review": {
+        "rule_id": "CLAIMS",
+        "status": "FAIL",
+        "reasoning": "Synthetic flow",
+        "hint": "Flow.java:1",
+        "evidence": [
+          {
+            "file": "Flow.java",
+            "line": 1,
+            "excerpt": "if (enabled) load();"
+          },
+          {
+            "file": "Flow.java",
+            "line": 2,
+            "excerpt": "onLoaded() { show(); }"
+          }
+        ],
+        "claims": [
+          {
+            "id": "c1",
+            "statement": "The enabled flow loads then shows.",
+            "kind": "violation",
+            "evidence_indices": [
+              0,
+              1
+            ],
+            "scope": "static",
+            "applicability": "applicable",
+            "path": [
+              {
+                "role": "gate",
+                "evidence_indices": [
+                  0
+                ]
+              },
+              {
+                "role": "callback",
+                "evidence_indices": [
+                  1
+                ]
+              }
+            ],
+            "conditions": [
+              "enabled"
+            ],
+            "unresolved": [],
+            "limitations": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "valid-violation-ancillary-review-rejects",
+      "workspace": {
+        "Flow.java": "if (enabled) load();\nonLoaded() { show(); }\n"
+      },
+      "result": {
+        "rule_id": "CLAIMS",
+        "status": "FAIL",
+        "reasoning": "Kết luận: FAIL\nDraft includes one supported static violation plus an unproven runtime claim.",
+        "hint": "Flow.java:1",
+        "evidence": [
+          {
+            "file": "Flow.java",
+            "line": 1,
+            "excerpt": "if (enabled) load();"
+          },
+          {
+            "file": "Flow.java",
+            "line": 2,
+            "excerpt": "onLoaded() { show(); }"
+          }
+        ],
+        "claims": [
+          {
+            "id": "c1",
+            "statement": "The enabled flow loads then shows.",
+            "kind": "violation",
+            "evidence_indices": [
+              0,
+              1
+            ],
+            "scope": "static",
+            "applicability": "applicable",
+            "path": [
+              {
+                "role": "gate",
+                "evidence_indices": [
+                  0
+                ]
+              },
+              {
+                "role": "callback",
+                "evidence_indices": [
+                  1
+                ]
+              }
+            ],
+            "conditions": [
+              "enabled"
+            ],
+            "unresolved": [],
+            "limitations": []
+          },
+          {
+            "id": "runtime-ancillary",
+            "statement": "Runtime behavior not measured",
+            "kind": "uncertain",
+            "evidence_indices": [
+              0,
+              1
+            ],
+            "scope": "runtime",
+            "applicability": "applicable",
+            "path": [
+              {
+                "role": "gate",
+                "evidence_indices": [
+                  0
+                ]
+              },
+              {
+                "role": "callback",
+                "evidence_indices": [
+                  1
+                ]
+              }
+            ],
+            "conditions": [
+              "enabled"
+            ],
+            "unresolved": [
+              "Runtime not measured"
+            ],
+            "limitations": []
+          }
+        ]
+      },
+      "expected_status": "UNKNOWN",
+      "expected_reason": "review_unknown",
+      "review": {
+        "rule_id": "CLAIMS",
+        "status": "UNKNOWN",
+        "reasoning": "Review did not establish the static violation.",
+        "hint": "Flow.java:1",
+        "evidence": [
+          {
+            "file": "Flow.java",
+            "line": 1,
+            "excerpt": "if (enabled) load();"
+          },
+          {
+            "file": "Flow.java",
+            "line": 2,
+            "excerpt": "onLoaded() { show(); }"
+          }
+        ],
+        "claims": [
+          {
+            "id": "c1",
+            "statement": "The enabled flow loads then shows.",
+            "kind": "violation",
+            "evidence_indices": [
+              0,
+              1
+            ],
+            "scope": "static",
+            "applicability": "applicable",
+            "path": [
+              {
+                "role": "gate",
+                "evidence_indices": [
+                  0
+                ]
+              },
+              {
+                "role": "callback",
+                "evidence_indices": [
+                  1
+                ]
+              }
+            ],
+            "conditions": [
+              "enabled"
+            ],
+            "unresolved": [],
+            "limitations": []
+          }
+        ]
+      }
+    }
+  ]
+}

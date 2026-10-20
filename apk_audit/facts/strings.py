@@ -1,11 +1,11 @@
 import re
 from ..utils import source_files, read_text
 
-def extract_strings(root, extract):
+def extract_strings(root, extract, files=None):
     patterns = {key: re.compile(pattern) for key, pattern in extract.get("string_patterns", {}).items()}
     result = {"admob_app_ids": [], "ad_unit_ids": [], "sdk_versions": {}, "candidates": {key: [] for key in patterns}}
     warnings = ["sdk_versions_not_extracted", "strings_from_decoded_text_only"]
-    for path in source_files(root):
+    for path in (source_files(root) if files is None else files):
         if path.suffix not in {".java", ".kt", ".smali", ".xml", ".json", ".properties"}:
             continue
         try:

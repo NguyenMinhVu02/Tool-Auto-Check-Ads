@@ -2,15 +2,212 @@
 
 ## Trạng thái hiện tại
 
-- Cập nhật: 2026-10-16 17:21 (Asia/Ho_Chi_Minh).
-- Mục tiêu: Tăng cỡ chữ và trình bày kết quả audit dễ đọc, giữ đầy đủ nội dung.
-- Trạng thái: Hoàn tất; code đã push lên GitHub main tại commit 7d439cf.
-- Kết quả: Tiêu đề 17px, nội dung 15px, evidence 13px; báo cáo cũ có ý chính và mở toàn bộ phân tích thành từng ý, giữ nguyên identifier; báo cáo có mục được trình bày theo Kết luận/Cần sửa/Đã đúng/Chưa xác minh. Assets mới phục vụ tại http://127.0.0.1:8765.
-- Kiểm tra: 51/51 unittest đạt ngoài sandbox; frontend build và git diff --check đạt; Node kiểm tra giữ đủ nội dung/identifier và nhận section; HTTP assets xác nhận nội dung mới và font 15px.
-- Giới hạn: Chưa kiểm tra trực quan bằng browser automation. Prompt hướng dẫn reasoning theo mục đã sửa trong agent.py, có hiệu lực khi backend khởi động lại và gọi AI mới; cache/báo cáo cũ dùng renderer tương thích. Giữ server hiện tại để không mất job đang xem. Claude OAuth vẫn cần đăng nhập lại theo phiên trước.
-- Bước tiếp theo: Máy khác pull main; đăng nhập lại Claude nếu cần và restart backend để nạp prompt mới.
+- Cập nhật: 2026-10-20 14:47 (Asia/Ho_Chi_Minh).
+- Đọc tài liệu linh hoạt: Hoàn tất code và kiểm chứng bước tài liệu. CSV tự tìm header trong 40 dòng đầu (giữ dòng vật lý), nhận comma/semicolon/tab/pipe và alias cột Việt/Anh; XLSX dùng chung aliases. Pipeline dùng Codex/Claude đã chọn để ánh xạ cột khi parser không hiểu, một lần/tài liệu, timeout90s, preview30k ký tự/40 dòng/64 cột/120 ký tự mỗi ô. AI chỉ trả tọa độ, loader kiểm sheet/dòng/cột bắt buộc/không trùng và lấy giá trị từ nguồn; giữ fill/strike/formula của XLSX. Không tự đoán workbook nhiều app. Static/none/max-tool-calls0 không gọi AI tài liệu. UI có Tài liệu đã đọc, report metrics.documents có phương pháp và usage. Backend chưa restart.
+- Kiểm tra mới nhất:165/165 unittest đạt (7.438s; /tmp/apk-audit-flexible-documents-tests.log), frontendbuild đạt (/tmp/apk-audit-flexible-documents-build.log; cảnh báo chunk/use-client cũ), diffcheck đạt. CSV SmartZone working AI Learn66dòng/ADS MoneyTracker17placement và XLSX mẫu26placement/3disabled đều đọc trực tiếp, không gọi AI. Hai CSV thuộc hai app khác nhau, đã thông báo không dùng làm cùng hợp đồng audit.
+- AI tài liệu thật: out/document-ai-live-smoke/report.json dùng dữ liệu giả lập, Sol6.1medium trả mapping thành công 8.856s,0tools,1placement. Report0rule là smoke bước tài liệu có chủ đích, không là kiểm ads APK. Usage20507input/77output theo CLI, không quy đổi chi phí. Claude mapping kiểm fake CLI, chưa live auth. Chưa có dropdown sheet hoặc đảm bảo semantic mapping mọi mẫu.
+- Chẩn đoán XLSX Smart Zone: Hoàn tất đọc hai file thật, cả hai tái hiện lỗi nhiều sheet. ADS SCRIPTS có PA-SZI-1-AI Learn (24 placements), PA-SZI-2-Money Tracker (17), PA-SZI-3-Silly (24), cùng khớp header ở dòng 2. Working file có ba sheet cùng tên ứng dụng khớp mẫu; sheet Index cũng khớp tiêu chí Content/Detail hiện tại. Đây là giới hạn chọn sheet của parser, chưa phải bằng chứng file hỏng. Chưa chỉnh code/file đầu vào hoặc chạy audit. Hướng xử lý: chọn cùng sheet ứng dụng ở hai file, cần dropdown sheet trên web để không phải tách file thủ công; không tự đoán ứng dụng.
+- Rà soát sẵn sàng triển khai: Hoàn tất đánh giá chỉ đọc, không sửa code chức năng. Chạy mới 151/151 unittest đạt (7.258s; /tmp/apk-audit-readiness-tests.log), rules check tại repo đạt 11 rule 0.4.0 và git diff --check đạt. Chưa chạy AI trả phí hoặc build/visual QA mới trong lượt rà soát.
+- Vấn đề cần ưu tiên: CLI chạy từ /tmp trả thành công nhưng nạp pack empty/0 rule; loader phụ thuộc cwd và cấu hình wheel chỉ đóng gói apk_audit, chưa kèm rulepacks bên ngoài package. Cần đóng gói pack/reference, giải đường dẫn độc lập cwd và fail-fast khi thiếu pack. Local beta có thể dùng đường dẫn --rules tuyệt đối.
+- Hiệu năng quan sát: Pilot 3 rule trước tinh chỉnh prompt cuối dành 1063.73/1082.31s (~98.3%) cho AI; context mỗi rule khoảng 87–89KB, vẫn chứa toàn bộ Documents và inventory. Ưu tiên lọc tài liệu theo rule, tái dùng bằng chứng chung, rút gọn repair/review và phân loại blocker tài liệu/code/runtime/engine trước khi điều tra thêm. Chưa có số đo tăng tốc cho bản tinh chỉnh cuối.
+- Mục tiêu gần nhất: Dùng code base và AI đọc sâu để giảm UNKNOWN có thể xử lý. Trạng thái: Hoàn tất triển khai và kiểm chứng đại diện3rule; không đánh dấu full11rule hoặc toàn dự án đã hoàn chỉnh.
+- Đã sửa: Snapshot portable11profile codebase e8f4337, filehash/commit và static goal/required paths/caveats riêng. Rule0.4.0 bỏ yêu cầu runtime ngoài phạm vi tĩnh; interoptional/openresume theo trạng thái tài liệu giữ nguyên; banner không ép Splashreload khi chưa có yêu cầu riêng. AI sửa excerpt/claim refs kể cả UNKNOWN qua catalog/source windows; một lượt điều tra blocker/tiếp tục khi phần budget đầu bị ngắt; giữ bounded read outputs ở Codex/Claude, finalguard/reviewFAIL vẫn bắt buộc. UNKNOWN lỗi cấu trúc/source không cache hoặc checkpoint reuse.
+- Budget/hiển thị: Native rule mặc định35–45calls, phần đầu khoảng60% khi allocation>=20, vẫn trần toànlượt400. Prompt tách currentattemptallowance/ruletotal. Metrics/UI hiện repair/investigation/review và commitbase; không tự đổi model/effort.
+- Kiểm tra mới:151/151unittest đạt (7.307s), frontendbuild/JScheck/rulescheck/diffcheck đạt; log/tmp/apk-audit-depth-tests-final.log và /tmp/apk-audit-depth-build.log. Không browservisualQA. Unit/replay chỉ chứng minh hợp đồng, không đo accuracyAPK.
+- Pilot thật: out/audit-depth-validation/report/report.json; Sol6.1medium,3rule từngUNKNOWN →1PASS/1FAIL/1UNKNOWN,54tools,1082.31s,0verdictcache. RemoteConfigPASS8tools; LanguageFAIL20tools, reviewaccepted, thiếu offlinefallback trong rendernon-null (đã đọc lại source); IDUNKNOWN26tools/2attempts,6compliance+2uncertain vì hợp đồng CSV cũ/mới và AI mở scope quá rộng.
+- Sau pilot: Siết IDquestion/profile/prompt về getter/alias→config.id→SDKload; không đòi remote snapshot hoặc render/navigation của rule khác. Làm rõ attemptbudget trong prompt. Pilot dùng snapshot3rule trước các tinh chỉnh này; không gán số đo đó cho bản prompt mới hoặc full11rule. Xem docs/audit-depth-validation.md.
+- XLSX mẫu người dùng: /home/infinity01/Downloads/[PUB INFINITY x INNOVATIVE INSIDE] ADS SCRIPTS.xlsx. Người dùng xác nhận chỉ là mẫu, không cần đúng APK. Đọc26placement/23active/3disabled,2strike/1fill,0activeIDtrống,0unknown. open_resume disabled đúng. Không dùng IDs mẫu để chấm APK IPTV, không cần hỏi thêm file cho kiểm mẫu. Summary không ghi ID ở out/audit-depth-validation/xlsx-input-check.json.
+- Vận hành/Git: Giữ feat/audit-optimization và mọi diff trước; chưa commit/push/restartserver hoặc sửa APK. Cần restart backend trước auditweb mới để nạp code/model. Báo cáo web cũ không tự đổi; pilot3rule ở thư mục riêng.
+- Bước tiếp theo đề xuất: Sửa đóng gói/đường dẫn và context theo rule trước; benchmark tùy chọn 2 workers đã có với cùng đầu vào/model/cache. Sau đó bổ sung tiến độ live cho repair/investigation/review và hủy audit truyền tới CLI. Trước phát hành ổn định cần kiểm full 11 rule với hợp đồng thật, ca APK có kết luận chuẩn và cài/chạy ngoài repo trên máy mới. Chưa triển khai các đề xuất này trong lượt rà soát; runtime/SDK thiếu mã thật vẫn phải giữ UNKNOWN có lý do.
 
 ## Lịch sử phiên
+
+### 2026-10-20 16:20 — Phân tích kết quả audit AI Learn 4 workers (Asia/Ho_Chi_Minh)
+
+- Job c7d5612c (com.ai.learn.and.speak.language.ailearn, Codex Sol medium, 4 workers): 1 PASS / 3 FAIL / 7 UNKNOWN, 179 tool calls, 1028s tổng (rules 951s; tổng thời gian rule cộng dồn ~3500s nên song song giảm ~3.5x).
+- FAIL: INIT_ORDER, LANGUAGE_PLACEMENT, WELCOME_RESUME. PASS: SPLASH.
+- UNKNOWN: BANNER_RELOAD và CROSS_FLOW `engine_error` do Codex hết usage limit (đã xác minh bằng codex exec: "You've hit your usage limit ... try again at 7:10 PM"); FIREBASE review_error (nhiều khả năng cùng nguyên nhân, chưa xác minh); ID_SOURCE unverified_evidence (bản nháp FAIL lệch 4 ID Splash release); ONBOARDING/LOAD_OBSERVE thiếu thân hàm AdExtensionKt:911 do JADX lỗi; REMOTE_FALLBACK custom parser.
+- Phát hiện: lỗi Codex chỉ báo "exit 1" vì thông báo nằm trong JSON stdout; Codex nạp skill cá nhân ~/.codex và đọc AGENTS.md/SESSION_LOG.md, tốn lệnh. Chưa sửa.
+
+### 2026-10-20 15:55 — Xóa cache và lịch sử, restart (Asia/Ho_Chi_Minh)
+
+- Theo yêu cầu: không có job đang chạy; dừng server, xóa out/web (lịch sử, báo cáo, uploads, documents, cache), ~/.cache/apk-audit và file tạm /tmp/apk-audit-*; restart server, /api/jobs rỗng.
+
+### 2026-10-20 15:45 — Hiển thị agent đang chạy trên UI (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: UI hiện trực quan từng agent/rule đang chạy và lệnh nó đang thực thi.
+- Đã làm: `engine_common.ACTIVITY` (contextvar) + `report_activity()`; Codex/Claude engine báo lệnh và số tool call khi bắt đầu mỗi tool; agent báo giai đoạn (initial/repair/investigation/review), lượt và allowance; pipeline gắn sink theo rule. Web lưu phase/tool_calls/allowance/command/recent_commands (6 gần nhất)/started_at trong `current_rules`. Frontend thêm khối "Agent đang chạy": thẻ mỗi rule với chấm nhấp nháy, thời gian chạy, tag giai đoạn, thanh lệnh đã dùng/ngân sách, lệnh hiện tại dạng terminal và lịch sử lệnh.
+- File: apk_audit/{engine_common,engines,claude_engine,agent,pipeline,web}.py, frontend/src/{App.jsx,style.css}, web_assets build, tests/test_web.py, SESSION_LOG.md.
+- Kiểm tra: 168/168 unittest đạt (test web mở rộng cho activity); build đạt; pipeline thật trên examples/workspace với engine giả, 4 workers: 22 sự kiện activity cho 11 rule. Chưa visual QA trình duyệt.
+- 15:50: Theo yêu cầu, dừng server và 4 tiến trình claude của job 30ca2841 (ngắt job), restart server với UI agent mới; HTTP 200.
+
+### 2026-10-20 15:35 — Chạy nhiều rule song song (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Người dùng muốn audit nhanh hơn bằng nhiều phiên AI chạy đồng thời.
+- Đã làm: `execution.MAX_WORKERS=10`, `valid_workers()` dùng chung cho execution/pipeline/web/cli; `--workers 1-10`; `serve` mặc định 4. Cross-flow vẫn chạy sau cùng; ngân sách 400 lượt vẫn được giữ chỗ theo rule.
+- File: apk_audit/{execution,pipeline,web,cli}.py, tests/test_execution.py, README.md, SESSION_LOG.md.
+- Kiểm tra: 168/168 unittest đạt (thêm test 6 rule chạy đồng thời bằng Barrier). Chưa đo thời gian audit thật với 4 workers; chưa kiểm rate limit/quota CLI khi chạy song song.
+- Sự cố: Restart server lúc 15:24 làm gián đoạn job Claude 257c1216 người dùng vừa bắt đầu (0/11). Server mới đang chạy; job có nút Tiếp tục.
+
+### 2026-10-20 15:30 — Xóa lịch sử kiểm tra web (Asia/Ho_Chi_Minh)
+
+- Theo yêu cầu: dừng server, xóa toàn bộ out/web (job, báo cáo, uploads, documents), restart server nền; /api/jobs trả rỗng. Giữ các thư mục out/* validation/pilot CLI khác.
+
+### 2026-10-20 15:25 — Dừng audit, xóa sạch cache, restart server (Asia/Ho_Chi_Minh)
+
+- Theo yêu cầu: dừng server cũ (PID 448253/448297) và codex exec của job 00e42ef1 (đang ở rule 1/11); xóa out/web/cache, ~/.cache/apk-audit, /tmp/apk-audit-codex-*. Giữ báo cáo/jobs/uploads/documents.
+- Restart `uv run apk-audit serve` nền (log /tmp/claude-1000/apk-audit-serve.log), cổng 8765 trả engines OK; bản build có chọn sheet. Job cũ hiển thị bị gián đoạn; cần chạy lượt mới.
+- Ghi chú: mục "Xóa cache tool" trước đó xóa nhầm lúc job vừa được Tiếp tục; lần này dừng job trước rồi mới xóa.
+
+### 2026-10-20 15:50 — Xóa cache tool (Asia/Ho_Chi_Minh)
+
+- Theo yêu cầu người dùng, xóa out/web/cache (2.2G: workspaces, source-index, verdicts), out/audit-optimization-benchmark/cache và ~/.cache/apk-audit (570M). Không có job đang chạy lúc xóa (server 8765 vẫn chạy). Giữ báo cáo, uploads, documents, jobs. Lượt sau phải giải mã và gọi AI lại từ đầu; resume job cũ không còn dùng lại verdict cache.
+
+### 2026-10-20 15:10 — Sửa đóng gói/đường dẫn rule pack (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Người dùng yêu cầu hoàn thiện các chức năng còn dở; bắt đầu với ưu tiên số 1 (pack phụ thuộc cwd).
+- Trạng thái: Hoàn tất mục đóng gói/path/fail-fast. Các mục còn lại (chọn sheet, lọc context theo rule, tiến độ live/hủy audit) chưa làm.
+- Đã làm: `load_pack()` không còn trả pack empty im lặng; tìm pack trong gói (`apk_audit/rulepacks/default`) rồi tới gốc repo, không thấy thì AuditError mã 5. Wheel force-include `rulepacks/default`.
+- File thay đổi: apk_audit/rules/loader.py, pyproject.toml, SESSION_LOG.md.
+- Kiểm tra: `rules check` từ /tmp đạt 11 luật; wheel chứa 6 file pack; cài wheel vào venv sạch, chạy từ / đạt 11 luật; 165/165 unittest đạt.
+- Bước tiếp theo: Lọc Documents/inventory theo rule; live stage + hủy audit tới CLI.
+
+### 2026-10-20 15:40 — Chọn sheet XLSX cho workbook nhiều app (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Người dùng chọn làm tiếp chức năng chọn sheet.
+- Trạng thái: Hoàn tất; chưa restart server chính, chưa visual QA trình duyệt.
+- Đã làm: `documents.list_sheets()` trả sheet khớp header (không có thì mọi sheet visible); `load_document(..., sheet=)` lọc đúng sheet visible, lỗi nhiều sheet liệt kê tên. Pipeline `ads_sheet`/`checklist_sheet`; CLI `--ads-sheet`/`--checklist-sheet`. Web: `/api/documents` trả `sheets`; reserve nhận header `X-Ads-Scripts-Sheet`/`X-Checklist-Sheet` (URL-encoded), bắt buộc chọn khi >1 sheet, lưu `document_sheets` trong job (resume dùng lại). Frontend upload tài liệu ngay khi chọn, hiện Select sheet, khóa nút bắt đầu khi đang đọc/thiếu sheet, tải lại token nếu lượt trước đã dùng.
+- File thay đổi: apk_audit/{documents,pipeline,cli,web}.py, frontend/src/App.jsx + web_assets build, tests/{test_documents,test_web,test_job_persistence}.py, README.md, SESSION_LOG.md.
+- Kiểm tra: 167/167 unittest đạt; frontend build đạt. Workbook Smart Zone thật: ADS 3 sheet app, working 4 (gồm Index); chọn từng sheet đọc đúng 24/17/24 placement và 66 dòng working, không gọi AI. Smoke server tạm cổng 8799: upload ADS trả đúng 3 sheet. Chưa chạy audit APK đầy đủ với lựa chọn sheet.
+- Giới hạn: Working file vẫn liệt kê sheet Index (header khớp Content/Detail); người dùng tự chọn đúng sheet app. Không tự đoán ghép cặp sheet.
+
+### 2026-10-20 14:47 — Sửa CSV lệch header và bổ sung AI nhận dạng tài liệu (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Sửa CSV SmartZone bị từ chối, sau đó nhận steering người dùng muốn đọc linh hoạt và thêm AI lọc thông tin khi cần.
+- Trạng thái: Hoàn tất triển khai/kiểm chứng slice nhận dạng cấu trúc; chưa restart server hoặc phát hành.
+- Nguyên nhân thực: CSV ADS MoneyTracker có dòng giới thiệu ở dòng1, header dòng2; parser cũ chỉ đọc dòng đầu. Working AI Learn đọc được66dòng nhưng là app khác ADS17placement. Không sửa workbook/CSV gốc hoặc tự ghép hợp đồng khác app.
+- Đã làm: Regression RED/GREEN cho header lệch/blank/multiline/boundary40/wrongslot. Tiếp đó alias cột và tự nhận delimiter; callback mapping tùy chọn cho CSV/XLSX, schema và kiểm tọa độ từ preview. Tách structured invocation dùng lại lifecycle/timeout/usage của Codex/Claude, giữ model/effort pin; Claude mapping tools rỗng, Codex tắt shell/websearch, mọi tool call mapping bị từ chối. Không coi observer là hard gateway cho mọi tool bên trong Codex. Pipeline gọi fallback tự động chỉ khi cần, không gọi khi static/none/budget0. UI báo tài liệu được đọc trực tiếp hay AI hỗ trợ và dòng tiêu đề/số dữ liệu; metrics không lưu raw preview. Không tạo/correct ID hoặc thay trạng thái bôi màu bằng suy đoán AI.
+- File thay đổi lượt này: apk_audit/{documents,document_structure,engines,claude_engine,pipeline}.py; tests/{test_documents,test_document_mapping}.py; frontend/src/App.jsx và web_assets/app.js build; README.md, docs/superpowers/plans/2026-10-20-flexible-documents.md, SESSION_LOG.md. Giữ toàn bộ diff tối ưu cũ; không commit/push.
+- Kiểm tra: Ban đầu CSV header regression đỏ rồi19/19 xanh, full155/155. Slice AI/alias/delimiter có test đỏ trước sửa; bắt và sửa regression mất cột mô tả Việt/Anh khi có cả hai. Cuối165/165đạt7.438s; buildđạt3.01s, diffcheckđạt. Kiểm hai CSV thật và XLSX mẫu với mapper cấm gọi: đọc trực tiếp đúng66/17/26dòng và XLSX3disabled.
+- AI smoke: CSV tự tạo không chứa APK/ID đối tác, dùng empty pack có chủ đích. Codex thật Sol6.1medium ánh xạ header dòng2 trong8.856s/0tools,1placement, usage20507input/77output; out/document-ai-live-smoke/report.json. Không đánh giá APK/11rule trong smoke này. Hai provider fake CLI kiểm schema riêng, model pin, usage, no audit instruction; Claude thật chưa xác minh.
+- Giới hạn: Mapping chỉ xác nhận tọa độ/cấu trúc, chưa là proof semantic của mọi tên cột; không hiểu thì báo lỗi, không bỏ tài liệu âm thầm. Preview bounded, header ngoài40dòng chưa hỗ trợ. Nhiều app sheet vẫn cần chọn/tách sheet, không có dropdown; không suy công thức/conditional formatting. Mapping chưa có cache riêng giữa các job. File thật người dùng hiện không cần AI fallback.
+- Việc còn lại: Restart server để áp dụng backend mới, người dùng dùng đúng cặp tài liệu cùng app. Chưa commit/push, fullAPKaccuracy, liveClaudeauth hay visual browser QA; các tối ưu packaging/context trước vẫn chưa thực hiện.
+- Bước tiếp theo: Dùng web với file mới sau restart; bộ chọn sheet và xác nhận ánh xạ thủ công là mở rộng riêng khi cần.
+
+### 2026-10-20 14:29 — Giải thích lỗi XLSX nhiều sheet Smart Zone (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Người dùng hỏi nguyên nhân lỗi khi tải ADS SCRIPTS và working file Smart Zone Infotech.
+- Trạng thái: Hoàn tất chẩn đoán/giải thích; chưa triển khai chọn sheet.
+- Đã làm: Đọc hướng dẫn/nhật ký, Git, loader XLSX và test; dùng load_document tái hiện với cả hai đường dẫn Downloads. Kiểm metadata, header và số placement bằng openpyxl chỉ đọc, không in ID/token hoặc nội dung checklist.
+- Kết quả: ADS có ba sheet ứng dụng visible cùng mẫu, lần lượt AI Learn 24, Money Tracker 17, Silly 24 placements. Working có ba sheet ứng dụng tương ứng và Index bị coi là ứng viên do có Content/Detail. _xlsx_rows từ chối mọi trường hợp hơn một ứng viên nên dừng ở bước tài liệu; không liên quan giải mã APK/AI.
+- Quyết định: Giải thích đúng giới hạn lựa chọn sheet, không gộp dữ liệu nhiều app hoặc tự chọn sheet đầu tiên. Cách hiện tại là dùng bản sao chỉ giữ sheet ứng dụng cần kiểm ở mỗi file; hướng sản phẩm là dropdown cho từng tài liệu và giữ trạng thái tô màu/gạch ngang.
+- File thay đổi lượt này: SESSION_LOG.md. Không sửa workbook gốc, code chức năng, commit/push/restart.
+- Kiểm tra: Hai lỗi thực được tái hiện, workbook đọc được và header/count đã kiểm; không chạy lại unit suite/build/AI vì lượt này chỉ chẩn đoán nguyên nhân.
+- Việc còn lại: Chưa có bộ chọn sheet trên web/CLI, chưa biết ứng dụng người dùng muốn audit trong workbook nhiều app; không cần thông tin này để giải thích lỗi.
+- Bước tiếp theo: Nếu triển khai hỗ trợ workbook nhiều sheet, truyền lựa chọn sheet rõ ràng xuyên suốt upload, parser, job persistence/resume và cache identity; kiểm đúng cặp sheet trước audit.
+
+### 2026-10-20 14:18 — Rà soát code và ưu tiên tối ưu trước triển khai (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Đánh giá code hiện tại, mức sẵn sàng triển khai và những phần có thể tối ưu theo câu hỏi người dùng.
+- Trạng thái: Hoàn tất rà soát; chưa thực hiện các sửa đổi đề xuất.
+- Đã làm: Đọc hướng dẫn/nhật ký, kiểm Git, pipeline/context, loader/packaging, metrics pilot, scheduler và tiến độ web. Xác nhận 2 workers đã có, chưa có hủy audit truyền tới CLI hoặc callback live cho các lượt repair/investigation/review.
+- Phát hiện: Chạy rules check từ repo đạt 11 rule 0.4.0; chạy cùng executable từ /tmp trả empty 0 rule và exit 0. Wheel config chỉ bao gồm apk_audit nên cần đóng gói bộ rule/reference và bỏ phụ thuộc cwd. Pilot 3 rule dành ~98.3% thời gian cho AI, context 87–89KB/rule; đây là số đo snapshot trước chỉnh prompt cuối, không chứng minh tốc độ hay accuracy bản mới.
+- Đề xuất theo thứ tự: Đóng gói/path/fail-fast; lọc Documents/inventory theo rule và tái dùng dẫn chứng; phân loại blocker để tránh điều tra code khi thiếu hợp đồng; benchmark 1/2 workers đã có; thêm live stage/hủy audit. Gate phát hành: full 11 rule có đầu vào thật, ca APK có kết luận chuẩn và kiểm cài/chạy ngoài repo trên máy mới.
+- File thay đổi lượt này: SESSION_LOG.md; giữ toàn bộ diff chức năng có sẵn trên feat/audit-optimization.
+- Kiểm tra: Chạy mới 151/151 unittest đạt trong 7.258s, log /tmp/apk-audit-readiness-tests.log; rules check tại repo và git diff --check đạt. Lỗi 0 rule ngoài cwd được tái hiện. Không chạy audit AI trả phí, build frontend mới, kiểm trực quan hoặc thử wheel cài đặt trong lượt này.
+- Việc còn lại: Các tối ưu đề xuất chưa làm; chưa đo accuracy tổng quát, chưa chạy full 11 rule sau thay đổi cuối, chưa xác minh Claude live auth. Code tối ưu hiện có chưa commit/push; backend chưa restart để nạp toàn bộ thay đổi mới.
+- Bước tiếp theo: Bàn giao ưu tiên triển khai; local beta có thể chạy từ repo với --rules tuyệt đối. Không tự commit/push/restart hoặc triển khai batch mới từ câu hỏi đánh giá.
+
+### 2026-10-20 11:53 — Bổ sung code base và AI điều tra sâu (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Người dùng yêu cầu giải quyết UNKNOWN bằng thêm dữ liệu base và AI can thiệp sâu; sau đó cung cấp XLSX để kiểm mẫu, xác nhận không cần khớp ứng dụng.
+- Trạng thái: Hoàn tất triển khai/kiểm đại diện; chưa chạy lại full11rule với hợp đồng thật mới hoặc đo accuracy tổng quát.
+- Chẩn đoán: Report31f931... có50evidence nhưng claim trỏ53–63, path không nằm trong claimrefs; UNKNOWN có excerpt sai không được repair, có thểreusecache; native Language dừng26/25tools. Đọc sourcebase thật commit e8f4337, phát hiện khác biệt docs cũ về Languagepreload/Splashreload.
+- Đã làm: Thêm snapshotbase và scriptrefresh kiểm commit/dirtysource; loader/RulePack/pipeline chuyển profile riêng, hashreference vào cache, metricsnguồn. Sửa repair/UNKNOWNinvestigation/budgetreserve/retainedreadoutputs, thêm currentattemptlimit tách khỏi tổngrule. RevalidateUNKNOWN/cache; giữ strictguard/review. Sửa scope/rulebudget và banner logic. UI/README/validationdoc cập nhật. Không gửi Sheet/webhook hoặc đổi account/model.
+- File thay đổi lượt này: apk_audit/{agent,engine_common,engines,claude_engine,contracts,pipeline}.py; apk_audit/rules/loader.py; scripts/snapshot_base_reference.py; rulepacks/default/{base-reference.json,pack.yaml,context.md,rules/ads-flow.yaml}; frontend/src/{App.jsx,findingExplanation.js} và web_assetsbuild; tests/{test_audit_depth,test_execution,test_codex_engine,test_claude_engine}.py; README.md, docs/audit-depth-validation.md, SESSION_LOG.md. Giữ các diff cũ/XLSX parser.
+- Kiểm tra: RED→GREEN cho badrefs53/63, UNKNOWNexcerpt, điều tra callback, runtimefailclosed, budgetrecovery, cachedUNKNOWNforgedvalid, codex/claude giữreadresults, refcache và attemptlimit. Full151/151đạt, build/JS/rulescheck/diffcheckđạt. Pilot3ruleSolmedium1PASS/1FAIL/1UNKNOWN,18phút2giây/54tools/0cache; docsghi rõ không là speedbenchmark hoặc fullAPKaccuracy. Languageofflinefault đượcreviewvàđọcsource lại, chưa đo runtime.
+- XLSX thực: Sheet PA-INN-1-RemoteTV,26rows/23active/3disabled;2strike/1highlight,IDs active không trống. Ban đầu thấy AppID khácAPK nên hỏi, người dùng xác nhận đây là mẫuformat: kiểm mẫu hoàn tất, không dùng để tínhIDverdictIPTV. Không ghi rawID/token vào nhật ký.
+- Quyết định/giới hạn: Không épUNKNOWNthànhPASS. IDCSV còn thiếu quan hệ cũ/mới; tinh chỉnh scope tránh đòi remote live và callbackrender không liên quan. Các chỉnhpromptcuối chưa có paidrerun, được kiểm bằng hồi quy; pilotartifact giữ nguyên snapshot và metadata. Rule/model/scope/cache khác lượt cũ nên không suy tốc độ/precision/recall. BoundedAI có thể mất thời gian/quota; không tự tăng model hoặc bỏ trần400.
+- Việc còn lại: Restart backend khi dùng web, auditfull11rule với docs thật khi có yêu cầu; runtime/Firebase và sourceSDK thiếu vẫn có thểUNKNOWN. Chưa commit/push.
+- Bước tiếp theo: Bàn giao báo cáopilot và cơ chế mới; không chạy thêm AI trả phí ngoài phạm vi kiểm chứng đã xong.
+
+### 2026-10-20 11:21 — Rule tùy chọn, XLSX và giải thích UNKNOWN (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Theo sửa yêu cầu của người dùng, bỏ inter cuối Onboarding; phần lớn open_resume không dùng khi thiếu ID/tô màu/gạch ngang. Người dùng xác nhận chuyển tài liệu sang XLSX và hỏi ý nghĩa lỗi chưa rõ.
+- Trạng thái: Hoàn tất code/tests/build; chưa audit lại APK đối tác, chưa restart/push.
+- Đã làm: Thêm normalization trạng thái active/disabled/unknown độc lập isEnable của APK, integration_policy dùng chung inventory và prompt. Điều chỉnh6rule liên quan cùng context, nâng pack0.3.0/promptpolicy. Thêm openpyxl để đọc XLSX, sheet/header/dòng/style; chấp nhận backend/frontend và lưu job qua restart. Giữ CSV/JSON, thêm cột trạng thái và warnings mất định dạng. UI phân biệt nguyên nhân UNKNOWN và sửa mô tả verification chưa đạt; không sửa verdict lịch sử.
+- File sửa mới lượt này: apk_audit/placement_policy.py, documents.py, inventory.py, pipeline.py, agent.py, web.py; rulepacks/default/{pack.yaml,context.md,rules/ads-flow.yaml}; frontend/src/{App.jsx,findingExplanation.js,findingExplanation.test.js} và web_assets build; pyproject.toml/uv.lock; tests/{test_documents,test_inventory,test_job_persistence}.py; README.md, docs/base-ads-contract.md, SESSION_LOG.md. Mọi diff cũ được giữ.
+- Kiểm tra: Test đỏ trước sửa cho trạng thái CSV/JSON, inventory optional/disabled, uploadXLSX và style/formula. Cuối140/140tests đạt, log/tmp/apk-audit-xlsx-tests-full.log; frontendbuild đạt, log/tmp/apk-audit-xlsx-build.log; JS check/rulescheck/diffcheck đạt. Smoke offline với2XLSX đi hết pipeline engine none, open_resume highlight disabled, inter không báo thiếu. Sandbox test kẹt MCP đã dừng; chạy đầy đủ ngoài sandbox đạt. Build có cảnh báo AntD use-client/chunk như trước. Không coi engine-none smoke là bằng chứng AI kết luận đúng.
+- Quyết định/giới hạn: Màu nền ô ID khác trắng/không màu đánh dấu không dùng theo quy ước người dùng; không suy từ màu header/mô tả. Conditional formatting/công thức không được thực thi: cần tài liệu tĩnh để kết luận. XLSX nhiều sheet phù hợp cần file chỉ giữ một sheet; không tự chọn nhầm. Sheets dùng exportXLSX, chưa kết nốiURL. UNKNOWN ở báo cáo cũ không tương đương bug APK; không tự nâng UNKNOWN thành PASS.
+- Việc còn lại: Restart backend và audit mới bằng XLSX thực để xác minh chất lượng verdict; các lỗi liên kết claim/evidence hoặc budget của lượt cũ chưa được sửa thuật toán trong lượt này. Chưa commit/push.
+- Bước tiếp theo: Người dùng tải.xlsx của ADS SCRIPTS/working file vào web sau khi nạp backend mới.
+
+### 2026-10-20 11:07 — Đọc lượt audit IPTV mới nhất (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Xem kết quả audit người dùng vừa chạy.
+- Trạng thái: Hoàn tất đọc và nhận xét sơ bộ; không triển khai sửa tool hoặc audit lại.
+- Đã làm: So metadata jobs và thời gian report; đọc đủ11finding, verification và metrics. Đối chiếu inter_onboarding load/show stub và getter trong workspace với ADS SCRIPTS; đọc config/banner callsite và reference base để ghi giới hạn kết luận reload. Không tải dữ liệu hoặc gửi Sheet.
+- Kết quả: Job31f9316735b24c9da4ec41e959e176c2 hoàn tất11:03:32ngày20/10;1PASS/2FAIL/8UNKNOWN,408.44s,67tools,6cache. Engine vẫn Luna;5UNKNOWN có invalid claim/evidence indices/path,Language toolbudget26/25,2UNKNOWN thiếu callsite/coverage. Hai FAIL qua reviewaccepted của tool, không đồng nghĩa chứng minh ngữ nghĩa/runtime.
+- File thay đổi lượt này: SESSION_LOG.md.
+- Kiểm tra: Đọc report.json/metrics/metadata và các đoạn nguồn liên quan; không chạy tests/build/CLI AI. Không xác minh adfill, UI runtime hoặc Firebase nhận event.
+- Việc còn lại: Sửa chất lượng liên kết bằng chứng, xác nhận phạm vi reload Splash và chạy model mới ở lượt sau khi có yêu cầu; giữ mọi thay đổi có sẵn.
+- Bước tiếp theo: Trả người dùng tóm tắt, phân biệt lỗi APK có bằng chứng và giới hạn công cụ.
+
+### 2026-10-20 11:00 — Pin Claude Haiku và Codex Sol medium (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Không dùng Claude default có thể đắt; Codex chuyển đúng6.1Sol/medium.
+- Trạng thái: Hoàn tất code/tests/build; chưa live audit bằng hai model mới.
+- Đã làm: Kiểm CLI help + localmodelmetadata, tra nguồn chính thức model/effort; chọn claude-haiku-5-5/low, khóa modelallowlist/fallback settings trong invocation; Codex chỉ địnhgpt-6.1-sol và config effortmedium. Chuẩn hóa lỗi Codex bỏ nhãnLuna; detection trả model/effort, doctor lấy engineidentity thực. Cache thêm reasoning_effort; tên report engine phân biệt cả model/effort. Web hiện đúng model mới và giữ tên báo cáo Luna/default cũ; docs cập nhậtdefaults, giữ benchmark cũ có ghi chú lịch sử.
+- File thay đổi lượt này: apk_audit/{engines,claude_engine,cache_identity,config,cli}.py; frontend/src/App.jsx và apk_audit/web_assets/app.js; tests/{test_codex_engine,test_claude_engine,test_execution}.py; README.md, docs/audit-optimization.md, docs/audit-optimization-validation.md, SESSION_LOG.md. Giữ mọi diff tối ưu/UI hiện có.
+- Kiểm tra: Fake CLI tests trước sửa thất bại đúng do model/effort không được truyền; sau sửa đạt. Cache identity test đổi effort và Claude pin giảm cache miss đạt. Full129/129 test (7.367s), frontend build exit0, diffcheck đạt. Không gửiAPK/docs hay gọi model trả phí trong lượt này.
+- Quyết định: Pin Haiku5.5 thay alias haiku/default để không phụ thuộc config người dùng; nếu account không hỗ trợ thì lỗi/UNKNOWN, không nâng model tự động. Không chỉnh config cá nhân hoặc tự đăng nhập. Không xác minh quyền model thực tế bằng request AI. Cần restart server chạy từ code mới.
+- Việc còn lại: Người dùng restart và kiểm audit thực; không tự push/commit.
+- Bước tiếp theo: Chạy .venv/bin/apk-audit serve --port8765 sau Ctrl+C server cũ.
+
+### 2026-10-19 10:39 — Tách card từng rule trong báo cáo (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Khắc phục các mục Init/Remote Config và rule khác nhìn dính nhau.
+- Trạng thái: Hoàn tất.
+- Đã làm: Card riêng cho từng rule, header số thứ tự + tiêu đề + trạng thái; nền/viền/khoảng cách24px; tách body và verification; evidence và collapse thành khối rõ, mobile header/status xuống hàng. Giữ đủ reasoning/claims/evidence trong cùng rule.
+- File thay đổi phiên này: frontend/src/App.jsx, frontend/src/style.css, apk_audit/web_assets/app.js, apk_audit/web_assets/app.css, SESSION_LOG.md. Giữ nguyên mọi thay đổi đang có trên nhánh.
+- Kiểm tra: Frontend build thành công; React SSR thực tế render2 Finding mẫu Init/Remote Config thành2card và2h4; HTTP assets mới đạt; diff check đạt. Không browser visual QA, không thêm backend test hoặc auditAI cho thay đổi layout.
+- Việc còn lại: Người dùng đánh giá trực quan; chưa commit/push.
+- Bước tiếp theo: Tải lại web để xem card mới, không cần restart server.
+
+### 2026-10-19 10:08 — Triển khai tối ưu audit và claim verification (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Thực hiện kế hoạch tối ưu local và kết luận chính xác hơn, người dùng yêu cầu dùng Superpowers.
+- Trạng thái: Hoàn tất triển khai, chưa commit/push. Không ghi đè thay đổi SESSION_LOG có sẵn.
+- Quy trình: Đọc using-superpowers/writing-plans/executing-plans/TDD, ghi spec/plan/ledger; feature branch; chia3phần độc lập cho agents (index,claims,persistence), root tích hợp scheduler/cache/metrics/benchmark; independent final review và một vòng sửa lỗi có regression. Không tạo worktree/commit khi chưa có yêu cầu cho các thao tác đó.
+- File thay đổi: apk_audit/source_index.py, cache_identity.py, execution.py, claim_verifier.py, benchmark.py, quality_cases.json; sửa agent/engine_common/contracts/engines/claude_engine/pipeline/verdict_cache/cli/web/tools/inventory/facts; frontend App.jsx và app.js build; các tests source_index/claims/execution/shared_workspace/benchmark/job_persistence/web/adapters; README, .gitignore, docs và nhật ký. Ledger .superpowers/audit-optimization/progress.md được ignore, giữ tại máy để tiếp nối.
+- Đã làm: Chuẩn bị bundle theo rule/placement, chỉ mục compact và cắt vocabulary có metadata; reuse danh sách file đã kiểm trong preprocessing. Claims link evidence, applicability/path/conditions/limitations, review FAIL và candidate có violation hỗ trợ nhưng claim phụ lỗi; strict final guard, UNKNOWN ghi rõ draft chưa chấp nhận. Cache version/model/CLI/policy và checksum, recheck actual excerpts+review trace; checkpoint đủ fingerprint. Scheduler reserve ngân sách, mặc định1worker,tối đa2, crossflow cuối. Web lưu JSON atomic/history/resume chủ động/path validation, giữ report qua refresh. Metrics và benchmark cold/warm/quality.
+- Kiểm tra: Baseline51/51; cuối127/127 đạt, frontend build đạt (cảnh báo AntD/chunk/font như trước), quality15/15, diff check đạt, HTTP web đạt. Test mới có cache corruption/forged review trace, CLI version đổi giữa job, worker overlap/budget/order, checkpoint fingerprint, restart/path tamper và cache index bounded/truncated. Reviewer3Important đã sửa; không có Critical hoặc minor deferred được báo.
+- Bằng chứng runtime công cụ: Codex thật mẫu static known-fault đi đủ claim+review (FAIL đúng hợp đồng,4tools/38.05s); warmcache0tools. Pilot APK thật Splash đọc59kfile, tách phase facts36.51/index62.49/AI167.47, cuốiUNKNOWN; phát hiện index398MB và bất cập draft. Sửa index xuống16MB, đo v2cold53.63/warm1.85, process peak250100KiB (không phải mỗi phase); preprocessing chia sẻ file list engine none20.24s. Replay candidate/repair thật có reviewerUNKNOWN trong budget25/12/6,total20tools sau chỉnhguard. Không gọi lại full11rule.
+- Quyết định: Giữ tất cả source cho AI tìm rộng, lexical index không chứng minh absence/call graph. Tắt verdict reuse Claude khi identity chưa biết; không tự đổi provider/model. Quan sát tooloverrun và báo đúng, không giả hard pre-execution cap. Giữ cache v1/report đầu vào cũ, không rm. Checksum chỉ corruption, không security authenticity. Tài liệu validation ghi rõ phân biệt fixture/replay/live/pilot và policy khác thời điểm.
+- Vận hành: Nạp server cuối cổng8765 khi không activejob. Browser automation setup lỗi node:process; dùng HTTP/API+build/test, không tuyên bố visual QA. Chưa commit/push hoặc merge main.
+- Việc còn lại ngoài phạm vi lát cắt: Bộ APK groundtruth/accuracy, benchmark freshAI worker1/2, runtimeads/Firebase/smali và Claude live auth. Không hứa tăng tốc tổng theo96%giảm index.
+- Bước tiếp theo: Người dùng thử web, rà verdict thật và quyết định commit/push khi sẵn sàng.
+
+### 2026-10-19 09:34 — Phương án tối ưu tốc độ và chất lượng audit (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Trả lời phương án triển khai để audit nhanh hơn và kết luận đáng tin hơn.
+- Trạng thái: Hoàn tất đề xuất, chưa thực thi mã.
+- Đã làm: Rà pipeline, tools, facts, unpack, inventory, adapter, agent verifier và verdict cache; đối chiếu pilot IPTV 518.7 giây/76 tool calls. Chỉ ra bộ code reference chưa đi vào context, nhiều lượt scan, phiên AI riêng cho từng rule và thiếu kiểm chứng ngữ nghĩa.
+- File thay đổi: SESSION_LOG.md.
+- Kiểm tra: Đọc code và report; không chạy lại test/AI, không dùng số pilot có cache khác verdict làm benchmark tương đương.
+- Quyết định đề xuất: Ưu tiên baseline + fixture chuẩn, chỉ mục/gói dẫn chứng, claim verification rồi cache/checkpoint và song song hai worker có kiểm soát; thêm smali/DEX theo ca cần giải nghĩa mã lỗi, không dựng bộ symbolic execution toàn APK. Tách nhận định deterministic khỏi AI và chưa chứng minh; giữ hợp đồng ADS SCRIPTS/base được version hóa.
+- Việc còn lại: Phương án chưa triển khai; cần benchmark cùng đầu vào và đo thời gian, quota/tokens nếu CLI trả, tài nguyên, repair, precision/recall và UNKNOWN do thiếu dữ liệu so với lỗi hệ thống.
+- Bước tiếp theo: Người dùng chọn triển khai lát cắt đầu; chưa commit/push.
+
+### 2026-10-19 09:30 — Kiểm tra lại tiến độ (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Báo cáo phần đã có, đã kiểm chứng và còn thiếu.
+- Trạng thái: Hoàn tất kiểm tra, không sửa mã chức năng.
+- Đã làm: Đọc AGENTS/nhật ký, Git và pipeline/API/UI; kiểm bộ luật và công cụ; đối chiếu report pilot thật. Commit code mới nhất 7d439cf, commit nhật ký dce8e0e trên main; không pull/push hoặc chạy audit đối tác mới.
+- File thay đổi: SESSION_LOG.md.
+- Kiểm tra: Chạy mới 51/51 unittest đạt; rulepack infinity-ads-base-logic 0.2.0 có 11 rule hợp lệ; doctor nhận Java/JADX/Codex/Claude; frontend assets có sẵn. Không kiểm trực quan web, không build lại, không xác nhận auth Claude hiện tại.
+- Việc còn lại: Runtime/Firebase live, độ chính xác verdict, Claude live thành công, lưu job qua restart và các mở rộng đã ghi ở trạng thái hiện tại.
+- Bước tiếp theo: Ưu tiên kiểm chứng AI và tính bền vững của job trước khi bổ sung chức năng ngoài ads.
 
 ### 2026-10-16 17:21 — Push Claude CLI, CSV và UI kết quả (Asia/Ho_Chi_Minh)
 

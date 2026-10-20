@@ -8,9 +8,9 @@ from .manifest import parse_manifest
 from .assets import extract_assets
 from .strings import extract_strings
 
-def build_xrefs(root):
+def build_xrefs(root, files=None):
     index = {}
-    for path in source_files(root):
+    for path in (source_files(root) if files is None else files):
         if path.suffix != ".smali":
             continue
         try:
@@ -28,10 +28,10 @@ def build_xrefs(root):
                 index.setdefault(owner, []).append(item)
     return index
 
-def build_facts(workspace, source=None, extract=None):
+def build_facts(workspace, source=None, extract=None, files=None):
     root = Path(workspace).resolve()
     extract = extract or {}
-    files = list(source_files(root))
+    files = list(source_files(root) if files is None else files)
     content_hash = digest_json([(p.relative_to(root).as_posix(), digest_file(p)) for p in files])
     facts = Facts(generated_at=datetime.now(timezone.utc).isoformat(), tool_versions={"apk_audit": "0.1.0"},
                   source=dict(source or {}), workspace={"root": str(root), "sources_dir": "sources", "smali_dir": "smali", "resources_dir": "resources", "file_count": len(files), "content_sha256": content_hash})
@@ -43,9 +43,9 @@ def build_facts(workspace, source=None, extract=None):
         facts.warnings.append(f"manifest_unreadable: {exc}")
     for key in ("package", "version_name", "version_code"):
         facts.source[key] = facts.manifest.get(key) or facts.source.get(key)
-    facts.assets, warnings = extract_assets(root)
+    facts.assets, warnings = extract_assets(root, files=files)
     facts.warnings.extend(warnings)
-    facts.strings, warnings = extract_strings(root, extract)
+    facts.strings, warnings = extract_strings(root, extract, files=files)
     facts.warnings.extend(warnings)
     java = [p for p in files if p.suffix == ".java" and p.relative_to(root).parts[0] == "sources"]
     ratio = sum(len(p.stem) <= 2 for p in java) / len(java) if java else None

@@ -6,15 +6,16 @@ from .utils import safe_path, source_files, read_text, lookup
 
 class WorkspaceTools:
     """Read-only source inspection. Lists are bounded; locations are one-based."""
-    def __init__(self, workspace, facts=None):
+    def __init__(self, workspace, facts=None, files=None):
         self.root = Path(workspace).resolve()
-        self.facts = facts if facts is not None else build_facts(self.root).to_dict()
+        files = list(source_files(self.root) if files is None else files)
+        self.facts = facts if facts is not None else build_facts(self.root, files=files).to_dict()
         self.classes = []
-        for path in source_files(self.root):
+        for path in files:
             rel = path.relative_to(self.root).as_posix()
             if rel.startswith("sources/") and rel.endswith(".java"):
                 self.classes.append({"name": rel[len("sources/"):-5].replace("/", "."), "file": rel, "line": 1})
-        self.xref_index = build_xrefs(self.root)
+        self.xref_index = build_xrefs(self.root, files=files)
 
     @staticmethod
     def page(items, limit=100, offset=0):

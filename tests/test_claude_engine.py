@@ -28,6 +28,12 @@ class ClaudeEngineTests(unittest.TestCase):
 from pathlib import Path
 args = sys.argv[1:]
 assert '--print' in args and '--no-session-persistence' in args
+assert args[args.index('--model') + 1] == 'claude-haiku-5-5'
+assert args[args.index('--effort') + 1] == 'low'
+settings = json.loads(args[args.index('--settings') + 1])
+assert settings['fallbackModel'] == []
+assert settings['availableModels'] == ['claude-haiku-5-5']
+assert '--fallback-model' not in args
 assert '--restricted' in args and '--safe-mode' in args
 assert args[args.index('--tools') + 1] == 'Read,Glob,Grep'
 assert args[args.index('--permission-mode') + 1] == 'dontAsk'
@@ -44,6 +50,31 @@ print(json.dumps({'type':'result','subtype':'success','is_error':False,'structur
         self.assertEqual(result.tool_calls, 1)
         self.assertEqual(json.loads(result.text)['rule_id'], 'TEST_RULE')
 
+    def test_usage_from_cli_is_preserved(self):
+        result = self.run_cli('''import json,sys
+sys.stdin.read()
+print(json.dumps({'type':'result','subtype':'success','usage':{'input_tokens':12,'output_tokens':3},'structured_output':{'rule_id':'TEST_RULE','status':'UNKNOWN','evidence':[],'claims':[],'reasoning':'missing flow','hint':'sources/'}}))
+''')
+        self.assertEqual(result.usage, {'input_tokens':12,'output_tokens':3})
+
+    def test_error_after_tools_keeps_observed_count(self):
+        with self.assertRaises(AuditError) as caught:
+            self.run_cli('''import json,sys
+sys.stdin.read()
+print(json.dumps({'type':'assistant','message':{'content':[{'type':'tool_use','id':'read-1','name':'Read'}]}}), flush=True)
+print(json.dumps({'type':'result','subtype':'error','is_error':True}), flush=True)
+''')
+        self.assertEqual(caught.exception.tool_calls, 1)
+
+    def test_timeout_after_tools_keeps_observed_count(self):
+        with self.assertRaises(AuditError) as caught:
+            self.run_cli('''import json,sys,time
+sys.stdin.read()
+print(json.dumps({'type':'assistant','message':{'content':[{'type':'tool_use','id':'read-1','name':'Read'}]}}), flush=True)
+time.sleep(5)
+''', timeout=0.15)
+        self.assertEqual(caught.exception.tool_calls, 1)
+
     def test_budget_exhaustion_never_returns_a_verdict(self):
         result = self.run_cli('''import json, sys
 sys.stdin.read()
@@ -52,6 +83,17 @@ for i in range(3):
 ''', budget=1)
         self.assertTrue(result.exhausted_budget)
         self.assertEqual(result.text, '')
+
+    def test_budget_stop_keeps_completed_tool_result_for_followup(self):
+        result = self.run_cli('''import json,sys
+sys.stdin.read()
+print(json.dumps({'type':'assistant','message':{'content':[{'type':'tool_use','id':'r1','name':'Read','input':{'file_path':'Flow.java'}}]}}), flush=True)
+print(json.dumps({'type':'user','message':{'content':[{'type':'tool_result','tool_use_id':'r1','content':'if (enabled) load();'}]}}), flush=True)
+print(json.dumps({'type':'assistant','message':{'content':[{'type':'tool_use','id':'r2','name':'Read'}]}}), flush=True)
+''', budget=1)
+        self.assertTrue(result.exhausted_budget)
+        self.assertEqual(result.events[0]['type'], 'source_read')
+        self.assertIn('if (enabled)', result.events[0]['output'])
 
     def test_timeout_stops_cli(self):
         with self.assertRaisesRegex(AuditError, 'quá thời gian'):

@@ -44,6 +44,8 @@ class Finding:
     expected: Any = None
     actual: Any = None
     evidence: list = field(default_factory=list)
+    claims: list = field(default_factory=list)
+    verification: dict = field(default_factory=dict)
     reasoning: str = ""
     reason: str = ""
     hint: str = ""
@@ -69,6 +71,7 @@ class RulePack:
     rules: list[Rule] = field(default_factory=list)
     context: str = ""
     extract: dict = field(default_factory=dict)
+    references: dict = field(default_factory=dict)
 
 @dataclass
 class AgentResult:
@@ -76,3 +79,4 @@ class AgentResult:
     tool_calls: int = 0
     events: list = field(default_factory=list)
     exhausted_budget: bool = False
+    usage: dict = field(default_factory=dict)
