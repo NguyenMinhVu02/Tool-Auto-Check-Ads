@@ -10,7 +10,10 @@ from urllib.parse import unquote, urlsplit
 from uuid import uuid4
 
 from .documents import list_sheets, load_document
+from .dev_view import build_dev_view
+from .passed_history import PassedHistory
 from .marketing import build_marketing_summary
+from .report_html import ids_csv, render_html
 from .errors import AuditError
 from .engines import detect_engines
 from .execution import MAX_WORKERS, valid_workers
@@ -144,6 +147,13 @@ class AuditJobs:
                     key=lambda item: item.get("created_at", ""), reverse=True)]
 
     def read_report(self, job_id):
+        report, changed, raw = self._report(job_id)
+        return json.dumps(report, ensure_ascii=False).encode("utf-8") if changed else raw
+
+    def load_report(self, job_id):
+        return self._report(job_id)[0]
+
+    def _report(self, job_id):
         with self.lock:
             job = self.jobs[job_id]
             self._validate_paths(job)
@@ -154,17 +164,19 @@ class AuditJobs:
             sheets = job.get("document_sheets") or {}
         raw = path.read_bytes()
         report = json.loads(raw)
-        if "marketing" in report or "inventory" not in report:
-            return raw
-        # Reports made before the Marketing summary existed: rebuild it from saved inputs.
+        if ("marketing" in report and "dev_view" in report) or "inventory" not in report:
+            return report, False, raw
+        # Reports made before these summaries existed: rebuild them from saved inputs.
         try:
-            facts = json.loads((path.parent / "facts.json").read_text(encoding="utf-8"))
-            loaded = {"ads_scripts": load_document(self._path(documents["ads_scripts"], exists=True), "ads_scripts",
-                                                   sheet=sheets.get("ads_scripts"))} if documents.get("ads_scripts") else {}
-            report["marketing"] = build_marketing_summary(loaded, facts, report["inventory"], report["findings"])
+            if "marketing" not in report:
+                facts = json.loads((path.parent / "facts.json").read_text(encoding="utf-8"))
+                loaded = {"ads_scripts": load_document(self._path(documents["ads_scripts"], exists=True), "ads_scripts",
+                                                       sheet=sheets.get("ads_scripts"))} if documents.get("ads_scripts") else {}
+                report["marketing"] = build_marketing_summary(loaded, facts, report["inventory"], report["findings"])
+            report["dev_view"] = build_dev_view(report["findings"], report.get("marketing"))
         except (OSError, ValueError, KeyError, AuditError):
-            return raw
-        return json.dumps(report, ensure_ascii=False).encode("utf-8")
+            return report, False, raw
+        return report, True, raw
 
     def resume(self, job_id):
         with self.lock:
@@ -214,7 +226,7 @@ class AuditJobs:
         return document_id, sheets
 
     def reserve(self, filename, ads_id=None, checklist_id=None, engine=None, ads_sheet=None, checklist_sheet=None,
-                cross_flow=False):
+                cross_flow=False, recheck_all=False):
         name = Path(unquote(filename).replace("\\", "/")).name
         if not name or Path(name).suffix.lower() not in ALLOWED_EXTENSIONS:
             raise ValueError("Chỉ nhận file .apk, .xapk hoặc .apkm")
@@ -250,7 +262,7 @@ class AuditJobs:
             archive = self._path(self.output_root / "uploads" / (job_id + Path(name).suffix.lower()))
             self._path(self.output_root / job_id)
             self.jobs[job_id] = {"id": job_id, "filename": name, "state": "uploading", "stage": "upload", "docs_used": bool(documents), "engine": engine,
-                                 "cross_flow": bool(cross_flow)}
+                                 "cross_flow": bool(cross_flow), "recheck_all": bool(recheck_all)}
             self.jobs[job_id].update(documents=documents, document_sheets=sheets, archive_path=str(archive),
                                      output_path=str(self.output_root / job_id), upload_complete=False,
                                      resumable=False, interrupted=False,
@@ -328,6 +340,7 @@ class AuditJobs:
                 resume=resumed,
                 engine=self.get(job_id)["engine"],
                 cross_flow=self.get(job_id).get("cross_flow", False),
+                recheck_all=self.get(job_id).get("recheck_all", False),
                 ads_scripts=self._path(documents["ads_scripts"], exists=True) if documents else None,
                 checklist=self._path(documents["checklist"], exists=True) if documents else None,
                 ads_sheet=self.get(job_id).get("document_sheets", {}).get("ads_scripts"),
@@ -400,6 +413,17 @@ def make_handler(jobs):
                         return
                     self._send(200, report, "application/json; charset=utf-8")
                     return
+                if parts[3] in {"report.html", "ids.csv"} and job["state"] == "done":
+                    try:
+                        report = jobs.load_report(parts[2])
+                    except (ValueError, OSError, KeyError):
+                        self._json(400, {"error": "Báo cáo không còn hợp lệ hoặc đã bị di chuyển"})
+                        return
+                    if parts[3] == "report.html":
+                        self._send(200, render_html(report).encode("utf-8"), "text/html; charset=utf-8")
+                    else:
+                        self._send(200, ids_csv(report.get("marketing")).encode("utf-8"), "text/csv; charset=utf-8")
+                    return
             self._json(404, {"error": "Đường dẫn không tồn tại"})
 
         def do_POST(self):
@@ -453,6 +477,7 @@ def make_handler(jobs):
                     unquote(self.headers.get("X-Ads-Scripts-Sheet", "")) or None,
                     unquote(self.headers.get("X-Checklist-Sheet", "")) or None,
                     self.headers.get("X-Cross-Flow") == "1",
+                    self.headers.get("X-Recheck-All") == "1",
                 )
             except (ValueError, OSError) as exc:
                 self._json(400, {"error": str(exc)})
@@ -488,6 +513,7 @@ def make_handler(jobs):
 
 def serve(port=8765, output_root="out/web", rules=None, workers=6):
     jobs = AuditJobs(output_root, rules, workers=workers)
+    PassedHistory(Path(output_root) / "cache").seed_from_reports(output_root)
     server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(jobs))
     print(f"apk-audit web: http://127.0.0.1:{server.server_port}", flush=True)
     try:

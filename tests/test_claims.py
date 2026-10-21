@@ -321,3 +321,4 @@ class ExcerptMatchTests(unittest.TestCase):
         self.assertFalse(_excerpt_matches('done();\n...\nsdk.load(id);', self.lines, 6))
         self.assertFalse(_excerpt_matches('if (enabled) { sdk.show(id); }', self.lines, 3))
         self.assertFalse(_excerpt_matches('...', self.lines, 3))
+

@@ -8,6 +8,7 @@ from unittest.mock import patch
 from apk_audit.contracts import AgentResult, Finding, Rule
 from apk_audit.engines import ReplayEngine
 from apk_audit import run
+from apk_audit.pipeline import normalize_usage
 
 
 class SchedulerTests(unittest.TestCase):
@@ -82,6 +83,110 @@ class PipelineOptimizationTests(unittest.TestCase):
         (self.pack/'rules/a.yaml').write_text('- id: EXAMPLE\n  title: Inspect\n  area: splash\n  mode: agent\n  question: Inspect\n  verdict: {pass_when: "yes", fail_when: "no", unknown_when: unclear}\n')
         self.kwargs=dict(rules=self.pack,out=self.root/'out',cache_dir=self.root/'cache',trace=True)
         self.payload=json.dumps({'rule_id':'EXAMPLE','status':'UNKNOWN','reasoning':'fixture incomplete','evidence':[]})
+
+    def scoped_pass_result(self, command='sed -n 1,5p sources/demo/App.java'):
+        payload=json.dumps({'rule_id':'EXAMPLE','status':'PASS','reasoning':'ok','hint':'sources/',
+                            'evidence':[{'file':'sources/demo/App.java','line':2,'excerpt':'public class App { void onCreate() { Example.init(); } }'}]})
+        return AgentResult(payload,tool_calls=1,events=[{'type':'source_read','command':command,'output':'x'}])
+
+    def copy_workspace(self,name,edit=None):
+        import shutil
+        target=self.root/name
+        shutil.copytree(self.ws,target)
+        if edit:
+            edit(target)
+        return target
+
+    def test_scoped_cache_reuses_verdict_only_when_files_read_are_unchanged(self):
+        (self.ws/'sources/demo/Other.java').write_text('package demo;\nclass Other { int v = 1; }\n')
+        first=run(self.ws,engine=ReplayEngine([self.scoped_pass_result()]),**self.kwargs)
+        self.assertEqual(first['findings'][0]['status'],'PASS')
+        class Forbidden(ReplayEngine):
+            def run_agent(inner,*args,**kwargs):
+                raise AssertionError('AI must not be called')
+        unrelated=self.copy_workspace('unrelated',lambda w:(w/'sources/demo/Other.java').write_text('package demo;\nclass Other { int v = 2; }\n'))
+        second=run(unrelated,engine=Forbidden([]),**self.kwargs)
+        self.assertEqual((second['findings'][0]['status'],second['findings'][0]['from_cache']),('PASS',True))
+        self.assertTrue(second['metrics']['rules'][0]['from_scoped_cache'])
+        changed=self.copy_workspace('changed',lambda w:(w/'sources/demo/App.java').write_text('package demo; // edited\npublic class App { void onCreate() { Example.init(); } }\n'))
+        third=run(changed,engine=ReplayEngine([self.scoped_pass_result()]),**self.kwargs)
+        self.assertFalse(third['metrics']['rules'][0]['from_scoped_cache'])
+        self.assertEqual(third['metrics']['rules'][0]['tool_calls'],1)
+        added=self.copy_workspace('added',lambda w:(w/'sources/demo/New.java').write_text('class New {}\n'))
+        fourth=run(added,engine=ReplayEngine([self.scoped_pass_result()]),**self.kwargs)
+        self.assertFalse(fourth['metrics']['rules'][0]['from_scoped_cache'])
+
+    def test_scoped_cache_is_disabled_for_workspace_wide_searches_and_when_turned_off(self):
+        (self.ws/'sources/demo/Other.java').write_text('class Other { int v = 1; }\n')
+        run(self.ws,engine=ReplayEngine([self.scoped_pass_result('rg -n Example.init')]),**self.kwargs)
+        other=self.copy_workspace('other',lambda w:(w/'sources/demo/Other.java').write_text('class Other { int v = 2; }\n'))
+        report=run(other,engine=ReplayEngine([self.scoped_pass_result('rg -n Example.init')]),**self.kwargs)
+        self.assertFalse(report['metrics']['rules'][0]['from_scoped_cache'])
+        self.assertEqual(report['metrics']['rules'][0]['tool_calls'],1)
+
+    def test_rule_with_skip_after_pass_is_skipped_on_later_builds_unless_rechecked(self):
+        (self.pack/'rules/a.yaml').write_text('- id: EXAMPLE\n  title: Inspect\n  area: splash\n  mode: agent\n  question: Inspect\n  params: {skip_after_pass: true}\n  verdict: {pass_when: "y", fail_when: "n", unknown_when: u}\n')
+        first=run(self.ws,engine=ReplayEngine([self.scoped_pass_result()]),**self.kwargs)
+        self.assertEqual(first['findings'][0]['status'],'PASS')
+        class Forbidden(ReplayEngine):
+            def run_agent(inner,*args,**kwargs):
+                raise AssertionError('AI must not be called')
+        newer=self.copy_workspace('newer',lambda w:(w/'sources/demo/App.java').write_text('package demo; // v2\npublic class App { void onCreate() { Example.init(); } }\n'))
+        second=run(newer,engine=Forbidden([]),**self.kwargs)
+        finding=second['findings'][0]
+        self.assertEqual((finding['status'],finding['reason'],finding['tool_calls']),('SKIPPED','passed_previously',0))
+        third=run(newer,engine=ReplayEngine([self.scoped_pass_result()]),recheck_all=True,**self.kwargs)
+        self.assertEqual(third['findings'][0]['status'],'PASS')
+        self.assertEqual(third['metrics']['rules'][0]['tool_calls'],1)
+
+    def test_pack_version_bump_keeps_unchanged_ai_verdicts_but_rule_edits_do_not(self):
+        run(self.ws,engine=ReplayEngine([self.scoped_pass_result()]),**self.kwargs)
+        class Forbidden(ReplayEngine):
+            def run_agent(inner,*args,**kwargs):
+                raise AssertionError('AI must not be called')
+        (self.pack/'pack.yaml').write_text('name: fixture\nversion: "2"\nschema_version: 2\n')
+        warm=run(self.ws,engine=Forbidden([]),**self.kwargs)
+        self.assertEqual((warm['findings'][0]['status'],warm['findings'][0]['from_cache']),('PASS',True))
+        (self.pack/'rules/a.yaml').write_text('- id: EXAMPLE\n  title: Inspect\n  area: splash\n  mode: agent\n  question: Inspect again\n  verdict: {pass_when: "yes", fail_when: "no", unknown_when: unclear}\n')
+        changed=run(self.ws,engine=ReplayEngine([self.scoped_pass_result()]),**self.kwargs)
+        self.assertEqual(changed['metrics']['rules'][0]['tool_calls'],1)
+
+    def test_failed_screen_rule_keeps_full_checklist_and_quota_is_reported(self):
+        (self.pack/'rules/a.yaml').write_text('- id: EXAMPLE\n  title: Inspect\n  area: splash\n  mode: agent\n  question: Inspect\n  params:\n    checklist: ["Load đúng", "Thoát khi lỗi"]\n  verdict: {pass_when: "y", fail_when: "n", unknown_when: u}\n')
+        class Quota(ReplayEngine):
+            requires_claims=True
+            def run_agent(inner,*args,**kwargs):
+                raise RuntimeError("You've hit your usage limit. Try again at 2:19 PM.")
+        report=run(self.ws,engine=Quota([]),**self.kwargs)
+        finding=report['findings'][0]
+        self.assertEqual((finding['status'],finding['reason']),('UNKNOWN','engine_error'))
+        self.assertEqual([r['status'] for r in finding['screen_report']['requirements']],['unknown','unknown'])
+        self.assertTrue(any(w.startswith('engine_quota_exhausted: 1 rule') for w in report['warnings']))
+        screen=next(x for x in report['marketing']['screens'] if x['rule_id']=='EXAMPLE') if any(x['rule_id']=='EXAMPLE' for x in report['marketing']['screens']) else None
+        self.assertIsNone(screen)  # fixture rule is not one of the four marketing screens
+        self.assertIn('hết hạn mức', report['dev_view']['groups'][0]['rules'][0]['unknown_reason'])
+
+    def test_rule_is_skipped_without_ai_when_document_marks_area_unused(self):
+        (self.pack/'rules/a.yaml').write_text('- id: WELCOME\n  title: Welcome\n  area: welcome\n  mode: agent\n  question: Inspect\n  verdict: {pass_when: "y", fail_when: "n", unknown_when: u}\n')
+        ads=self.root/'ads.json'
+        ads.write_text(json.dumps({'placements':[{'name':'inter_welcome_back','id':'x','enabled':False},{'name':'inter_splash','id':'y'}]}))
+        class Forbidden(ReplayEngine):
+            def run_agent(inner,*args,**kwargs):
+                raise AssertionError('AI must not be called')
+        report=run(self.ws,engine=Forbidden([]),ads_scripts=ads,**self.kwargs)
+        finding=report['findings'][0]
+        self.assertEqual((finding['status'],finding['reason'],finding['tool_calls']),('SKIPPED','not_applicable_by_document',0))
+        self.assertIn('inter_welcome_back',finding['reasoning'])
+
+    def test_usage_is_normalized_per_rule_and_totalled(self):
+        usage={"input_tokens":6,"cache_read_input_tokens":100,"cache_creation_input_tokens":40,"output_tokens":9}
+        report=run(self.ws,engine=ReplayEngine([AgentResult(self.payload,tool_calls=1,usage=usage)]),**self.kwargs)
+        expected={"input":6,"cache_read":100,"cache_write":40,"output":9}
+        self.assertEqual(report['metrics']['rules'][0]['usage'],expected)
+        self.assertEqual(report['metrics']['usage_totals'],expected)
+        self.assertEqual(report['metrics']['rules'][0]['resumed_attempts'],0)
+        codex=normalize_usage({"input_tokens":50,"cached_input_tokens":30,"output_tokens":4})
+        self.assertEqual(codex,{"input":50,"cache_read":30,"cache_write":0,"output":4})
 
     def test_metrics_and_source_bundle_are_sent_and_warm_cache_avoids_ai(self):
         class Recording(ReplayEngine):

@@ -6,7 +6,7 @@ from .engine_common import report_activity, verdict_schema
 from .utils import safe_path, read_text
 
 
-PROMPT_POLICY_VERSION = 'claims-review-6-scoped'
+PROMPT_POLICY_VERSION = 'claims-review-11-batched-reads'
 AUDIT_PROMPT = (
     'Lần đường đi mã từ nguồn cấu hình/ID qua load, callback thành công/lỗi, gate, observer, '
     'render/show và nhánh điều hướng khi phù hợp. Kiểm cả disabled, purchase, offline, timeout. '
@@ -14,10 +14,14 @@ AUDIT_PROMPT = (
     'Mỗi claim cần statement, kind compliance|violation|uncertain, scope static|runtime, '
     'applicability applicable|unknown|not_applicable, evidence_indices đánh số từ 0 trong evidence, '
     'path gồm các role và evidence_indices, conditions, unresolved và limitations (đều là list string). '
-    'Ưu tiên 8-20 đoạn trích nhiều dòng bao phủ nhánh quan trọng thay cho hàng chục dòng rời rạc. '
+    'Dùng 6-12 evidence ngắn bao phủ các nhánh quan trọng thay cho hàng chục dòng rời rạc. '
+    'Số lệnh là giới hạn cứng, vì vậy GỘP nhiều đoạn cần đọc vào một lệnh (ví dụ sed -n "a,bp;c,dp" file hoặc nhiều file trong '
+    'cùng một lệnh), mỗi lệnh khoảng 150-300 dòng; không cat/nl cả file lớn vì mọi lượt sau phải mang theo output đó. '
+    'Bắt đầu từ flow_map và evidence_bundle, tránh đọc lại file đã đọc và dành lệnh cuối để trả JSON. '
     'Hoàn thiện danh sách evidence trước, đánh số 0..N-1, rồi mới lập claims/path. '
-    'excerpt chép nguyên văn các dòng liên tiếp bắt đầu đúng tại line (không kèm số dòng); '
-    'đoạn bỏ qua ghi một dòng "..."; không viết lại hay gộp code. '
+    'Mỗi evidence gồm file, line, end_line và anchor. line..end_line là đoạn 1-8 dòng liên tiếp (số dòng lấy từ nl -ba hoặc rg -n); '
+    'anchor là một cụm ngắn (tối đa 80 ký tự) chép nguyên văn từ code nằm trong đoạn đó và thể hiện điều bạn khẳng định '
+    '(ví dụ lời gọi hàm hoặc điều kiện; với claim violation chọn cụm đặc trưng dài từ 12 ký tự, không dùng từ khóa chung chung). KHÔNG viết excerpt: tool tự lấy mã nguồn từ file theo line..end_line. '
     'Mọi chỉ số trong path phải có trong evidence_indices của chính claim; không tham chiếu '
     'một chỉ số đã bỏ khỏi evidence khi rút gọn kết quả. '
     'PASS/FAIL chỉ khi claim applicable, static, không còn blocker và có ít nhất hai vai trò '
@@ -41,7 +45,12 @@ AUDIT_PROMPT = (
     'FAIL phải có violation applicable được dẫn chứng; PASS không được chứa violation applicable. '
     'Không đủ căn cứ trả UNKNOWN kèm gợi ý file/dòng. Trả đúng một JSON theo schema. '
     'Viết reasoning bằng tiếng Việt với các mục cần thiết: Kết luận:, Cần sửa:, Đã đúng:, Chưa xác minh:. '
-    'Kết luận tối đa hai câu, các ý ngắn, giữ class/hàm/key và giới hạn quan trọng. '
+    'Kết luận tối đa hai câu, các ý ngắn, giữ class/hàm/key và giới hạn quan trọng; toàn bộ reasoning tối đa khoảng 8 dòng. '
+    'screen_report: chỉ điền khi đầu vào có checklist, ngược lại load="" show="" requirements=[]. '
+    'load và show: 1-2 câu tiếng Việt dễ hiểu mô tả logic HIỆN TẠI của app trên màn này (khi nào xin/preload quảng cáo, '
+    'khi nào hiển thị, khi lỗi/offline/hết thời gian thì làm gì), không tên class/hàm/file. requirements: đúng một '
+    'phần tử cho mỗi mục checklist, index theo thứ tự từ 0, status ok|issue|unknown|na (na khi hợp đồng không có mục này), '
+    'note 1 câu dễ hiểu. Chỉ ghi ok/issue khi đã có bằng chứng trong evidence; chưa chắc thì unknown. '
     'marketing_summary: 1-2 câu tiếng Việt dễ hiểu cho Marketing, không tên class/hàm/file: màn nào, '
     'quảng cáo/placement nào (tên placement như inter_splash) bị ảnh hưởng và hậu quả với hiển thị/doanh thu; '
     'PASS thì nói ngắn là ổn; UNKNOWN thì nói cần dev kiểm tra phần nào. '
@@ -49,6 +58,9 @@ AUDIT_PROMPT = (
 )
 REVIEW_TOOL_LIMIT = 12
 REVIEW_PROMPT = (
+    'Mỗi evidence của candidate kèm source_text: mã thật do tool lấy từ line..end_line. Đối chiếu statement của từng '
+    'claim violation với source_text này; loại hoặc hạ claim mà các dòng được dẫn không thể hiện điều khẳng định, '
+    'kể cả khi anchor khớp. Chỉ đọc thêm khi source_text thiếu gate/nhánh cần thiết. '
     'Review độc lập có mục tiêu cho kết quả FAIL bên dưới. Kiểm statement có thực sự suy ra '
     'từ excerpt trong context và hợp đồng rule; excerpt đúng không đồng nghĩa claim đúng. '
     'Thử bác bỏ violation qua applicability, gate/conditions, đường đi, callback, fallback, '
@@ -95,9 +107,39 @@ def _repair_feedback(payload, checked, verification, tools):
             continue
     return {'previous_result': payload, 'structure_verification': verification,
             'evidence_catalog': catalog, 'source_windows': windows,
-            'instruction': 'Sửa file/dòng/excerpt và toàn bộ chỉ số claims/path. '
+            'instruction': 'Sửa file/line/end_line/anchor (hoặc excerpt) và toàn bộ chỉ số claims/path; anchor phải nằm trong đoạn line..end_line. '
                            'Chỉ số ngoài catalog không có bằng chứng: đọc source để bổ sung hoặc sửa claim; '
                            'không tự dịch số hoặc xóa blocker. Trả JSON đầy đủ, không chỉ bản vá.'}
+
+
+def checklist_placeholder(checklist, state='unknown'):
+    """Checklist with no AI answers (rule failed or was skipped): keeps every screen equally complete."""
+    return {'load': '', 'show': '', 'verified': False,
+            'requirements': [{'text': text, 'status': state, 'note': ''} for text in checklist]}
+
+
+def _screen_report(raw, checklist, status):
+    """Plain-language screen logic + checklist answers, only for rules that declare a checklist.
+
+    A draft the guard later downgrades (status UNKNOWN) is shown as unverified: every
+    requirement becomes `unknown` so an unproven "ok" never reaches a reader.
+    """
+    if not checklist or not isinstance(raw, dict):
+        return {}
+    answers = {}
+    for item in raw.get('requirements') or []:
+        if isinstance(item, dict) and type(item.get('index')) is int and 0 <= item['index'] < len(checklist):
+            answers.setdefault(item['index'], item)
+    verified = status in {'PASS', 'FAIL'}
+    requirements = []
+    for index, text in enumerate(checklist):
+        item = answers.get(index, {})
+        state = item.get('status') if item.get('status') in {'ok', 'issue', 'unknown', 'na'} else 'unknown'
+        if not verified and state in {'ok', 'issue'}:
+            state = 'unknown'
+        requirements.append({'text': text, 'status': state, 'note': str(item.get('note') or '')[:300]})
+    return {'load': str(raw.get('load') or '')[:500], 'show': str(raw.get('show') or '')[:500],
+            'verified': verified, 'requirements': requirements}
 
 
 def _normalize(line):
@@ -138,6 +180,29 @@ def _excerpt_matches(excerpt, lines, number):
     return position > 0
 
 
+MAX_RANGE_LINES = 20
+MIN_ANCHOR = 4
+
+
+def _verify_range(item, lines):
+    """Evidence given as file + line range + short verbatim anchor.
+
+    Verified when the range exists (at most MAX_RANGE_LINES) and the anchor, compared
+    ignoring whitespace, occurs inside it. The returned excerpt is the real source text, so
+    nothing the model paraphrased can reach the report; a range that does not contain what
+    the model says it shows fails on the anchor.
+    """
+    start = item['line']
+    end = item.get('end_line', start)
+    anchor = _normalize(item['anchor'])
+    if (type(start) is not int or type(end) is not int or not 1 <= start <= end <= len(lines)
+            or end - start + 1 > MAX_RANGE_LINES or len(anchor) < MIN_ANCHOR):
+        return False, None
+    segment = lines[start - 1:end]
+    text = '\n'.join(segment)
+    return _compact_tokens(anchor) in _compact_tokens(' '.join(_normalize(line) for line in segment)), text
+
+
 def _verify_evidence(payload, tools):
     checked = []
     evidence = payload.get('evidence', [])
@@ -150,8 +215,13 @@ def _verify_evidence(payload, tools):
         verified = False
         try:
             lines = read_text(safe_path(tools.root, item['file'])).splitlines()
-            number, excerpt = item['line'], item['excerpt']
-            if type(number) is int and 1 <= number <= len(lines) and isinstance(excerpt, str) and excerpt.strip():
+            number = item['line']
+            excerpt = item.get('excerpt')
+            if isinstance(item.get('anchor'), str) and not (isinstance(excerpt, str) and excerpt.strip()):
+                # Cited range + short verbatim anchor: the tool copies the real lines itself.
+                verified, excerpt = _verify_range(item, lines)
+                item = dict(item, excerpt=excerpt)
+            elif type(number) is int and 1 <= number <= len(lines) and isinstance(excerpt, str) and excerpt.strip():
                 verified = _excerpt_matches(excerpt, lines, number)
         except (OSError, ValueError, KeyError, TypeError):
             pass
@@ -199,7 +269,10 @@ def evaluate(rule, tools, engine, context, max_tool_calls=None):
         return finish()
     prompt = json.dumps({'context': context, 'rule_id': rule.id, 'question': rule.question,
                          'verdict': rule.verdict, 'start_hints': rule.start_hints,
-                         'rule_total_tool_budget': budget, 'output_schema': verdict_schema()}, ensure_ascii=False) + '\n' + AUDIT_PROMPT
+                         **({'checklist': rule.params['checklist']} if rule.params.get('checklist') else {}),
+                         'rule_total_tool_budget': budget,
+                         # Live CLIs already receive the schema natively; only offline engines need it in the prompt.
+                         **({} if live else {'output_schema': verdict_schema()})}, ensure_ascii=False) + '\n' + AUDIT_PROMPT
     trace['prompt'] = prompt
 
     def call(text, *, repair=False, review=False, investigation=False, limit=None, followup=None):
@@ -344,6 +417,7 @@ def evaluate(rule, tools, engine, context, max_tool_calls=None):
         finding.status = value['status']
         finding.reasoning = str(value.get('reasoning', ''))
         finding.marketing_summary = str(value.get('marketing_summary') or '')[:600]
+        finding.screen_report = _screen_report(value.get('screen_report'), rule.params.get('checklist'), value['status'])
         finding.expected, finding.actual = value.get('expected'), value.get('actual')
         finding.hint = str(value.get('hint') or rule.hint or tools.facts.get('manifest', {}).get('application_file') or 'AndroidManifest.xml')
         finding.evidence = evidence
@@ -431,8 +505,13 @@ def evaluate(rule, tools, engine, context, max_tool_calls=None):
             finding.exhausted_budget = True
             finding.verification['review'] = 'budget_exhausted'
             return finish()
+        # The reviewer judges each claim against the real source text the tool copied for every
+        # cited range, so a claim the cited lines cannot support is rejected without extra reading.
+        shown = [{**{k: v for k, v in raw.items() if k != 'excerpt'}, 'source_text': found.get('excerpt'),
+                  'range_verified': found.get('verified')}
+                 for raw, found in zip(payload.get('evidence') or [], checked) if isinstance(raw, dict)]
         review_prompt = prompt + '\n' + REVIEW_PROMPT + '\n' + json.dumps({
-            'candidate': payload, 'structure_verification': finding.verification,
+            'candidate': {**payload, 'evidence': shown}, 'structure_verification': finding.verification,
             'remaining_tool_calls': budget-finding.tool_calls}, ensure_ascii=False)
         # A focused re-check of the violation path, not a second full audit.
         response = call(review_prompt, review=True, limit=min(REVIEW_TOOL_LIMIT, budget-finding.tool_calls))

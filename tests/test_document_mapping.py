@@ -127,7 +127,7 @@ assert 'MAP_COLUMNS_ONLY' in instruction
 assert 'workspace jadx' not in instruction
 payload={'decision':'mapped','sheet':'CSV','header_line':2,'columns':[]}
 if '--output-schema' in args:
- assert args[args.index('--model')+1]=='gpt-6.1-sol'
+ assert args[args.index('--model')+1]=='gpt-6-sol'
  schema=json.loads(Path(args[args.index('--output-schema')+1]).read_text())
  assert 'columns' in schema['required'] and 'evidence' not in schema['properties']
  assert 'features.shell_tool=false' in args

@@ -2,6 +2,12 @@
 
 ## Trạng thái hiện tại
 
+- 2026-10-21 09:40: Đã lập kế hoạch triển khai `docs/superpowers/plans/2026-10-21-readable-fast-cheap-audit.md` (đo → báo cáo Dev/MKT → rule tĩnh, bỏ rule không áp dụng, cache theo file, bản đồ luồng → cắt context/đầu ra). Chưa bắt đầu code; chờ người dùng đổi model rồi triển khai.
+- **Việc cho phiên 2026-10-21 (người dùng ghi chú, Đang làm):**
+  1. Kiểm tra ad config đúng yêu cầu chưa: nội dung `ad_config.json`/`ad_config_debug.json` và Remote Config so với ADS SCRIPTS/working file (ID, isEnable, các trường cấu hình), không chỉ so ID.
+  2. Kiểm tra bật/tắt ads hợp lý chưa: cờ enable từng placement theo màn/tài liệu (placement bị gạch/tô màu phải tắt, placement đang dùng phải bật).
+  3. Logic màn Welcome back / App Open: rà lại luồng Welcome, loại trừ với App Open, điều kiện chọn biến thể chỉ inter/native.
+- Cập nhật 2026-10-20 18:55: main tại 45cb80e (đã merge PR #2 token + tóm tắt Marketing). Server đang chạy bản này, Claude Sonnet 5.5 low, 6 workers, cross-flow tắt mặc định. Chưa đo token lượt Sonnet low mới.
 - Cập nhật: 2026-10-20 14:47 (Asia/Ho_Chi_Minh).
 - Đọc tài liệu linh hoạt: Hoàn tất code và kiểm chứng bước tài liệu. CSV tự tìm header trong 40 dòng đầu (giữ dòng vật lý), nhận comma/semicolon/tab/pipe và alias cột Việt/Anh; XLSX dùng chung aliases. Pipeline dùng Codex/Claude đã chọn để ánh xạ cột khi parser không hiểu, một lần/tài liệu, timeout90s, preview30k ký tự/40 dòng/64 cột/120 ký tự mỗi ô. AI chỉ trả tọa độ, loader kiểm sheet/dòng/cột bắt buộc/không trùng và lấy giá trị từ nguồn; giữ fill/strike/formula của XLSX. Không tự đoán workbook nhiều app. Static/none/max-tool-calls0 không gọi AI tài liệu. UI có Tài liệu đã đọc, report metrics.documents có phương pháp và usage. Backend chưa restart.
 - Kiểm tra mới nhất:165/165 unittest đạt (7.438s; /tmp/apk-audit-flexible-documents-tests.log), frontendbuild đạt (/tmp/apk-audit-flexible-documents-build.log; cảnh báo chunk/use-client cũ), diffcheck đạt. CSV SmartZone working AI Learn66dòng/ADS MoneyTracker17placement và XLSX mẫu26placement/3disabled đều đọc trực tiếp, không gọi AI. Hai CSV thuộc hai app khác nhau, đã thông báo không dùng làm cùng hợp đồng audit.
@@ -21,6 +27,107 @@
 - Bước tiếp theo đề xuất: Sửa đóng gói/đường dẫn và context theo rule trước; benchmark tùy chọn 2 workers đã có với cùng đầu vào/model/cache. Sau đó bổ sung tiến độ live cho repair/investigation/review và hủy audit truyền tới CLI. Trước phát hành ổn định cần kiểm full 11 rule với hợp đồng thật, ca APK có kết luận chuẩn và cài/chạy ngoài repo trên máy mới. Chưa triển khai các đề xuất này trong lượt rà soát; runtime/SDK thiếu mã thật vẫn phải giữ UNKNOWN có lý do.
 
 ## Lịch sử phiên
+
+### 2026-10-21 16:30 — Viết lại README, commit và push (Asia/Ho_Chi_Minh)
+
+- README mới ngắn gọn cho MKT và Dev (dùng nhanh, đọc báo cáo, công cụ kiểm tra gì, cài đặt, dòng lệnh, chọn AI/tiết kiệm token, giới hạn). README cũ giữ nguyên nội dung tại docs/technical-reference.md. Commit toàn bộ thay đổi của nhánh feat/readable-fast-cheap-audit và push theo yêu cầu người dùng.
+
+### 2026-10-21 16:00 — Onboarding/Welcome thiếu thông tin: do quota và hết ngân sách lệnh (Asia/Ho_Chi_Minh)
+
+- Job cf299856 (IPTV, Codex gpt-6-sol low): 6 PASS / 2 FAIL / 8 UNKNOWN, 163s, input 2.54M (cache 2.17M), output 34K (rất thấp so với lượt 6.1: 13.3M) NHƯNG: 5 rule AI dính "usage limit" (Welcome engine_error, Onboarding repair_error, Splash review_error, Load/observe, Banner) và 3 rule tool_budget (INIT 36/35, REMOTE 41/40, ID 36/35). Nên Onboarding/Welcome không có evidence/logic/checklist trong báo cáo.
+- Nguyên nhân tool_budget: prompt "≤120 dòng/lệnh" làm gpt-6-sol dùng gấp đôi số lệnh (252 so với 113). Đã đổi thành gộp nhiều đoạn vào một lệnh (sed -n "a,bp;c,dp"), 150–300 dòng/lệnh, dành lệnh cuối trả JSON. claims-review-11-batched-reads.
+- Đã làm: rule có checklist luôn trả `screen_report` (placeholder: ❔ khi AI lỗi, ➖ khi bỏ qua theo tài liệu) nên 4 màn luôn đầy đủ như nhau; marketing giải thích riêng khi hết hạn mức ("chạy lại sau khi hạn mức làm mới, rule đã xong được dùng lại") hoặc lỗi gọi AI; dev view nhãn quota; cảnh báo `engine_quota_exhausted` trong report. 218/218 test; server restart. Chưa kiểm live; chưa commit.
+- Chưa làm: tự dừng sớm toàn lượt khi gặp quota (hiện từng rule tự lỗi); cân nhắc tăng ngân sách lệnh cho INIT/REMOTE/ID nếu vẫn hết.
+
+### 2026-10-21 15:20 — Codex đổi sang gpt-6-sol low (Asia/Ho_Chi_Minh)
+
+- Theo yêu cầu: model Codex `gpt-6.1-sol` → `gpt-6-sol` (vẫn effort low). Đã kiểm `codex exec --model gpt-6-sol` trả OK. engines.py, cli help, README, UI (nhãn cũ 6.1 giữ cho báo cáo cũ), 2 test. 216/216 test, build đạt, server restart. Cache Codex cũ không dùng lại (engine identity đổi). Chưa đo chất lượng gpt-6-sol; chưa commit.
+
+### 2026-10-21 15:00 — Bù đánh đổi evidence theo đoạn dòng bằng review có mã thật (Asia/Ho_Chi_Minh)
+
+- Chọn phương án tối ưu nhất trong các cách bù (anchor dài hơn / hai anchor / review đọc mã thật): review FAIL nhận `source_text` = mã thật tool lấy từ line..end_line cho mọi evidence (không tốn thêm lệnh đọc), REVIEW_PROMPT yêu cầu loại claim mà dòng được dẫn không thể hiện kể cả khi anchor khớp; prompt yêu cầu anchor của violation ≥12 ký tự đặc trưng. Không thêm lượt AI hay tiêu chí cứng mới nên không tạo thêm lượt sửa. PROMPT_POLICY claims-review-10-source-review.
+- 216/216 test (thêm test reviewer nhận source_text, không còn excerpt do AI viết); server restart. Chưa đo live; chưa commit.
+
+### 2026-10-21 14:30 — Dẫn chứng theo đoạn dòng + anchor (giảm lượt sửa bằng chứng) (Asia/Ho_Chi_Minh)
+
+- Yêu cầu: sửa triệt để vấn đề lượt "sửa bằng chứng" làm token tăng 2–4 lần.
+- Nguyên nhân (dữ liệu thật): Codex low IPTV 28 evidence bị loại, 27 do viết lại đoạn code dài, dòng đầu vẫn đúng dòng được dẫn; mô phỏng với ranged evidence (≤8 dòng, anchor = dòng đầu 60 ký tự) cả 28 + 4 của Sonnet đều xác minh được.
+- Đã làm: evidence schema live = {file, line, end_line, anchor} (bỏ excerpt); `_verify_range` (đoạn tồn tại, ≤20 dòng, anchor ≥4 ký tự nằm trong đoạn, so sánh bỏ khoảng trắng) và tool điền excerpt = mã thật; excerpt cũ vẫn kiểm chặt như trước (replay/benchmark/cache cũ). Prompt claims-review-9: bỏ excerpt, hướng dẫn anchor/đoạn 1–8 dòng. Cache đã lưu dùng lại được (excerpt điền sẵn).
+- Kiểm: 215/215 test (thêm 3 test ranged + cache reverify); live Claude Sonnet low trên AI Learn, ADS_SPLASH_PLACEMENT: PASS, 1 lượt, 0 sửa, 4 tool, 26s, 6 evidence verified, output 3.7K token. Chưa kiểm Codex live với schema mới. Server restart. Chưa commit.
+- Đánh đổi đã nêu trong README: mất bằng chứng AI "đã nhìn nguyên văn cả đoạn", còn anchor ngắn.
+
+### 2026-10-21 13:00 — Giảm token cho lượt chạy mới (Asia/Ho_Chi_Minh)
+
+- Người dùng hỏi chạy lại có tốn token nữa không và yêu cầu tối ưu. Trả lời: có, lượt đầu sau khi đổi checklist/prompt/pack phải chạy lại AI.
+- Đã làm: (1) bỏ pack version khỏi khóa verdict cache và scoped cache — bump version khi thêm rule không còn làm mất kết quả AI của rule không đổi (rule text/params, context, policy, engine, tài liệu vẫn đổi khóa). Một lần duy nhất khóa đổi định dạng nên lượt tới vẫn chạy đủ. (2) Prompt: evidence 1–5 dòng nguyên văn (không "...", không gộp, không tóm tắt) vì 27/28 evidence trượt của Codex low là đoạn dài bị viết lại; lệnh đọc ≤~120 dòng, không cat/nl cả file, bắt đầu từ flow_map/evidence_bundle (output lớn bị mang theo mọi lượt sau). PROMPT_POLICY claims-review-8-short-reads. 212/212 test; server restart. Chưa đo token live; chưa commit.
+- Đề xuất chờ duyệt: gộp ADS_LOAD_OBSERVE_GATES vào rule từng màn (trùng đọc AdsManager); rule nhẹ chạy Haiku; chỉ điều tra bổ sung khi chưa sửa bằng chứng.
+
+### 2026-10-21 12:20 — Rule chặn xoay màn hình và observe liên tục (Asia/Ho_Chi_Minh)
+
+- Hỏi: đã có rule kiểm observer ads liên tục và chặn xoay màn hình ở 4 màn chưa. Kết quả rà: observer đã nằm trong ADS_LOAD_OBSERVE_GATES (load→observe→render/hide, observer bị ngắt → FAIL) và rule Language (observer chồng), Onboarding (vòng đời view) nhưng chưa thành mục riêng cho từng màn; chặn xoay chưa có rule nào.
+- Đã làm: rule tĩnh `ADS_SCREEN_ORIENTATION` (custom check `screen_orientation_lock`): parse resources/AndroidManifest.xml, 4 Activity đầu phải có screenOrientation thuộc {portrait, reversePortrait, sensorPortrait, userPortrait, locked}; ghi chú nếu chỉ dùng configChanges=orientation; evidence dòng manifest; hiện ở mục cấu hình của tab Marketing. Checklist Language/Onboarding/Welcome thêm ý "theo dõi liên tục kết quả tải (observe), quảng cáo về trễ vẫn hiện". Pack 0.10.0, 17 rule.
+- Kết quả: IPTV và AI Learn đều PASS (4 màn portrait). 211/211 test; server restart. Chưa commit; AI cần chạy lại (checklist đổi nên cache AI cũ không dùng).
+
+### 2026-10-21 11:50 — Logic từng màn và checklist yêu cầu trong báo cáo (Asia/Ho_Chi_Minh)
+
+- Yêu cầu: báo cáo nêu rõ ở 4 màn Splash/Language/Onboarding/Welcome app đang có logic thế nào và đã đúng yêu cầu chưa (load, show ads).
+- Đã làm: schema AI thêm `screen_report` {load, show, requirements[{index,status ok|issue|unknown|na,note}]} (bắt buộc cho strict schema, rule không checklist trả rỗng); `params.checklist` (5/5/5/4 mục) cho ADS_SPLASH/LANGUAGE/ONBOARDING/WELCOME; prompt hướng dẫn tiếng Việt dễ hiểu, chỉ ok/issue khi có bằng chứng; `agent._screen_report` ghép checklist, hạ mọi ok/issue thành unknown nếu rule bị guard hạ UNKNOWN, đánh dấu `verified`; `Finding.screen_report`; marketing `screens[].logic/requirements`; hiển thị ở tab Marketing, report.md, report.html. Pack 0.9.0, PROMPT_POLICY claims-review-7.
+- Kiểm tra: 210/210 unittest; build đạt; smoke Claude Sonnet low trên examples/workspace (ADS_SPLASH_PLACEMENT): schema được chấp nhận, thiếu code thì mọi mục unknown đúng. Chưa kiểm Codex với schema mới; chưa chạy APK thật (cache AI cũ không dùng lại vì pack/prompt đổi). Server restart. Chưa commit.
+
+### 2026-10-21 11:10 — Gỡ rule Firebase tracking (Asia/Ho_Chi_Minh)
+
+- Theo yêu cầu: xóa `ADS_FIREBASE_EVENTS` khỏi rulepacks/default/rules/ads-flow.yaml, pack 0.8.0, 16 → 15 rule (11 AI → 9 AI... xem rules check: 16 luật tính cả rule tĩnh mới). base-reference.json và scripts/snapshot_base_reference.py giữ mục cũ (không ảnh hưởng). Cơ chế skip_after_pass giữ lại, hiện chưa rule nào dùng. 206/206 test; server restart. Chưa commit.
+
+### 2026-10-21 10:45 — Sửa ADS_CONFIG_FLAGS đọc sai key UA (Asia/Ho_Chi_Minh)
+
+- Lỗi: rule chỉ đọc `enableUaCheck` (camelCase) trong ad_config.json, trong khi JSON thật dùng `enable_ua_check` (adapter của base `AdRemoteConfigJsonAdapterFactory` đọc `"enable_ua_check"`). Hệ quả: native_onboarding_fullscreen_* đã `enable_ua_check: true` vẫn bị báo thiếu — báo cáo sai. Đã đọc cả hai tên key, ưu tiên `enable_ua_check`; trường trong báo cáo đổi thành `enable_ua_check`.
+- Sau sửa: IPTV FAIL chỉ vì inter_home/inter_back có UA true (cả hai file); AI Learn FAIL vì inter_onboarding UA true. Các native fullscreen không còn bị báo. 206/206 test; server restart. Chưa commit.
+
+### 2026-10-21 10:25 — Kết quả Codex Sol low trên IPTV và bỏ qua rule đã đạt (Asia/Ho_Chi_Minh)
+
+- Job 1f4be3bd (IPTV, Codex Sol low, 6 workers, 16 rule): 5 PASS / 3 FAIL / 8 UNKNOWN, 936s (rules 905s). 7/10 rule AI UNKNOWN do `unverified_evidence` kể cả sau sửa bằng chứng. Token: input 13.29M (cache đọc 11.49M, mới 1.80M), output 256K; mỗi rule 0.5–2.5M input — cùng bậc với Codex medium hôm trước (~1.37M/rule), nên low không tiết kiệm token và chậm hơn Sonnet (242s). 
+- Chẩn đoán evidence trượt (28 mục): chỉ 1/28 do sai số dòng; 27/28 đoạn trích không phải nguyên văn dù dòng đầu khớp đúng dòng được dẫn (Codex low viết lại/tóm tắt đoạn code). Không thể xác minh bằng cách tự sửa số dòng hay thay đoạn trích bằng code thật (sẽ hợp thức hóa claim bịa); giữ hợp đồng nghiêm.
+- Kết luận đề xuất: không dùng Codex low làm mặc định; ưu tiên Claude Sonnet low (ít UNKNOWN hơn, nhanh hơn) hoặc Codex medium.
+- Đã làm: `skip_after_pass` (passed_history.py): rule ADS_FIREBASE_EVENTS bỏ qua ở bản build sau khi app đã Đạt; `--recheck-all`/ô web; lịch sử seed từ report khi web khởi động (hiện có INIT_ORDER của com.ai.learn…, IPTV chưa có Firebase vì FAIL). 206/206 test, server đã restart sau khi job xong. Chưa commit.
+
+### 2026-10-21 14:00 — Codex nối tiếp phiên cho lượt sửa/điều tra (Asia/Ho_Chi_Minh)
+
+- Bối cảnh: lượt web Codex Sol low trên IPTV: 5/6 rule AI vào lượt "sửa bằng chứng" trước khi rule nào xong; Codex chưa nối phiên nên mỗi lượt sửa gửi lại toàn prompt. Người dùng yêu cầu dừng audit và áp dụng cho Codex. Audit/server đã dừng (job 84a23cfd bị gián đoạn, mới có facts/inventory).
+- Đã làm: CodexEngine `supports_resume`; lượt đầu giữ session (bỏ --ephemeral, lấy `thread_id` từ sự kiện thread.started), lượt sau `codex exec resume <id>` với `sandbox_mode="read-only"` (resume không có --sandbox/--cd) và cwd=workspace; `close_session` xóa rollout trong ~/.codex/sessions khi rule xong; review FAIL vẫn phiên mới (agent.py không đổi). map_document vẫn --ephemeral.
+- Kiểm live (Sol low, examples/workspace, ADS_INIT_ORDER): resume nhớ ngữ cảnh, read-only chặn ghi file, không còn rollout sót sau khi xong; lượt resume chỉ gửi 5.5–6.4KB prompt thay vì 24KB (token vào gồm cả hội thoại nhưng ~82–85% từ cache).
+- Đã thử và bỏ: tự sửa số dòng evidence và tự gộp chỉ số path vào claim — trên dữ liệu Sonnet thật chỉ 0/4 evidence còn trượt được sửa dòng, và cả hai làm hỏng test hợp đồng nghiêm (evidence phải khớp ở đúng dòng được dẫn, path phải nằm trong claim). Lỗi cấu trúc claim phần lớn là hệ quả evidence không xác minh, nên cách đã có (so khớp bỏ khoảng trắng/gộp dòng/"...") mới là phần hiệu quả. Giả thuyết "phần lớn là sai số dòng" của lượt trước KHÔNG được dữ liệu ủng hộ; chưa biết nguyên nhân repair của Codex low trên IPTV vì job bị dừng trước khi có trace.
+- File: apk_audit/engines.py, tests/test_codex_engine.py. 202/202 test; server restart. Chưa commit.
+- Việc tiếp: chạy lại IPTV với trace bật để biết vì sao Codex low cần repair (so với medium); cho rule tĩnh chạy trước để bộ đếm tiến độ không hiện 0/16.
+
+### 2026-10-21 12:30 — Rule ID test ở ad_config_debug (Asia/Ho_Chi_Minh)
+
+- Theo yêu cầu: `ADS_DEBUG_TEST_IDS` (static, pack 0.7.0, 17 rule): mọi placement trong ad_config_debug.json phải dùng ID demo Google (pub-3940256099942544) đúng loại (open 9257395921; banner 6300978111/9214589741; inter 1033173712; reward 5224354917/5354046379; native 2247696110/1044960115). ID trống chỉ chấp nhận khi isEnable=false; ID thật, ID sai loại hoặc trống khi đang bật → FAIL. ad_config.json (release) dùng ID demo → FAIL. Evidence file/dòng JSON; hiện ở nhóm Cấu hình của tab Dev và mục kiểm tra cấu hình của tab Marketing.
+- APK AI Learn: PASS (debug dùng ID test đúng loại, 9 placement tắt để trống, release dùng ID thật pub-7462…).
+- File: apk_audit/rules/{custom,loader}.py, apk_audit/{dev_view,marketing}.py, rulepacks/default/{pack.yaml,rules/ads-flow.yaml}, tests/test_custom_rules.py, README.md. 201/201 test; server restart. Chưa commit.
+
+### 2026-10-21 12:00 — Codex hạ xuống Sol low (Asia/Ho_Chi_Minh)
+
+- Theo yêu cầu: Codex `gpt-6.1-sol` effort `medium` → `low` (engines.py, label, README, UI, test). Báo cáo cũ giữ nhãn medium. Verdict cache cũ của Codex medium không dùng lại cho low (engine identity đổi). 200/200 test, build đạt, server restart. Chưa đo chất lượng Sol low; chưa commit.
+
+### 2026-10-21 11:30 — Triển khai kế hoạch đọc dễ / nhanh / ít token (Asia/Ho_Chi_Minh)
+
+- Nhánh `feat/readable-fast-cheap-audit` (từ main, mang theo thay đổi rule UA/Dev toggle chưa commit từ sáng). Kế hoạch: docs/superpowers/plans/2026-10-21-readable-fast-cheap-audit.md.
+- GĐ0: `metrics.usage_totals`, `rules[].usage` chuẩn hóa (input/cache_read/cache_write/output), `resumed_attempts`; UI hiện token; `scripts/measure_audit.py` (chưa chạy live, cần quota).
+- GĐ1: tab Marketing/Dev; `dev_view.py` (gom theo màn, kết luận một dòng, Cần sửa, file:dòng, lý do UNKNOWN bằng lời thường, UNKNOWN do guard hiện "AI nghiêng về..."); nhãn chung Đạt/Cần sửa/Cần dev xem lại/Không áp dụng; `report_html.py` + endpoint `/report.html`, `/ids.csv`; nút copy ID lỗi; report.md theo cấu trúc mới; báo cáo cũ được dựng lại dev_view khi mở.
+- GĐ2: rule tĩnh ADS_REMOTE_KEYS, ADS_INTERSTITIAL_INTERVAL, ADS_SCREEN_NAMES (pack 0.6.0, 16 rule); rule ID thu hẹp còn nguồn ID trong code (budget 35); rule welcome/banner → SKIPPED không gọi AI khi tài liệu không dùng; `scoped_cache.py` dùng lại verdict PASS/FAIL theo file đã đọc (kiểm trên trace thật: 7/7 liệt kê được, cần tập đường dẫn file không đổi; `--no-scoped-cache`); `flow_map.py` bản đồ luồng quảng cáo (~2KB) vào context.
+- GĐ3: bundle gợi ý 12000 ký tự (rule.budget.context_chars ghi đè), bỏ output_schema trùng khỏi prompt CLI, prompt yêu cầu 6–12 evidence và reasoning ~8 dòng. Replay: prompt mỗi rule 80–85KB → 43–52KB.
+- Chưa làm: GĐ3.3 (model theo độ khó, tùy chọn chờ duyệt); đo live thời gian/token/chất lượng; visual QA trình duyệt cho 2 tab; refactor JSX bị lặp (mid) trong App.jsx.
+- Kiểm tra: 200/200 unittest, frontend build đạt, rules check 16 luật, server restart (HTTP 200), API trả dev_view/report.html/ids.csv trên báo cáo cũ. Chưa commit/push.
+
+### 2026-10-21 09:20 — Rule tĩnh isEnable/UA check và Dev setting ở Language (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: người dùng mô tả cơ chế UA check của base (isEnable + enableUaCheck; Dev setting → Unlimited ads bypass thành non-organic) và yêu cầu thêm rule trước các bước tiếp theo.
+- Khảo sát base e8f4337: AdUnitConfig.enableUaCheck mặc định false; ad_config*.json của base không khai báo enableUaCheck; LanguageActivity gắn `tvTitle.setOnAdminAdToggleListener` (com.itg.devconfig). Yêu cầu người dùng: chỉ 4 native_onboarding_fullscreen_* có enableUaCheck=true.
+- Đã làm: `apk_audit/rules/custom.py` với `ad_config_flags` (enableUaCheck đúng pattern `native_onboarding_fullscreen_*`; isEnable theo trạng thái ADS SCRIPTS active/disabled, bỏ qua inter_onboarding/unknown; kiểm cả ad_config.json và ad_config_debug.json, evidence file/dòng JSON) và `language_dev_toggle` (tìm setOnAdminAdToggleListener trong *Language*Activity/Fragment; FAIL nếu chưa gắn, UNKNOWN nếu không thấy màn Language). Hai rule static ADS_CONFIG_FLAGS, ADS_LANGUAGE_DEV_TOGGLE (không tốn token AI); pack 0.5.0, 13 rule. evaluate_static nhận workspace. Tóm tắt Marketing thêm mục config_checks (bảng file/vị trí/trường/cần/đang) trên web và report.md.
+- Kết quả APK AI Learn: ADS_CONFIG_FLAGS FAIL (4 native fullscreen Onboarding thiếu enableUaCheck=true ở cả 2 file); ADS_LANGUAGE_DEV_TOGGLE PASS (LanguageActivity.java:231).
+- File: apk_audit/rules/{custom(mới),engine,loader}.py, apk_audit/{pipeline,marketing}.py, rulepacks/default/{pack.yaml,rules/ads-flow.yaml}, frontend/src/App.jsx + build, tests/test_custom_rules.py (mới), SESSION_LOG.md.
+- Kiểm tra: 182/182 unittest, rules check 13 luật, build đạt. Server không chạy (máy khởi động lại) → đã start lại, HTTP 200. Chưa commit.
+- Còn lại theo kế hoạch 21/10: Remote Config so tài liệu (mục 1 phần còn lại), logic Welcome back/App Open.
 
 ### 2026-10-20 18:40 — Tiết kiệm token Claude và tóm tắt cho Marketing (Asia/Ho_Chi_Minh)
 

@@ -6,7 +6,7 @@ compact form; nothing is dropped from the source documents themselves.
 """
 import re
 
-SCOPE_VERSION = 1
+SCOPE_VERSION = 2
 
 # Placement-name fragments relevant to each rule area; None keeps every placement.
 AREA_PLACEMENTS = {
@@ -42,6 +42,28 @@ def _wanted(name, fragments):
 
 def _compact(row, keys):
     return {key: row[key] for key in keys if row.get(key) not in (None, '', False, [])}
+
+
+# Optional areas: when ADS SCRIPTS marks every placement of the area unused (or lists none),
+# the rule has nothing to audit and the AI is not called.
+SKIPPABLE_AREAS = ('welcome', 'banner')
+
+
+def not_applicable_by_document(documents, area):
+    """Return a short reason when the document says this area's placements are not used."""
+    if area not in SKIPPABLE_AREAS:
+        return None
+    ads = (documents or {}).get('ads_scripts')
+    rows = ads.get('placements') if isinstance(ads, dict) else None
+    if not rows:
+        return None
+    fragments = AREA_PLACEMENTS[area]
+    related = [row for row in rows if isinstance(row, dict) and _wanted(row.get('name'), fragments)]
+    if any(row.get('state') in {'active', 'unknown'} for row in related):
+        return None
+    if related:
+        return 'ADS SCRIPTS đánh dấu không dùng: ' + ', '.join(sorted(row['name'] for row in related))
+    return 'ADS SCRIPTS không có placement nào thuộc phần này (' + '/'.join(fragments) + ')'
 
 
 def scope_documents(documents, area):

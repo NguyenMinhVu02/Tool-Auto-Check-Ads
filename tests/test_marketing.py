@@ -20,7 +20,7 @@ class MarketingSummaryTests(unittest.TestCase):
         self.assertEqual(problems, {('inter_splash', 'Sai ID: app khác ADS SCRIPTS'),
                                     ('inter_welcome_back', 'Thiếu: app chưa khai báo vị trí này')})
         splash = result['screens'][0]
-        self.assertEqual((splash['level'], splash['id_issues'], splash['flow_label']), ('issue', 1, 'Ổn'))
+        self.assertEqual((splash['level'], splash['id_issues'], splash['flow_label']), ('issue', 1, 'Đạt'))
         self.assertEqual(splash['explanation'], 'Splash ổn.')
         language = result['screens'][1]
         self.assertFalse(language['placements'][0]['problem'])
@@ -37,6 +37,33 @@ class MarketingSummaryTests(unittest.TestCase):
         text = '\n'.join(marketing_markdown(result))
         self.assertIn('Tóm tắt cho Marketing', text)
         self.assertIn('❌', text)
+
+    def test_screen_logic_and_requirements_reach_summary_and_markdown(self):
+        report = {'load': 'Tải khi mở app', 'show': 'Hiện khi sẵn sàng', 'verified': True,
+                  'requirements': [{'text': 'Có gate', 'status': 'ok', 'note': 'đúng'}, {'text': 'Thoát khi lỗi', 'status': 'issue', 'note': 'kẹt'}]}
+        result = self.summary({'inter_splash': {'id': 'ca-app-pub-1/1'}},
+                              [{'rule_id': 'ADS_SPLASH_PLACEMENT', 'status': 'FAIL', 'screen_report': report}])
+        splash = result['screens'][0]
+        self.assertEqual(splash['logic'], {'load': 'Tải khi mở app', 'show': 'Hiện khi sẵn sàng', 'verified': True})
+        self.assertEqual([r['status'] for r in splash['requirements']], ['ok', 'issue'])
+        text = '\n'.join(marketing_markdown(result))
+        self.assertIn('Tải quảng cáo: Tải khi mở app', text)
+        self.assertIn('❌ Thoát khi lỗi — kẹt', text)
+        self.assertIsNone(result['screens'][1]['logic'])
+
+    def test_quota_and_engine_errors_get_plain_explanations_and_checklist_stays_visible(self):
+        placeholder = {'load': '', 'show': '', 'verified': False,
+                       'requirements': [{'text': 'Có gate', 'status': 'unknown', 'note': ''}]}
+        result = self.summary({}, [
+            {'rule_id': 'ADS_ONBOARDING_PLACEMENT', 'status': 'UNKNOWN', 'reason': 'repair_error',
+             'reasoning': "Codex CLI lỗi: You've hit your usage limit. Try again at 2:19 PM.", 'screen_report': placeholder},
+            {'rule_id': 'ADS_WELCOME_RESUME', 'status': 'UNKNOWN', 'reason': 'engine_error', 'reasoning': 'Codex CLI lỗi: exit 1',
+             'screen_report': placeholder}])
+        onboarding, welcome = result['screens'][2], result['screens'][3]
+        self.assertIn('hết hạn mức', onboarding['explanation'])
+        self.assertIn('lỗi khi gọi AI', welcome['explanation'])
+        self.assertEqual([r['status'] for r in onboarding['requirements']], ['unknown'])
+        self.assertEqual(len(welcome['requirements']), 1)
 
 
 if __name__ == '__main__':
