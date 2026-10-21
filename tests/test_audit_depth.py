@@ -214,6 +214,54 @@ class RangedEvidenceTests(unittest.TestCase):
         self.assertNotIn('"excerpt"', review.split('candidate')[1][:600])
 
 
+class FailGateTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        (self.root / 'Flow.java').write_text('if (enabled) load();\nonLoaded() { show(); }\n')
+        self.tools = WorkspaceTools(self.root)
+        self.rule = Rule('R', 'T', 'agent', budget={'max_tool_calls': 40})
+
+    def fail_payload(self, basis):
+        payload = verdict('FAIL')
+        payload['rule_id'] = 'R'
+        payload['claims'][0]['basis'] = basis
+        return payload
+
+    def run_fail(self, basis, profile):
+        payload = self.fail_payload(basis)
+        return evaluate(self.rule, self.tools, LiveReplay([payload, payload]), '', 40, profile=profile)
+
+    def test_absence_based_fail_needs_clean_decompiled_code(self):
+        obfuscated = {'obfuscation': 'cao', 'decompile_gap_files': 0}
+        clean = {'obfuscation': 'thấp', 'decompile_gap_files': 0}
+        gaps = {'obfuscation': 'thấp', 'decompile_gap_files': 3}
+        finding, _ = self.run_fail('behavior_absent', obfuscated)
+        self.assertEqual((finding.status, finding.reason), ('UNKNOWN', 'absence_not_conclusive'))
+        self.assertIn('FAIL từ bản nháp AI', finding.reasoning)
+        self.assertEqual(finding.verification['confidence'], 'thấp')
+        self.assertEqual(self.run_fail('behavior_absent', gaps)[0].status, 'UNKNOWN')
+        self.assertEqual(self.run_fail('behavior_absent', clean)[0].status, 'FAIL')
+
+    def test_visible_defect_stays_fail_even_when_obfuscated_and_missing_basis_is_legacy(self):
+        obfuscated = {'obfuscation': 'cao', 'decompile_gap_files': 2}
+        finding, _ = self.run_fail('defect_present', obfuscated)
+        self.assertEqual((finding.status, finding.verification['confidence']), ('FAIL', 'cao'))
+        payload = verdict('FAIL'); payload['rule_id'] = 'R'                      # replay payload without basis
+        legacy, _ = evaluate(self.rule, self.tools, LiveReplay([payload, payload]), '', 40, profile=obfuscated)
+        self.assertEqual(legacy.status, 'FAIL')
+        self.assertEqual(evaluate(self.rule, self.tools, LiveReplay([self.fail_payload('behavior_absent')] * 2), '', 40)[0].status, 'FAIL')
+
+    def test_repaired_or_absence_heavy_results_get_medium_confidence(self):
+        first = self.fail_payload('defect_present')
+        first['claims'][0]['evidence_indices'].append(53)       # forces a repair round
+        finding, trace = evaluate(self.rule, self.tools, LiveReplay([first, self.fail_payload('defect_present'),
+                                                                     self.fail_payload('defect_present')]), '', 40,
+                                  profile={'obfuscation': 'thấp', 'decompile_gap_files': 0})
+        self.assertEqual((finding.status, finding.verification['confidence']), ('FAIL', 'trung bình'))
+
+
 class ScreenReportTests(unittest.TestCase):
     checklist = ['Load inter khi vào', 'Thoát khi lỗi', 'Có gate UA']
 

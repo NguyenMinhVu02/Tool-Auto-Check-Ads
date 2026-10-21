@@ -6,6 +6,7 @@ screen verdicts from the matching rule. AI text is only shown as the rule's own 
 import re
 
 from .dev_view import STATUS_LABELS, STATUS_LEVELS
+from .placement_policy import config_key
 from .documents import normalize_ads_document
 
 SCREENS = (
@@ -87,11 +88,29 @@ def build_marketing_summary(documents, facts, inventory, findings):
     by_rule = {f['rule_id']: f for f in findings}
     screens, problems = [], []
     for key, title, rule_id, fragments in SCREENS:
-        names = sorted(name for name in documented.keys() | local.keys()
+        claimed = {config_key(name, local) for name in documented} - {None}
+        names = sorted(name for name in documented.keys() | (local.keys() - claimed)
                        if any(fragment in name.lower() for fragment in fragments))
-        placements = [_placement(name, documented.get(name), local.get(name), optional) for name in names]
+        placements = []
+        for name in names:
+            key = config_key(name, local)
+            item = _placement(name, documented.get(name), local.get(key) if key else None, optional)
+            if key and key != name:
+                item['app_name'] = key
+                item['status'] += f' (app đặt tên {key})'
+            elif not key and item['status'].startswith('Thiếu') and name in documented:
+                # Same family under another index (e.g. fullscreen_1_2 vs 1_3) is a naming difference to confirm, not proof of absence.
+                family = re.sub(r'(?:_\d+)+$', '', name)
+                similar = sorted(k for k in local.keys() - claimed if family and k.startswith(family + '_'))
+                if similar:
+                    item['candidates'] = similar
+                    item['status'] = ('Chưa khớp tên: tài liệu ghi ' + name + ', app có ' + ', '.join(similar)
+                                      + ' (cần xác nhận có phải cùng vị trí)')
+            placements.append(item)
         finding = by_rule.get(rule_id)
         flow_level, flow_label = VERDICTS.get(finding['status'], VERDICTS['UNKNOWN']) if finding else ('check', 'Chưa kiểm')
+        if finding and finding['status'] == 'FAIL' and (finding.get('verification') or {}).get('confidence') == 'trung bình':
+            flow_label += ' (nên dev xác nhận)'
         id_issues = sum(item['problem'] for item in placements)
         # One headline per screen: wrong IDs lose revenue even when the ad flow logic is fine.
         level = 'issue' if flow_level == 'issue' or id_issues else flow_level

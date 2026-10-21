@@ -34,6 +34,8 @@ Công cụ kiểm tra tự động cách một app Android tích hợp quảng c
 | **Luồng chung** | Khởi tạo SDK, Remote Config và fallback, nguồn ID trong code, load/observe, banner reload | AI đọc code |
 | **Lỗi chéo** *(tùy chọn)* | Lỗi chỉ xảy ra khi các luồng tác động lẫn nhau. Chậm hơn, tốn token, mặc định tắt | AI đọc code |
 
+Tên vị trí trong tài liệu và trong app đôi khi khác nhau: tool nhận các **tên tương đương đã biết** (hiện `inter_welcome_back` ↔ `inter_welcome`) và ghi rõ "app đặt tên …"; vị trí cùng nhóm nhưng khác chỉ số (ví dụ `fullscreen_1_2` so với `fullscreen_1_3`) được báo là **"chưa khớp tên, cần xác nhận"** thay vì "thiếu". Thêm cặp tương đương mới ở `PLACEMENT_ALIASES` trong `apk_audit/placement_policy.py`.
+
 Rule kiểm tra **tất định** chạy tức thì, không tốn token AI. Danh sách đầy đủ: `uv run apk-audit rules list`.
 
 ## Cài đặt (cho Dev)
@@ -69,10 +71,20 @@ Mã thoát `1` nghĩa là báo cáo có rule **Cần sửa**.
 
 ## Chọn AI và tiết kiệm token
 
-- **Claude Sonnet 5.5 (low)** và **Codex GPT-6 Sol (low)** đều cố định model, không tự đổi khi lỗi. Mỗi lượt dùng hạn mức của gói đăng ký, không tính tiền theo token.
+- **Claude Sonnet 5 (low)** và **Codex GPT-6 Sol (low)** đều cố định model, không tự đổi khi lỗi. Mỗi lượt dùng hạn mức của gói đăng ký, không tính tiền theo token.
 - Rule **Đạt/Cần sửa** đã có kết quả được **dùng lại** khi chạy lại cùng APK, tài liệu và engine; bản build mới cũng dùng lại nếu file code liên quan không đổi.
 - Hết hạn mức giữa chừng thì rule dở dang ra ❔ kèm lý do; chạy lại sau khi hạn mức làm mới.
 - Muốn xem nhanh ID và cấu hình mà không tốn token: dùng `--engine none`.
+
+## Độ tin cậy với APK bị làm rối
+
+Công cụ đọc mã **giải mã từ APK** (JADX), không phải mã nguồn gốc: tên lớp/hàm có thể bị đổi (R8/ProGuard) và một số hàm không giải mã được. Vì vậy:
+
+- **Chuỗi ký tự, manifest và file cấu hình trong assets không bị đổi tên** nên là căn cứ chắc chắn: thiếu hoặc sai ở đây mới báo ❌.
+- **Không thấy một tên hàm** chỉ báo ❌ khi mã *không* bị làm rối và không có file giải mã lỗi; ngược lại ra ❔ kèm lý do, không bị coi là lỗi.
+- Mỗi rule tĩnh ghi **Căn cứ** (manifest / file cấu hình / chuỗi trong mã / lời gọi hàm) và **giới hạn** (mức làm rối, số file giải mã lỗi); tab Dev cảnh báo khi mã bị làm rối vừa/cao. AI cũng nhận thông tin này và được yêu cầu không kết luận lỗi chỉ vì mất một tên hàm.
+- **Cổng chặn báo oan cho rule AI:** mỗi nhận định lỗi phải ghi `basis`: *defect_present* (đoạn code được dẫn thể hiện hành vi sai) hoặc *behavior_absent* (đã tìm nhưng không thấy). Kết quả ❌ chỉ chỉ dựa trên "không thấy" sẽ tự hạ thành ❔ khi mã bị làm rối hoặc có file giải mã lỗi; lỗi có đoạn code sai rõ ràng vẫn là ❌ và vẫn phải qua review độc lập. Reviewer được yêu cầu tự tìm lại hành vi bằng chuỗi/hằng số/import.
+- **Độ tin cậy** (cao / trung bình / thấp) hiện bên cạnh từng rule: *cao* khi đạt ngay lượt đầu và đủ căn cứ, *trung bình* khi phải sửa bằng chứng/điều tra thêm hoặc lỗi chỉ dựa trên việc không thấy, *thấp* với ❔. Màn Marketing ghi "nên dev xác nhận" khi ❌ chỉ ở mức trung bình.
 
 ## Giới hạn cần biết
 

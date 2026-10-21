@@ -6,7 +6,7 @@ from .engine_common import report_activity, verdict_schema
 from .utils import safe_path, read_text
 
 
-PROMPT_POLICY_VERSION = 'claims-review-11-batched-reads'
+PROMPT_POLICY_VERSION = 'claims-review-13-fail-gate'
 AUDIT_PROMPT = (
     'Lần đường đi mã từ nguồn cấu hình/ID qua load, callback thành công/lỗi, gate, observer, '
     'render/show và nhánh điều hướng khi phù hợp. Kiểm cả disabled, purchase, offline, timeout. '
@@ -28,6 +28,14 @@ AUDIT_PROMPT = (
     'được dẫn chứng trong path (ví dụ gate/callback, source/load, callback/navigation). '
     'Dẫn chính xác các nhánh quan trọng, điều kiện và call site; với hành vi bị thiếu nêu giới hạn tìm kiếm. '
     'Không suy từ việc không tìm thấy lexical hit thành hành vi không tồn tại. '
+    'Mã đến từ APK đã giải mã (JADX), không phải mã nguồn gốc: xem code_profile. Khi obfuscation là vừa/cao hoặc có '
+    'decompile_gap_files, tên lớp/hàm/biến có thể bị đổi và một số hàm không giải mã được, nên KHÔNG kết luận FAIL chỉ vì '
+    'không thấy một tên hàm; hãy lần theo chuỗi ký tự, hằng số, cấu trúc gọi và import (không đổi tên) để tìm hành vi tương '
+    'đương. FAIL chỉ khi thấy hành vi sai hoặc thiếu có bằng chứng ở mã đọc được, ngược lại UNKNOWN và nêu rõ phần bị che. '
+    'basis của mỗi claim: defect_present = chính đoạn code được dẫn thể hiện hành vi sai (ví dụ gate sai, lời gọi sai, '
+    'điều kiện thiếu nhánh) ; behavior_absent = bạn đã tìm hành vi cần có nhưng không thấy ; not_applicable cho claim '
+    'compliance/uncertain. Claim violation chỉ dựa trên việc không thấy (behavior_absent) rất dễ sai với mã bị làm rối: chỉ '
+    'dùng khi đã tìm bằng chuỗi/hằng số/import và code_profile cho thấy tên không bị đổi; nếu không hãy dùng kind uncertain. '
     'Xác định scope của claim theo đúng hợp đồng rule. unresolved chỉ chứa blocker chưa giải quyết '
     'trong scope đó: thiếu mã SDK/reflection/JNI/JADX hoặc điều kiện chưa biết cần thiết để kết luận '
     'claim phải đưa vào unresolved và verdict UNKNOWN. Claim khẳng định hành vi runtime chưa đo '
@@ -63,6 +71,9 @@ REVIEW_PROMPT = (
     'kể cả khi anchor khớp. Chỉ đọc thêm khi source_text thiếu gate/nhánh cần thiết. '
     'Review độc lập có mục tiêu cho kết quả FAIL bên dưới. Kiểm statement có thực sự suy ra '
     'từ excerpt trong context và hợp đồng rule; excerpt đúng không đồng nghĩa claim đúng. '
+    'Với claim violation có basis behavior_absent: tự tìm lại hành vi đó bằng chuỗi ký tự, hằng số, import và call site '
+    '(không dựa vào tên hàm); nếu code_profile cho thấy mã bị làm rối hoặc có file giải mã lỗi mà chưa tìm thấy chứng cứ '
+    'hành vi sai trong mã đọc được thì hạ claim thành uncertain. '
     'Thử bác bỏ violation qua applicability, gate/conditions, đường đi, callback, fallback, '
     'purchase/disabled/offline và SDK thiếu mã. Kiểm scope theo hợp đồng rule: unresolved là blocker '
     'trong scope, limitations là giới hạn ngoài scope. Chưa chạy runtime chỉ là limitation của một '
@@ -110,6 +121,38 @@ def _repair_feedback(payload, checked, verification, tools):
             'instruction': 'Sửa file/line/end_line/anchor (hoặc excerpt) và toàn bộ chỉ số claims/path; anchor phải nằm trong đoạn line..end_line. '
                            'Chỉ số ngoài catalog không có bằng chứng: đọc source để bổ sung hoặc sửa claim; '
                            'không tự dịch số hoặc xóa blocker. Trả JSON đầy đủ, không chỉ bản vá.'}
+
+
+def absence_conclusive(profile):
+    return (profile or {}).get('obfuscation') == 'thấp' and not (profile or {}).get('decompile_gap_files')
+
+
+def _gate_and_grade(finding, trace, profile, live):
+    """Deterministic last line of defence against false FAILs, plus a confidence grade.
+
+    A FAIL stands only if at least one supporting violation shows wrong code (defect_present) or
+    the decompiled code is clean enough for "not found" to be conclusive. Anything else is
+    downgraded to UNKNOWN with the AI's leaning kept visible.
+    """
+    if not live:
+        return
+    claims = finding.claims or []
+    supporting = [c for c, v in zip(claims, (finding.verification or {}).get('claims', []))
+                  if isinstance(c, dict) and v.get('supports_verdict') and c.get('kind') == 'violation']
+    bases = {c.get('basis') or 'defect_present' for c in supporting}   # legacy replays carry no basis
+    if finding.status == 'FAIL' and profile and 'defect_present' not in bases and not absence_conclusive(profile):
+        finding.status, finding.reason = 'UNKNOWN', 'absence_not_conclusive'
+    attempts = trace.get('attempts', [])
+    redone = any(a.get('repair') or a.get('investigation') for a in attempts)
+    absence_only = bool(supporting) and bases == {'behavior_absent'}
+    if finding.status == 'UNKNOWN':
+        grade = 'thấp'
+    elif redone or (absence_only and (profile or {}).get('obfuscation') not in {None, 'thấp'}):
+        grade = 'trung bình'
+    else:
+        grade = 'cao'
+    finding.verification = {**(finding.verification or {}), 'confidence': grade,
+                            'basis': 'AI đọc mã, dẫn chứng được tool kiểm' + (' và review độc lập' if finding.status == 'FAIL' else '')}
 
 
 def checklist_placeholder(checklist, state='unknown'):
@@ -230,7 +273,7 @@ def _verify_evidence(payload, tools):
     return checked
 
 
-def evaluate(rule, tools, engine, context, max_tool_calls=None):
+def evaluate(rule, tools, engine, context, max_tool_calls=None, profile=None):
     finding = Finding.for_rule(rule, resolved_by='agent:' + engine.name)
     live = bool(getattr(engine, 'requires_claims', False))
     finding.verification = {'valid': False, 'level': 'structure_and_evidence' if live else 'legacy_evidence_only',
@@ -242,6 +285,7 @@ def evaluate(rule, tools, engine, context, max_tool_calls=None):
     sessions = []
 
     def finish():
+        _gate_and_grade(finding, trace, profile, live)
         for used in sessions:
             try:
                 engine.close_session(used)

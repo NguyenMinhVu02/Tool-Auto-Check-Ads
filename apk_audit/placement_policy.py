@@ -3,6 +3,18 @@
 import unicodedata
 
 
+# Partner documents and the base config sometimes name the same placement differently.
+# Only add pairs known to be the same slot; positional names (e.g. fullscreen_1_2 vs 1_3) are NOT aliases.
+PLACEMENT_ALIASES = {'inter_welcome_back': ('inter_welcome',), 'inter_welcome': ('inter_welcome_back',)}
+
+
+def config_key(name, available):
+    """Config key that stands for a document placement name (itself, else a known alias), or None."""
+    if name in available:
+        return name
+    return next((alias for alias in PLACEMENT_ALIASES.get(name, ()) if alias in available), None)
+
+
 def label(value):
     text = unicodedata.normalize('NFKD', str(value)).replace('đ', 'd').replace('Đ', 'D')
     return ' '.join(''.join(c for c in text if not unicodedata.combining(c)).casefold().split())

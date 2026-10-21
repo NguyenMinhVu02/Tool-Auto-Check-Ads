@@ -2,7 +2,7 @@
 
 import re
 from xml.etree import ElementTree
-from .placement_policy import integration_policy, normalize_ads_document
+from .placement_policy import config_key, integration_policy, normalize_ads_document
 
 
 PACKAGE = re.compile(r"\b(?:[A-Za-z_][A-Za-z_0-9]*\.)+[A-Za-z_][A-Za-z_0-9]*\b")
@@ -48,9 +48,10 @@ def build_inventory(workspace, facts, documents, files=None):
     config = facts.get("assets", {}).get("json", {}).get("ad_config.json", {})
     if not isinstance(config, dict):
         config = {}
-    documented = {row["name"]: row for row in rows or [] if isinstance(row, dict) and row.get("name")}
-    expected = {key: row for key, row in documented.items() if row['state'] == 'active'}
     local = {key: value for key, value in config.items() if isinstance(value, dict) and "id" in value}
+    # Compare under the app's own placement name when the document uses a known alias.
+    documented = {(config_key(row["name"], local) or row["name"]): row for row in rows or [] if isinstance(row, dict) and row.get("name")}
+    expected = {key: row for key, row in documented.items() if row['state'] == 'active'}
     optional = {key for key in documented.keys() | local.keys() if key.casefold() == 'inter_onboarding'}
     shared = sorted(expected.keys() & local.keys())
     expected_package = _working_package(documents)

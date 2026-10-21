@@ -147,8 +147,8 @@ footer{text-align:center;color:#9eacc0;font-size:10px;padding-top:10px}
 .dev-rule.level-ok{border-left-color:#26c593}.dev-rule.level-issue{border-left-color:#e5484d}.dev-rule.level-check{border-left-color:#f5a524}
 .marketing-screen.level-skip{border-left-color:#98a2b3}
 
-.screen-logic{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-radius:8px;background:#f0f5ff}
+.screen-logic{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-radius:8px;background:#f0f5ff;color:#1d2939}
+.screen-logic .ant-typography-secondary{color:#52607a!important}
 .screen-requirements ul{margin:4px 0 0;padding-left:0;list-style:none}
 .screen-requirements li{padding:2px 0}
 .req-issue{color:#b42318}
-@media (prefers-color-scheme:dark){.screen-logic{background:#1b2740}.req-issue{color:#ff8a80}}

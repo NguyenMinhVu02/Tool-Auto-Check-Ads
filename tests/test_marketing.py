@@ -65,6 +65,31 @@ class MarketingSummaryTests(unittest.TestCase):
         self.assertEqual([r['status'] for r in onboarding['requirements']], ['unknown'])
         self.assertEqual(len(welcome['requirements']), 1)
 
+    def test_document_name_with_known_alias_matches_the_app_placement(self):
+        result = self.summary({'inter_welcome': {'id': 'ca-app-pub-1/4'}, 'inter_splash': {'id': 'ca-app-pub-1/1'},
+                               'banner_splash': {'id': 'ca-app-pub-1/2'}})
+        welcome = result['screens'][3]
+        self.assertEqual([p['name'] for p in welcome['placements']], ['inter_welcome_back'])   # one row, no duplicate
+        row = welcome['placements'][0]
+        self.assertEqual((row['problem'], row['app_name'], row['app_id']), (False, 'inter_welcome', 'ca-app-pub-1/4'))
+        self.assertIn('app đặt tên inter_welcome', row['status'])
+        self.assertFalse([p for p in result['id_problems'] if p['name'] == 'inter_welcome_back'])
+        wrong = self.summary({'inter_welcome': {'id': 'ca-app-pub-1/9'}})
+        self.assertEqual([p['status'] for p in wrong['id_problems'] if 'welcome' in p['name']],
+                         ['Sai ID: app khác ADS SCRIPTS (app đặt tên inter_welcome)'])
+
+    def test_same_family_under_another_index_is_a_naming_question_not_plain_missing(self):
+        documents = {'ads_scripts': {'placements': [
+            {'name': 'native_onboarding_fullscreen_1_2', 'ad_type': 'native', 'id': 'ca-app-pub-1/5', 'state': 'active'},
+            {'name': 'native_other', 'ad_type': 'native', 'id': 'ca-app-pub-1/6', 'state': 'active'}]}}
+        facts = {'assets': {'json': {'ad_config.json': {'native_onboarding_fullscreen_1_3': {'id': 'ca-app-pub-1/7'}}}}}
+        result = build_marketing_summary(documents, facts, {'optional_placements': []}, [])
+        rows = {p['name']: p for s in result['screens'] for p in s['placements']}
+        row = rows['native_onboarding_fullscreen_1_2']
+        self.assertTrue(row['status'].startswith('Chưa khớp tên'))
+        self.assertEqual(row['candidates'], ['native_onboarding_fullscreen_1_3'])
+        self.assertIn('cần xác nhận', row['status'])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -70,10 +70,10 @@ class CustomRuleTests(unittest.TestCase):
                     params={'required': ['ad_remote_config', 'on_show_dialog_consent'], 'optional': ['on_show_navigation_button']})
         facts = {'source': {'package': 'demo.app'}}
         self.write_source('demo/app/Remote.java', 'class R { static final String A = "ad_remote_config"; }\n')
-        self.write_source('lib/Other.java', 'String B = "on_show_dialog_consent";\n')  # library code does not count
         finding = evaluate_static(rule, facts, {}, workspace=self.root)
         self.assertEqual((finding.status, finding.actual['missing']), ('FAIL', ['on_show_dialog_consent']))
-        self.write_source('demo/app/Remote.java', 'String A = "ad_remote_config"; String B = "on_show_dialog_consent";\n')
+        # The code package often differs from the applicationId (templates, obfuscation): any source counts.
+        self.write_source('com/template/Other.java', 'String B = "on_show_dialog_consent";\n')
         finding = evaluate_static(rule, facts, {}, workspace=self.root)
         self.assertEqual((finding.status, finding.evidence[0]['line']), ('PASS', 1))
 
@@ -144,6 +144,54 @@ class CustomRuleTests(unittest.TestCase):
         self.assertEqual(evaluate_static(rule, {}, {}, workspace=self.root).status, 'PASS')
         manifest.write_text('<manifest')
         self.assertEqual(evaluate_static(rule, {}, {}, workspace=self.root).status, 'UNKNOWN')
+
+    def test_obfuscated_dev_toggle_is_unknown_not_fail(self):
+        rule = Rule('D', 'Dev', 'static', check='language_dev_toggle', params={'marker': 'setOnAdminAdToggleListener'})
+        self.write_source('com/itg/devconfig/Dialog.java', 'class Dialog {}\n')
+        self.write_source('com/itg/template/ui/language/LanguageActivity.java',
+                          'class LanguageActivity {\n  void f() { tvTitle.setOnTouchListener(new p.a(h, t)); }\n}\n')
+        finding = evaluate_static(rule, {}, {}, workspace=self.root)
+        self.assertEqual((finding.status, finding.reason, finding.evidence[0]['line']), ('UNKNOWN', 'obfuscated', 2))
+        (self.root / 'sources/com/itg/template/ui/language/LanguageActivity.java').write_text('class LanguageActivity {}\n')
+        self.assertEqual(evaluate_static(rule, {}, {}, workspace=self.root).status, 'FAIL')
+
+    def obfuscate(self, count=12):
+        for index in range(count):
+            self.write_source(f'x/{chr(97 + index)}.java', 'class A {}\n')   # one/two-letter class names
+
+    def test_absence_of_names_is_inconclusive_when_code_is_obfuscated_but_literals_still_decide(self):
+        interval = Rule('I', 'Interval', 'static', check='interstitial_interval', params={'seconds': 35})
+        toggle = Rule('D', 'Dev', 'static', check='language_dev_toggle', params={'marker': 'setOnAdminAdToggleListener'})
+        keys = Rule('K', 'Keys', 'static', check='remote_config_keys', params={'required': ['ad_remote_config']})
+        self.write_source('demo/app/LanguageActivity.java', 'class LanguageActivity {}\n')
+        self.write_source('demo/app/Other.java', 'class Other {}\n')
+        facts = {'source': {'package': 'demo.app'}}
+        low = {r.check: evaluate_static(r, facts, {}, workspace=self.root) for r in (interval, toggle, keys)}
+        self.assertEqual({k: v.status for k, v in low.items()},
+                         {'interstitial_interval': 'FAIL', 'language_dev_toggle': 'FAIL', 'remote_config_keys': 'FAIL'})
+        self.obfuscate()
+        from apk_audit.rules import code_facts
+        code_facts._cache.clear()
+        high = {r.check: evaluate_static(r, facts, {}, workspace=self.root) for r in (interval, toggle, keys)}
+        self.assertEqual(high['interstitial_interval'].status, 'UNKNOWN')
+        self.assertEqual(high['language_dev_toggle'].status, 'UNKNOWN')
+        self.assertEqual(high['remote_config_keys'].status, 'FAIL')           # a missing string is still a defect
+        self.assertEqual(high['remote_config_keys'].verification['confidence'], 'cao')
+        self.assertEqual(high['interstitial_interval'].verification['confidence'], 'thấp')
+        self.assertIn('mức làm rối cao', high['interstitial_interval'].verification['limits'])
+
+    def test_missing_literal_is_unknown_when_app_code_failed_to_decompile(self):
+        from apk_audit.rules import code_facts
+        keys = Rule('K', 'Keys', 'static', check='remote_config_keys', params={'required': ['ad_remote_config']})
+        self.write_source('demo/app/Broken.java', '/* JADX WARN: Code restructure failed: missing block */\nclass Broken {}\n')
+        self.write_source('lib/Lib.java', '/* Method dump skipped */\nclass Lib {}\n')   # library gaps are not the app's
+        code_facts._cache.clear()
+        facts = {'source': {'package': 'demo.app'}}
+        finding = evaluate_static(keys, facts, {}, workspace=self.root)
+        self.assertEqual((finding.status, finding.reason), ('UNKNOWN', 'decompile_gaps'))
+        (self.root / 'sources/demo/app/Broken.java').write_text('class Broken { String k = "ad_remote_config"; }\n')
+        code_facts._cache.clear()
+        self.assertEqual(evaluate_static(keys, facts, {}, workspace=self.root).status, 'PASS')
 
 
 if __name__ == '__main__':

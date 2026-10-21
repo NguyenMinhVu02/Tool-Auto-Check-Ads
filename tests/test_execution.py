@@ -292,7 +292,7 @@ class CacheIdentityTests(unittest.TestCase):
         with patch('apk_audit.cache_identity.cli_version',return_value='Claude 2'):
             identity,reusable=engine_identity(ClaudeEngine())
         self.assertTrue(reusable)
-        self.assertEqual(identity['model'],'claude-sonnet-5-5')
+        self.assertEqual(identity['model'],'claude-sonnet-5')
         self.assertEqual(identity['reasoning_effort'],'low')
 
     def test_cli_upgrade_is_seen_by_next_job_in_same_server(self):

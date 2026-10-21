@@ -17,10 +17,10 @@ from .errors import AuditError
 
 
 class ClaudeEngine:
-    model = 'claude-sonnet-5-5'
+    model = 'claude-sonnet-5'
     reasoning_effort = 'low'
     name = f'claude:{model}:{reasoning_effort}'
-    label = 'Claude CLI (Sonnet 5.5 · low)'
+    label = 'Claude CLI (Sonnet 5 · low)'
     requires_claims = True
     # Follow-up repair/investigation turns continue the rule's own session, so the
     # long audit prompt and the code already read stay in the prompt cache.

@@ -21,6 +21,7 @@ GROUPS = (
 OTHER = ('other', 'Khác')
 
 REASON_LABELS = {
+    'absence_not_conclusive': 'AI nghi có lỗi do không thấy hành vi cần có, nhưng mã bị làm rối/giải mã lỗi nên chưa thể kết luận lỗi',
     'unverified_evidence': 'AI dẫn chứng chưa khớp code, kết quả bị chặn để tránh kết luận sai',
     'unverified_claims': 'Nhận định của AI chưa được dẫn chứng đủ chặt',
     'engine_error': 'Lỗi khi gọi AI (CLI lỗi, hết quota hoặc quá thời gian)',
@@ -32,6 +33,7 @@ REASON_LABELS = {
     'tool_budget': 'Hết ngân sách đọc code',
     'global_budget': 'Hết ngân sách đọc code của cả lượt audit',
     'missing_fact': 'Thiếu dữ liệu cần thiết trong APK',
+    'obfuscated': 'Mã bị làm rối (đổi tên hàm), cần dev xác nhận thủ công',
     'invalid_json': 'AI trả kết quả sai định dạng',
     'engine_disabled': 'Chưa bật AI cho lượt này',
     'not_applicable_by_document': 'Tài liệu xác định không dùng phần này',
@@ -111,6 +113,9 @@ def rule_view(finding, id_problem_count=0):
         'verified': _short(sections.get('Đã đúng', ''), 400) if status != 'PASS' else '',
         'unverified': _short(sections.get('Chưa xác minh', ''), 400),
         'tool_calls': finding.get('tool_calls', 0), 'mode': finding.get('mode'),
+        'basis': (finding.get('verification') or {}).get('basis') or ('AI đọc mã, dẫn chứng được tool kiểm' if finding.get('mode') == 'agent' else ''),
+        'limits': (finding.get('verification') or {}).get('limits') or '',
+        'confidence': (finding.get('verification') or {}).get('confidence') or '',
     }
     if status == 'UNKNOWN':
         view['unknown_reason'] = REASON_LABELS.get(reason, 'Chưa đủ căn cứ trong mã để kết luận' if not reason else reason)
@@ -157,5 +162,8 @@ def dev_markdown(view):
                 lines += ['- Vị trí code: ' + ', '.join(f'`{loc}`' for loc in rule['locations'])]
             if rule['unverified']:
                 lines += [f"- Chưa xác minh: {rule['unverified']}"]
+            if rule.get('basis'):
+                lines += [f"- Căn cứ: {rule['basis']}" + (f" ({rule['limits']})" if rule.get('limits') else '')
+                          + (f" · độ tin cậy {rule['confidence']}" if rule.get('confidence') else '')]
             lines.append('')
     return lines

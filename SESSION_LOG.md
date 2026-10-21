@@ -28,6 +28,37 @@
 
 ## Lịch sử phiên
 
+### 2026-10-21 20:10 — Alias tên placement (Asia/Ho_Chi_Minh)
+
+- Báo oan: tài liệu ghi `inter_welcome_back`, app (ad_config + ad_config_debug) dùng `inter_welcome` nên báo "Thiếu". Thêm `PLACEMENT_ALIASES`/`config_key` (placement_policy.py): inventory so sánh theo tên của app, marketing hiện một dòng "Đúng ID (app đặt tên inter_welcome)", ADS_CONFIG_FLAGS cũng ghép theo alias. Vị trí cùng họ khác chỉ số (fullscreen_1_2 vs 1_3/1_4 của app huyết áp) giờ báo "Chưa khớp tên … cần xác nhận cùng vị trí" kèm danh sách `candidates`, không còn "Thiếu". Trên job 4f31f8ec: ID có vấn đề 3 → 2 (chỉ còn hai fullscreen_*_2 cần xác nhận tên). 227/227 test; server restart. Chưa commit.
+
+### 2026-10-21 19:40 — Cổng chặn báo oan cho rule AI và độ tin cậy (Asia/Ho_Chi_Minh)
+
+- Yêu cầu: hạn chế bắt lỗi nhầm ở cả các rule AI/sau này nhưng vẫn chính xác, đáng tin.
+- Đã làm: (1) claim có `basis` bắt buộc (defect_present | behavior_absent | not_applicable); prompt giải thích, claim violation chỉ dựa trên "không thấy" chỉ dùng khi tên không bị đổi. (2) `agent._gate_and_grade`: FAIL chỉ giữ nếu có ≥1 claim violation hỗ trợ verdict với defect_present, hoặc code_profile sạch (làm rối thấp, 0 file app lỗi); ngược lại hạ UNKNOWN reason `absence_not_conclusive` (giữ "AI nghiêng về…"); replay cũ không có basis coi là defect_present; không có profile (offline) giữ nguyên. (3) Reviewer: claim behavior_absent phải tự tìm lại bằng chuỗi/hằng số/import, nếu mã làm rối/lỗi giải mã mà chưa có chứng cứ hành vi sai thì hạ uncertain. (4) Độ tin cậy cao/trung bình/thấp cho cả rule AI (verification.confidence): cao = không phải sửa/điều tra, trung bình = có sửa bằng chứng/điều tra hoặc lỗi chỉ dựa trên vắng mặt khi mã làm rối, thấp = UNKNOWN; static dùng cao/thấp; hiển thị ở tab Dev, report.md, HTML; Marketing ghi "(nên dev xác nhận)" khi ❌ trung bình. rule_policy có absence_gate để cache đúng. claims-review-13-fail-gate.
+- Kiểm: 224/224 test (thêm 3 test gate/confidence); build đạt; server restart. Chưa chạy AI thật với prompt/schema mới; chưa commit. Ý tưởng tiếp: nút "Đánh dấu báo oan" lưu phản hồi để hiệu chỉnh/loại trừ ở lượt sau.
+
+### 2026-10-21 19:00 — Chuẩn hóa kết luận với APK bị làm rối (Asia/Ho_Chi_Minh)
+
+- Yêu cầu: hạn chế báo oan/cảm tính vì input là APK giải mã chứ không phải mã nguồn rõ.
+- Nguyên tắc: chuỗi ký tự, manifest, asset JSON không bị đổi tên → căn cứ chắc; vắng một TÊN hàm chỉ là lỗi khi mã ít làm rối và không có file giải mã lỗi. `rules/code_facts.py`: `code_profile` (tỉ lệ tên lớp ≤2 ký tự → làm rối thấp/vừa/cao; file của app có "Code restructure failed|Method dump skipped|…"; thư viện không tính), `app_roots` (package manifest + package Application class), `absence_is_conclusive`. Áp dụng: REMOTE_KEYS (thiếu chuỗi + file app giải mã lỗi → UNKNOWN decompile_gaps), INTERSTITIAL_INTERVAL và LANGUAGE_DEV_TOGGLE (vắng tên hàm: FAIL chỉ khi làm rối thấp, còn lại UNKNOWN obfuscated). Mọi rule tĩnh ghi `verification.basis/limits/confidence`; Dev view/report.md hiện "Căn cứ"; `report.code_profile` + cảnh báo trong tab Dev khi làm rối ≠ thấp hoặc có file lỗi. AI nhận `code_profile` trong context + prompt claims-review-12 (không FAIL chỉ vì mất tên hàm, lần theo chuỗi/hằng số/import).
+- Kiểm: 221/221 test (thêm 2 test); trên app huyết áp: CONFIG_FLAGS/DEBUG_TEST_IDS FAIL (confirmed), REMOTE_KEYS PASS, SCREEN_NAMES/ORIENTATION PASS, DEV_TOGGLE và INTERVAL UNKNOWN (inconclusive, làm rối cao 48%, 0 file lỗi trong app). Chưa kiểm AI với prompt mới; chưa commit.
+
+### 2026-10-21 18:00 — Đọc job f19b53b6 (Sonnet 5 low), sửa UI và báo oan rule tĩnh (Asia/Ho_Chi_Minh)
+
+- Job f19b53b6 (com.blood.pressure…, Claude Sonnet 5 low, 6 workers): 9 PASS / 5 FAIL / 2 UNKNOWN, 323s (rules 262s), 139 tool calls, cache read 3.73M, cache write 459K, output 105K; AI rules 9/9 gần hết 1–3 lượt (resume dùng ở 7 rule). Tốt nhất từ trước tới giờ. Job f8864b4b bị gián đoạn do restart server đúng lúc người dùng bấm chạy.
+- Phát hiện báo oan của rule tĩnh với app này (applicationId com.blood… nhưng code ở com.itg.template, mã bị làm rối): ADS_REMOTE_KEYS FAIL (thực tế đủ 4 key trong com/itg/template), ADS_INTERSTITIAL_INTERVAL UNKNOWN, ADS_LANGUAGE_DEV_TOGGLE FAIL (thực tế tvTitle.setOnTouchListener của lib devconfig bị đổi tên). Đã sửa: quét toàn bộ sources thay vì chỉ thư mục package manifest; dev toggle không thấy tên hàm mà có listener trên tiêu đề + thư viện devconfig → UNKNOWN reason `obfuscated`; interval ghi chú tên hàm có thể bị làm rối. Kiểm lại trên app: REMOTE_KEYS PASS, DEV_TOGGLE UNKNOWN(obfuscated), INTERVAL UNKNOWN.
+- Giữ nguyên các FAIL thật: ADS_DEBUG_TEST_IDS (ad_config.json release có 9 placement dùng ID demo Google), ADS_CONFIG_FLAGS (banner_home/native_home isEnable false trong khi ADS SCRIPTS active; inter_onboarding enable_ua_check true), REMOTE_FALLBACK FAIL (AI: AdRemoteConfig.initialize bỏ qua json, luôn fromAssets release).
+- UI: khung "Logic hiện tại" bị nền xanh đậm do media query dark-mode trong khi app giao diện sáng → chữ đen khó đọc; đã bỏ media query, nền sáng #f0f5ff chữ đậm. 219/219 test; server restart. Chưa commit.
+
+### 2026-10-21 17:15 — Claude đổi sang Sonnet 5 low (Asia/Ho_Chi_Minh)
+
+- Theo yêu cầu: Claude `claude-haiku-5-5` → `claude-sonnet-5` (low; id `claude-sonnet-5-0` không tồn tại, `claude-sonnet-5` trả OK). 218/218 test, build đạt, server restart; nhãn Haiku/Sonnet 5.5 giữ cho báo cáo cũ. Chưa đo chất lượng/token; chưa commit.
+
+### 2026-10-21 17:00 — Claude đổi sang Haiku 5.5 low (Asia/Ho_Chi_Minh)
+
+- Theo yêu cầu (tiết kiệm token): Claude `claude-sonnet-5-5` → `claude-haiku-5-5` (effort low). claude_engine.py, cli help, README, UI (nhãn Sonnet giữ cho báo cáo cũ), 3 test. Kiểm `claude -p --model claude-haiku-5-5` trả OK. 218/218 test, build đạt, server restart. Lưu ý: lần thử Haiku cũ (20/10, prompt/evidence cũ) cho 0 PASS/2 FAIL/9 UNKNOWN; định dạng evidence mới chưa kiểm với Haiku. Cache Claude Sonnet không dùng lại. Chưa commit thay đổi này (nhánh feat/readable-fast-cheap-audit đã push f637e3b).
+
 ### 2026-10-21 16:30 — Viết lại README, commit và push (Asia/Ho_Chi_Minh)
 
 - README mới ngắn gọn cho MKT và Dev (dùng nhanh, đọc báo cáo, công cụ kiểm tra gì, cài đặt, dòng lệnh, chọn AI/tiết kiệm token, giới hạn). README cũ giữ nguyên nội dung tại docs/technical-reference.md. Commit toàn bộ thay đổi của nhánh feat/readable-fast-cheap-audit và push theo yêu cầu người dùng.

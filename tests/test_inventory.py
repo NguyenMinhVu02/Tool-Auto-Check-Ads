@@ -73,3 +73,13 @@ class InventoryTests(unittest.TestCase):
             result = build_inventory(root, facts, docs)
             self.assertTrue(result['package_match'])
             self.assertTrue(result['app_id_match'])
+
+
+class AliasTests(unittest.TestCase):
+    def test_known_alias_between_document_and_config_is_not_reported_missing_or_extra(self):
+        with tempfile.TemporaryDirectory() as temp:
+            facts = {"assets": {"json": {"ad_config.json": {"inter_welcome": {"id": "ca-app-pub-1/4"}}}}, "source": {}}
+            docs = {"ads_scripts": {"placements": [{"name": "inter_welcome_back", "id": "ca-app-pub-1/4", "state": "active"}]}}
+            inventory = build_inventory(Path(temp), facts, docs)
+            self.assertEqual((inventory["missing_local"], inventory["extra_local"], inventory["matching_ids"]),
+                             ([], [], ["inter_welcome"]))

@@ -72,7 +72,8 @@ def _dev(view, findings):
     for group in view['groups']:
         out.append(f"<h3>{escape(group['title'])}</h3>")
         for rule in group['rules']:
-            parts = [f"<h3>{escape(rule['title'] or rule['rule_id'])} {_tag(rule['level'], rule['status_label'])}</h3>",
+            conf = f" {_tag('muted', 'Độ tin cậy: ' + rule['confidence'])}" if rule.get('confidence') else ''
+            parts = [f"<h3>{escape(rule['title'] or rule['rule_id'])} {_tag(rule['level'], rule['status_label'])}{conf}</h3>",
                      f"<div>{escape(rule['conclusion'])}</div>"]
             if rule.get('unknown_reason') and rule['status'] != 'PASS':
                 parts.append(f"<div class=\"muted\">Lý do: {escape(rule['unknown_reason'])}</div>")

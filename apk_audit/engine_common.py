@@ -29,9 +29,10 @@ def verdict_schema():
         'path': {'type': 'array', 'items': {'type': 'object', 'properties': {
             'role': {'type': 'string'}, 'evidence_indices': refs},
             'required': ['role', 'evidence_indices'], 'additionalProperties': False}},
-        'conditions': text_list, 'unresolved': text_list, 'limitations': text_list},
+        'conditions': text_list, 'unresolved': text_list, 'limitations': text_list,
+        'basis': {'type': 'string', 'enum': ['defect_present', 'behavior_absent', 'not_applicable']}},
         'required': ['id', 'statement', 'kind', 'evidence_indices', 'scope', 'applicability',
-                     'path', 'conditions', 'unresolved', 'limitations'], 'additionalProperties': False}
+                     'path', 'conditions', 'unresolved', 'limitations', 'basis'], 'additionalProperties': False}
     return {
         'type': 'object',
         'properties': {

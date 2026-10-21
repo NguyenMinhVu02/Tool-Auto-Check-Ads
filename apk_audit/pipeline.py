@@ -19,6 +19,7 @@ from .errors import AuditError
 from .facts import build_facts
 from .inventory import build_inventory, inventory_observations
 from .agent import checklist_placeholder
+from .rules.code_facts import app_roots, code_profile
 from .dev_view import build_dev_view
 from .passed_history import PassedHistory
 from .flow_map import build_flow_map
@@ -197,6 +198,8 @@ def run(target, *, rules=None, out=None, engine="codex", only=None, cache_dir=No
         "config_references", "code_references", "package_match", "app_id_match",
         "optional_placements", "disabled_placements", "uncertain_placements", "integration_policy", "document_warnings")}
     flow_map_json = json.dumps(build_flow_map(workspace, facts, workspace_files), ensure_ascii=False)
+    profile_data = code_profile(workspace, app_roots(facts))
+    profile_json = json.dumps({k: v for k, v in profile_data.items() if k != 'gap_samples'}, ensure_ascii=False)
 
     def context_for(rule):
         # Rule-scoped slices: smaller prompts on every tool turn, less unrelated noise.
@@ -204,7 +207,8 @@ def run(target, *, rules=None, out=None, engine="codex", only=None, cache_dir=No
                 + json.dumps(scope_documents(documents, rule.area), ensure_ascii=False)
                 + "\nDeterministic inventory (config local, chưa chứng minh runtime; lọc theo phạm vi rule):\n"
                 + json.dumps(scope_inventory(inventory_context, rule.area), ensure_ascii=False)
-                + "\nflow_map (điểm bắt đầu đọc code):\n" + flow_map_json)
+                + "\nflow_map (điểm bắt đầu đọc code):\n" + flow_map_json
+                + "\ncode_profile (độ tin cậy của việc 'không tìm thấy' trong mã giải mã):\n" + profile_json)
     noncacheable = {"engine_error", "global_budget", "tool_budget", "invalid_json", "invalid_tool_count",
                     "unverified_evidence", "unverified_claims", "review_error", "review_budget", "review_incomplete", "invalid_review", "repair_error", "repair_invalid_result", "investigation_invalid_result", "wrong_rule_id", "invalid_status"}
 
@@ -236,7 +240,8 @@ def run(target, *, rules=None, out=None, engine="codex", only=None, cache_dir=No
         bundle = source_index.bundle(rule, facts, inventory, max_chars=rule.budget.get('context_chars', BUNDLE_CHARS))
         reference = {'source': pack.references.get('source', {}), 'rule': pack.references.get('rules', {}).get(rule.id, {})}
         rule_policy = {**policy, "bundle_policy":bundle.get("policy"), 'base_reference': digest_json(reference),
-                       'context_scope': SCOPE_VERSION}
+                       'context_scope': SCOPE_VERSION,
+                       'absence_gate': profile_data['obfuscation'] == 'thấp' and not profile_data['decompile_gap_files']}
         key = cache.key(facts, pack, rule, adapter.name, documents, dependencies=prior, policy=rule_policy, identity=identity)
         finding = None
         run_trace = {}
@@ -272,7 +277,7 @@ def run(target, *, rules=None, out=None, engine="codex", only=None, cache_dir=No
                 context += '\nbase_reference (mã mẫu để hiểu logic, KHÔNG phải evidence của APK; integration_policy và rule hiện tại có ưu tiên):\n' + json.dumps(reference, ensure_ascii=False)
             if prior is not None:
                 context += "\nCác finding đã kiểm trước, kèm claim/evidence; rà mâu thuẫn, tránh lặp lỗi:\n" + json.dumps(prior, ensure_ascii=False)
-            finding, run_trace = evaluate(rule,tools,adapter,context,allocation)
+            finding, run_trace = evaluate(rule,tools,adapter,context,allocation,profile=profile_data)
             if rule.params.get("checklist") and not finding.screen_report:
                 finding.screen_report = checklist_placeholder(rule.params["checklist"])
             if reusable and adapter.name != "none" and finding.reason not in noncacheable:
@@ -351,6 +356,7 @@ def run(target, *, rules=None, out=None, engine="codex", only=None, cache_dir=No
         "engine":adapter.name,"docs_provided":{k:k in documents for k in ("ads_scripts","checklist")},"summary":summary,
         "findings":findings,"inventory":inventory,"observations":inventory_observations(inventory),"metrics":metrics,
         "marketing":marketing,"dev_view":build_dev_view(findings,marketing),
+        "code_profile":code_profile(workspace,app_roots(facts)),
         "warnings":warnings,"output":str(output),"tool_versions":facts["tool_versions"]}
     phase("report")
     passed_history.record(report, apk_sha)

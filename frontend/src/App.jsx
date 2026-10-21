@@ -264,9 +264,10 @@ function DevView({ view }) {
           </Space>}>
           {group.rules.map((rule) => (
             <div className={`dev-rule level-${rule.level}`} key={rule.rule_id}>
-              <Space size={8} wrap><Tag color={levelTags[rule.level]}>{rule.status_label}</Tag><Text strong>{rule.title || rule.rule_id}</Text></Space>
+              <Space size={8} wrap><Tag color={levelTags[rule.level]}>{rule.status_label}</Tag><Text strong>{rule.title || rule.rule_id}</Text>{rule.confidence && <Tag color={rule.confidence === 'cao' ? 'green' : rule.confidence === 'trung bình' ? 'gold' : 'default'}>Độ tin cậy: {rule.confidence}</Tag>}</Space>
               {rule.conclusion && <div>{rule.conclusion}</div>}
               {rule.unknown_reason && rule.status !== 'PASS' && <Text type="secondary">Lý do: {rule.unknown_reason}</Text>}
+              {rule.basis && <Text type="secondary" className="rule-basis">Căn cứ: {rule.basis}{rule.limits ? ` (${rule.limits})` : ''}</Text>}
               {rule.fixes && <div><Text strong>Cần sửa: </Text>{rule.fixes}</div>}
               {rule.locations.length > 0 && <div><Text strong>Vị trí code: </Text>{rule.locations.map((loc) => <Text code key={loc} copyable>{loc}</Text>)}</div>}
               {(rule.verified || rule.unverified) && <Collapse ghost size="small" items={[{ key: 'more', label: 'Đã đúng / chưa xác minh',
@@ -582,8 +583,10 @@ export default function App() {
     'codex:gpt-6-sol:low': 'Codex GPT-6 Sol · low',
     'codex:gpt-6.1-sol:low': 'Codex GPT-6.1 Sol · low (báo cáo cũ)',
     'codex:gpt-6.1-sol:medium': 'Codex GPT-6.1 Sol · medium (báo cáo cũ)',
-    'claude:claude-sonnet-5-5:medium': 'Claude Sonnet 5.5 · medium',
+    'claude:claude-sonnet-5:low': 'Claude Sonnet 5 · low',
     'claude:claude-haiku-5-5:low': 'Claude Haiku 5.5 · low (báo cáo cũ)',
+    'claude:claude-sonnet-5-5:low': 'Claude Sonnet 5.5 · low (báo cáo cũ)',
+    'claude:claude-sonnet-5-5:medium': 'Claude Sonnet 5.5 · medium (báo cáo cũ)',
     'codex:gpt-6-luna': 'Codex GPT-6 Luna (báo cáo cũ)',
     'claude:default': 'Claude (model mặc định cũ)',
   };
@@ -632,7 +635,7 @@ export default function App() {
                 onChange={setSelectedEngine} options={engines.map((item) => ({ value: item.id, label: `${item.label}${item.installed ? '' : ' — chưa cài'}`, disabled: !item.installed }))} />
               <Button onClick={refreshEngines} loading={enginesLoading} disabled={busy}>Phát hiện lại</Button>
             </Space>
-            <Text type="secondary">CLI cần được đăng nhập sẵn. Claude cố định Sonnet 5.5 / low; Codex dùng GPT-6 Sol / low.</Text>
+            <Text type="secondary">CLI cần được đăng nhập sẵn. Claude cố định Haiku 5.5 / low; Codex dùng GPT-6 Sol / low.</Text>
             {engineError && <Alert type="error" showIcon message={engineError} />}
             {!enginesLoading && !engineError && !selectedEngine && <Alert type="warning" showIcon message="Cài và đăng nhập Codex CLI hoặc Claude CLI, sau đó khởi động lại server nếu PATH thay đổi và bấm Phát hiện lại." />}
           </div>
@@ -673,6 +676,9 @@ export default function App() {
           {report ? <Tabs className="report-tabs" defaultActiveKey="marketing" items={[
             { key: 'marketing', label: 'Marketing', children: report.marketing ? <MarketingSummary data={report.marketing} jobId={job.id} /> : <Empty description="Báo cáo này chưa có tóm tắt Marketing" /> },
             { key: 'dev', label: 'Dev', children: <>
+              {report.code_profile && (report.code_profile.obfuscation !== 'thấp' || report.code_profile.decompile_gap_files > 0) && <Alert type="warning" showIcon style={{ marginBottom: 12 }}
+                message={`Mã đã giải mã bị làm rối mức ${report.code_profile.obfuscation} (${Math.round(100 * report.code_profile.short_name_ratio)}% tên lớp ≤2 ký tự)${report.code_profile.decompile_gap_files ? `, ${report.code_profile.decompile_gap_files} file của app giải mã lỗi` : ''}`}
+                description="Tên hàm/lớp có thể bị đổi nên 'không tìm thấy' không đồng nghĩa app thiếu. Tool chỉ báo Cần sửa khi có bằng chứng rõ (chuỗi ký tự, manifest, file cấu hình, hành vi đọc được); phần còn lại ghi Cần dev xem lại." />}
               {report.dev_view && <DevView view={report.dev_view} />}
           {report?.metrics?.documents?.parsed?.length > 0 && <Card size="small" title="Tài liệu đã đọc" style={{ marginBottom: 16 }}>
             <List size="small" dataSource={report.metrics.documents.parsed} renderItem={(document) => <List.Item>

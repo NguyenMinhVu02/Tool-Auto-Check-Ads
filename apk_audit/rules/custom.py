@@ -8,7 +8,9 @@ import re
 from pathlib import Path
 
 from ..documents import normalize_ads_document
+from ..placement_policy import PLACEMENT_ALIASES
 from ..utils import read_text
+from .code_facts import absence_is_conclusive, app_roots, code_profile, limits_note
 
 
 def _line_of(text, key):
@@ -61,7 +63,7 @@ def ad_config_flags(rule, facts, documents, workspace):
                 issues.append({'file': name, 'placement': key, 'field': 'enable_ua_check',
                                'expected': ua_expected, 'actual': 'không khai báo (mặc định false)' if ua_value is None else ua_value})
                 evidence.append(_evidence(relative, line, excerpt))
-            row = rows.get(key)
+            row = rows.get(key) or next((rows[a] for a in PLACEMENT_ALIASES.get(key, ()) if a in rows), None)
             if row and key.lower() not in optional and row.get('state') in {'active', 'disabled'}:
                 enable_expected = row['state'] == 'active'
                 if value.get('isEnable') is not enable_expected:
@@ -126,6 +128,27 @@ def language_dev_toggle(rule, facts, documents, workspace):
         return {'status': 'UNKNOWN', 'reason': 'missing_fact',
                 'reasoning': 'Không xác định được màn Language trong mã đã giải mã (có thể bị obfuscate).',
                 'marketing_summary': 'Chưa tìm được màn chọn ngôn ngữ trong app, cần dev kiểm tra Dev setting.'}
+    # Obfuscation renames the extension function: a touch/click listener on the title of the
+    # Language screen next to the DevConfig library is the same hook, so do not call it missing.
+    title_hook = re.compile(r'(?:tvTitle|toolbarTitle\w*|title\w*)\.setOn(?:Touch|LongClick|Click)Listener\(', re.I)
+    suspects = []
+    for relative in screens:
+        try:
+            for number, line in enumerate(read_text(Path(workspace) / relative).splitlines(), 1):
+                if title_hook.search(line):
+                    suspects.append(_evidence(relative, number, line.strip()))
+        except OSError:
+            continue
+    if suspects and library:
+        return {'status': 'UNKNOWN', 'reason': 'obfuscated', 'actual': {'candidates': [s['file'] + ':' + str(s['line']) for s in suspects[:3]]},
+                'evidence': suspects[:3],
+                'reasoning': 'Kết luận: không thấy tên hàm ' + marker + ' (có thể đã bị làm rối), nhưng tiêu đề màn Language đang gắn '
+                             'một listener chạm/nhấn và app có thư viện DevConfig. Cần dev xác nhận đó là Dev setting.',
+                'marketing_summary': 'Màn chọn ngôn ngữ có vẻ đã gắn Dev setting nhưng tên hàm bị làm rối nên tool chưa xác nhận được, cần dev kiểm tra.'}
+    if not absence_is_conclusive(code_profile(workspace, app_roots(facts)), 'name'):
+        return {'status': 'UNKNOWN', 'reason': 'obfuscated', 'actual': {'language_screens': screens[:5], 'devconfig_library': library},
+                'reasoning': 'Kết luận: không thấy ' + marker + ' trong màn Language; tên hàm có thể bị làm rối nên chưa coi là thiếu. Cần dev xác nhận.',
+                'marketing_summary': 'Chưa xác nhận được Dev setting ở màn chọn ngôn ngữ vì mã bị làm rối, cần dev kiểm tra.'}
     return {'status': 'FAIL', 'actual': {'language_screens': screens[:5], 'devconfig_library': library},
             'reasoning': 'Kết luận: màn Language chưa gắn ' + marker
                          + ('' if library else '; app cũng chưa tích hợp thư viện DevConfig') + '.\n'
@@ -135,12 +158,11 @@ def language_dev_toggle(rule, facts, documents, workspace):
 
 
 def _app_sources(workspace, facts):
-    """Sources of the app's own package when it exists, otherwise every decompiled source."""
+    """Every decompiled source: the applicationId often differs from the code package
+    (e.g. a template package) and obfuscated apps spread code over short package names, so
+    restricting to the manifest package produced false "missing" results."""
     root = Path(workspace or '')
-    sources = root / 'sources'
-    package = (facts.get('source') or {}).get('package') or ''
-    own = sources / package.replace('.', '/') if package else None
-    return (own if own and own.is_dir() else sources), root
+    return root / 'sources', root
 
 
 def _grep(workspace, facts, pattern, limit=20):
@@ -178,6 +200,13 @@ def remote_config_keys(rule, facts, documents, workspace):
         elif key in required:
             missing.append(key)
     expected = {'required': required, 'optional': optional}
+    profile = code_profile(workspace, app_roots(facts))
+    if missing and not absence_is_conclusive(profile, 'literal'):
+        return {'status': 'UNKNOWN', 'reason': 'decompile_gaps', 'expected': expected,
+                'actual': {'not_found': missing, 'found': found},
+                'reasoning': 'Kết luận: chưa thấy key Remote Config ' + ', '.join(missing) + ' nhưng ' + str(profile['decompile_gap_files'])
+                             + ' file code của app giải mã lỗi nên chưa thể coi là thiếu. Cần dev kiểm tra các file này.',
+                'marketing_summary': 'Chưa xác nhận được một số cấu hình điều khiển từ xa vì một phần code không giải mã được, cần dev kiểm tra.'}
     if missing:
         return {'status': 'FAIL', 'expected': expected, 'actual': {'missing': missing, 'found': found}, 'evidence': evidence,
                 'reasoning': 'Kết luận: thiếu key Remote Config bắt buộc: ' + ', '.join(missing)
@@ -195,9 +224,14 @@ def interstitial_interval(rule, facts, documents, workspace):
     hits = _grep(workspace, facts, r'setIntervalInterstitialAd\(\s*(\d+)\s*\)')
     if hits is None:
         return {'status': 'UNKNOWN', 'reason': 'missing_fact', 'reasoning': 'Không có thư mục sources đã giải mã.'}
+    if not hits and absence_is_conclusive(code_profile(workspace, app_roots(facts)), 'name'):
+        return {'status': 'FAIL', 'expected': expected, 'actual': 'không có lệnh đặt khoảng cách',
+                'reasoning': 'Kết luận: mã không bị làm rối nhưng không có lệnh setIntervalInterstitialAd.\nCần sửa: '
+                             f'đặt khoảng cách giữa hai inter là {expected} giây khi khởi tạo SDK.',
+                'marketing_summary': f'App chưa đặt khoảng cách giữa hai quảng cáo toàn màn hình (yêu cầu {expected} giây).'}
     if not hits:
-        return {'status': 'UNKNOWN', 'expected': expected, 'reason': 'missing_fact',
-                'reasoning': 'Không thấy lệnh đặt khoảng cách giữa hai inter (setIntervalInterstitialAd) trong mã app.',
+        return {'status': 'UNKNOWN', 'expected': expected, 'reason': 'obfuscated',
+                'reasoning': 'Không thấy lệnh đặt khoảng cách giữa hai inter (setIntervalInterstitialAd); tên hàm có thể đã bị làm rối nên cần dev kiểm tra.',
                 'marketing_summary': 'Chưa tìm thấy cấu hình khoảng cách giữa hai quảng cáo toàn màn hình, cần dev kiểm tra.'}
     values = sorted({int(h[3].group(1)) for h in hits})
     evidence = [_evidence(h[0], h[1], h[2]) for h in hits[:5]]
