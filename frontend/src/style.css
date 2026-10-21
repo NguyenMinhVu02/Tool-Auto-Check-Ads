@@ -140,3 +140,15 @@ footer{text-align:center;color:#9eacc0;font-size:10px;padding-top:10px}
 .marketing-explanation{margin:0!important;color:#3b4a5e}
 .marketing-row-problem td{background:#fff5f5!important}
 .ad-id{font-family:ui-monospace,monospace;font-size:11.5px;white-space:nowrap}
+
+.report-tabs{margin-top:8px}
+.dev-view{display:grid;gap:12px;margin-bottom:16px}
+.dev-rule{display:flex;flex-direction:column;gap:4px;padding:8px 0 8px 12px;border-left:3px solid #d0d5dd;margin:6px 0}
+.dev-rule.level-ok{border-left-color:#26c593}.dev-rule.level-issue{border-left-color:#e5484d}.dev-rule.level-check{border-left-color:#f5a524}
+.marketing-screen.level-skip{border-left-color:#98a2b3}
+
+.screen-logic{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-radius:8px;background:#f0f5ff}
+.screen-requirements ul{margin:4px 0 0;padding-left:0;list-style:none}
+.screen-requirements li{padding:2px 0}
+.req-issue{color:#b42318}
+@media (prefers-color-scheme:dark){.screen-logic{background:#1b2740}.req-issue{color:#ff8a80}}

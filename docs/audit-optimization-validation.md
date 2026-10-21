@@ -44,3 +44,18 @@ Checksum không chống người có quyền sửa cả record/checksum/trace. C
 ## Thay đổi model ngày 2026-10-20
 
 Các số liệu live phía trên thuộc cấu hình Luna ở thời điểm19/10. Code hiện chuyển Codex sang GPT-6.1 Sol / medium và Claude sang Haiku5.5 / low theo yêu cầu mới; không dùng benchmark Luna để suy giá/tốc độ/chất lượng của model mới. Khóa cache và nhãn report được tách theo model/effort.
+
+
+## 2026-10-21 — Đọc dễ, nhanh, ít token (replay, chưa đo live)
+
+Dữ liệu: APK AI Learn, ADS SCRIPTS/working file CSV, engine `ReplayEngine` (không gọi AI).
+
+| Chỉ số | Trước | Sau |
+|---|---|---|
+| Prompt mỗi rule agent | 80–85 KB | 43–52 KB (-40%) |
+| Tổng prompt 10 rule agent (không cross-flow) | 912 KB / 11 rule | 484 KB |
+| Rule chạy không cần AI | 0 | 5 rule tĩnh + rule welcome/banner khi tài liệu không dùng |
+| Dependency cache theo file (trace Sonnet thật hôm qua) | không có | 7/7 rule PASS/FAIL liệt kê được file đã đọc (6/7 trước khi hỗ trợ glob) |
+
+Chưa đo live: thời gian audit, token thực tế (cache read/write/output) và chất lượng PASS/FAIL/UNKNOWN sau các thay đổi. Cần một lượt `scripts/measure_audit.py` với quota Claude/Codex để so với mốc Sonnet medium 242s, 5 PASS / 2 FAIL / 4 UNKNOWN, cache write ~1.07M.
+Rủi ro đã biết: cache theo file không phát hiện sửa file AI không đọc (xem README).

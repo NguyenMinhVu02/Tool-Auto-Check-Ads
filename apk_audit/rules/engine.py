@@ -1,9 +1,14 @@
 from ..contracts import Finding
 from ..utils import lookup
 from .checks import read_value, compare
+from .custom import CUSTOM_CHECKS
 
-def evaluate_static(rule, facts, documents=None):
+def evaluate_static(rule, facts, documents=None, workspace=None):
     finding = Finding.for_rule(rule, resolved_by="static")
+    if rule.check in CUSTOM_CHECKS:
+        for key, value in CUSTOM_CHECKS[rule.check](rule, facts, documents, workspace).items():
+            setattr(finding, key, value)
+        return finding
     expected = rule.params.get("equals", rule.params.get("min"))
     if "equals_doc" in rule.params:
         try:

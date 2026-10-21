@@ -1,6 +1,6 @@
 import unittest
 
-from apk_audit.context_scope import compact_prior, scope_documents, scope_inventory
+from apk_audit.context_scope import compact_prior, not_applicable_by_document, scope_documents, scope_inventory
 
 
 class ContextScopeTests(unittest.TestCase):
@@ -42,6 +42,16 @@ class ContextScopeTests(unittest.TestCase):
         self.assertEqual(len(prior[0]['reasoning']), 700)
         self.assertEqual(len(prior[0]['evidence'][0]['excerpt']), 160)
         self.assertNotIn('verification', prior[0])
+
+    def test_welcome_is_skipped_only_when_document_marks_it_unused(self):
+        def docs(*rows):
+            return {'ads_scripts': {'placements': [{'name': n, 'state': s} for n, s in rows]}}
+        self.assertIn('inter_welcome_back', not_applicable_by_document(docs(('inter_welcome_back', 'disabled'), ('inter_splash', 'active')), 'welcome'))
+        self.assertIn('không có placement', not_applicable_by_document(docs(('inter_splash', 'active')), 'welcome'))
+        self.assertIsNone(not_applicable_by_document(docs(('inter_welcome_back', 'active')), 'welcome'))
+        self.assertIsNone(not_applicable_by_document(docs(('native_welcome', 'unknown')), 'welcome'))
+        self.assertIsNone(not_applicable_by_document({}, 'welcome'))          # no document: audit as usual
+        self.assertIsNone(not_applicable_by_document(docs(('inter_splash', 'disabled')), 'splash'))  # core screens never skipped
 
 
 if __name__ == '__main__':

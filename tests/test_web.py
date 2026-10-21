@@ -220,6 +220,34 @@ class WebTests(unittest.TestCase):
             self.assertEqual((job["state"], job["stage"]), ("done", "done"))
             self.assertEqual(job["last_rule"]["status"], "FAIL")
 
+    def test_html_report_and_id_csv_are_served_for_finished_jobs(self):
+        marketing = {"documents_available": True, "id_problems": [{"screen": "Splash", "name": "inter_splash", "status": "Sai ID"}],
+                     "screens": [{"title": "Màn Splash", "level": "issue", "flow_level": "ok", "flow_label": "Đạt", "id_issues": 1,
+                                  "explanation": "<b>x</b>", "placements": [{"name": "inter_splash", "ad_type": "Inter", "status": "Sai ID: app khác ADS SCRIPTS",
+                                                                           "document_id": "doc-1", "app_id": "app-1", "problem": True}]}]}
+
+        def fake_run(archive, *, out, **kwargs):
+            output = Path(out)
+            output.mkdir(parents=True)
+            report = {"output": str(output), "package": "demo.app", "warnings": [], "engine": "x",
+                      "summary": {"pass": 0, "fail": 0, "unknown": 0, "skipped": 0}, "findings": [],
+                      "marketing": marketing, "dev_view": {"groups": []}}
+            (output / "report.json").write_text(json.dumps(report))
+            return report
+
+        with patch("apk_audit.web.run", side_effect=fake_run):
+            job_id = json.load(self.request("/api/jobs", b"fake archive", "demo.apk"))["id"]
+            for _ in range(100):
+                if json.load(self.request(f"/api/jobs/{job_id}"))["state"] == "done":
+                    break
+                time.sleep(0.02)
+        html = self.request(f"/api/jobs/{job_id}/report.html").read().decode()
+        self.assertIn("1 ID ads đang có vấn đề", html)
+        self.assertIn("&lt;b&gt;x&lt;/b&gt;", html)
+        self.assertNotIn("<script", html)
+        csv_text = self.request(f"/api/jobs/{job_id}/ids.csv").read().decode("utf-8-sig")
+        self.assertIn("inter_splash,Inter,Sai ID: app khác ADS SCRIPTS,doc-1,app-1", csv_text)
+
     def test_both_documents_reach_pipeline(self):
         ads = json.load(self.request(
             "/api/documents", b'{"inter_splash":"app-id"}', "ADS%20SCRIPTS.json",

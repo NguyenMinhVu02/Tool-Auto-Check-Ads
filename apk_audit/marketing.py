@@ -5,6 +5,7 @@ screen verdicts from the matching rule. AI text is only shown as the rule's own 
 """
 import re
 
+from .dev_view import STATUS_LABELS, STATUS_LEVELS
 from .documents import normalize_ads_document
 
 SCREENS = (
@@ -15,12 +16,17 @@ SCREENS = (
 )
 AD_TYPES = {'interstitial': 'Toàn màn hình (Inter)', 'inter': 'Toàn màn hình (Inter)', 'banner': 'Banner',
             'native': 'Native', 'app_open': 'App Open', 'open': 'App Open', 'reward': 'Reward'}
-VERDICTS = {
-    'PASS': ('ok', 'Ổn'),
-    'FAIL': ('issue', 'Có lỗi cần sửa'),
-    'UNKNOWN': ('check', 'Cần dev kiểm tra thêm'),
-    'SKIPPED': ('check', 'Chưa kiểm'),
-}
+CONFIG_CHECKS = (
+    ('ADS_CONFIG_FLAGS', 'Cờ bật quảng cáo (isEnable) và kiểm tra UA trong ad_config'),
+    ('ADS_LANGUAGE_DEV_TOGGLE', 'Dev setting ở màn Language (Unlimited ads để test)'),
+    ('ADS_DEBUG_TEST_IDS', 'ID quảng cáo test ở bản debug'),
+    ('ADS_REMOTE_KEYS', 'Cấu hình điều khiển từ xa (Remote Config)'),
+    ('ADS_INTERSTITIAL_INTERVAL', 'Khoảng cách giữa hai quảng cáo toàn màn hình'),
+    ('ADS_SCREEN_NAMES', 'Tên 4 màn đầu theo quy định'),
+    ('ADS_SCREEN_ORIENTATION', 'Chặn xoay màn hình ở 4 màn đầu'),
+)
+REQUIREMENT_ICONS = {'ok': '✅', 'issue': '❌', 'unknown': '❔', 'na': '➖'}
+VERDICTS = {status: (STATUS_LEVELS[status], label) for status, label in STATUS_LABELS.items()}
 
 
 def _ad_type(row, name):
@@ -91,14 +97,34 @@ def build_marketing_summary(documents, facts, inventory, findings):
         level = 'issue' if flow_level == 'issue' or id_issues else flow_level
         label = (f'{id_issues} ID ads có vấn đề' if id_issues else 'ID ads đúng') + ' · Luồng quảng cáo: ' + flow_label
         explanation = (finding or {}).get('marketing_summary') or ''
-        if finding and finding['status'] == 'UNKNOWN':
+        if finding and finding['status'] == 'UNKNOWN' and 'usage limit' in str(finding.get('reasoning')):
+            explanation = 'Chưa kiểm được màn này vì AI hết hạn mức sử dụng giữa chừng. Chạy lại sau khi hạn mức làm mới (các rule đã xong được dùng lại).'
+        elif finding and finding['status'] == 'UNKNOWN' and finding.get('reason') in {'engine_error', 'repair_error', 'review_error'}:
+            explanation = 'Chưa kiểm được màn này vì lỗi khi gọi AI. Chạy lại để kiểm.'
+        elif finding and finding['status'] == 'UNKNOWN':
             explanation = ('Tool chưa đủ căn cứ để kết luận, cần dev xem lại.'
                            + (' Ghi chú của AI: ' + explanation if explanation else ''))
+        report = (finding or {}).get('screen_report') or {}
         screens.append({'key': key, 'title': title, 'rule_id': rule_id, 'level': level, 'label': label,
+                        'logic': ({'load': report.get('load', ''), 'show': report.get('show', ''),
+                                   'verified': bool(report.get('verified'))} if report else None),
+                        'requirements': report.get('requirements', []),
                         'flow_level': flow_level, 'flow_label': flow_label, 'id_issues': id_issues,
                         'explanation': explanation, 'placements': placements})
         problems += [{'screen': title, **item} for item in placements if item['problem']]
+    checks = []
+    for rule_id, title in CONFIG_CHECKS:
+        finding = by_rule.get(rule_id)
+        if not finding:
+            continue
+        check_level, check_label = VERDICTS.get(finding['status'], VERDICTS['UNKNOWN'])
+        issues = (finding.get('actual') or {}).get('issues', []) if isinstance(finding.get('actual'), dict) else []
+        checks.append({'rule_id': rule_id, 'title': title, 'level': check_level, 'label': check_label,
+                       'explanation': finding.get('marketing_summary') or '',
+                       'issues': [{'file': i['file'], 'placement': i['placement'], 'field': i['field'],
+                                   'expected': i['expected'], 'actual': i['actual']} for i in issues]})
     return {
+        'config_checks': checks,
         'documents_available': bool(documented),
         'publisher_note': _publisher_note(documented, local),
         'id_source': 'ad_config.json trong APK (cấu hình local, bản release)',
@@ -125,10 +151,28 @@ def marketing_markdown(summary):
     elif summary['documents_available']:
         lines += ['Không thấy ID ads nào sai/thiếu ở các màn đầu.']
     lines += ['', f"_Nguồn ID trong app: {summary['id_source']}._", '']
+    for check in summary.get('config_checks', []):
+        lines += [f"### {check['title']} — {check['label']}", '']
+        if check['explanation']:
+            lines += [check['explanation'], '']
+        if check['issues']:
+            lines += ['| File | Vị trí | Trường | Cần là | Đang là |', '|---|---|---|---|---|']
+            lines += [f"| {i['file']} | {i['placement']} | {i['field']} | {i['expected']} | {i['actual']} |" for i in check['issues']]
+            lines.append('')
     for screen in summary['screens']:
         lines += [f"### {screen['title']} — {screen['label']}", '']
         if screen['explanation']:
             lines += [screen['explanation'], '']
+        logic = screen.get('logic')
+        if logic and (logic['load'] or logic['show']):
+            note = '' if logic['verified'] else ' _(chưa xác minh đủ)_'
+            lines += [f"**Logic hiện tại{note}**", '', f"- Tải quảng cáo: {logic['load'] or '—'}",
+                      f"- Hiển thị: {logic['show'] or '—'}", '']
+        if screen.get('requirements'):
+            lines += ['**Đã đúng yêu cầu chưa?**', '']
+            lines += [f"- {REQUIREMENT_ICONS.get(r['status'], '❔')} {r['text']}" + (f" — {r['note']}" if r['note'] else '')
+                      for r in screen['requirements']]
+            lines.append('')
         if screen['placements']:
             lines += ['| Vị trí | Loại | ID trong ADS SCRIPTS | ID trong app | Tình trạng |', '|---|---|---|---|---|']
             lines += [f"| {p['name']} | {p['ad_type']} | {p['document_id'] or '—'} | {p['app_id'] or '—'} | "

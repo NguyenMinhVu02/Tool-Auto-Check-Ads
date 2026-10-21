@@ -40,8 +40,8 @@ class CodexEngine:
     """Run one rule in an ephemeral, read-only Codex CLI session."""
 
     requires_claims = True
-    model = "gpt-6.1-sol"
-    reasoning_effort = "medium"
+    model = "gpt-6-sol"
+    reasoning_effort = "low"
     name = f"codex:{model}:{reasoning_effort}"
     # Audits must not inherit the user's personal skills, plugins, hooks or AGENTS.md:
     # they cost tool calls/quota and can steer verdicts away from the rule pack.
@@ -52,38 +52,51 @@ class CodexEngine:
         "--config", "skills.include_instructions=false", "--config", "include_apps_instructions=false",
         "--config", "project_doc_max_bytes=0",
     ]
-    label = "Codex CLI (GPT-6.1 Sol · medium)"
+    label = "Codex CLI (GPT-6 Sol · low)"
 
     def available(self):
         return shutil.which("codex") is not None
 
-    def run_agent(self, prompt, tools, max_tool_calls, timeout=600):
+    # Follow-up repair/investigation turns continue the rule's own Codex session instead of
+    # resending the whole prompt; the transcript is deleted when the rule finishes.
+    supports_resume = True
+
+    def run_agent(self, prompt, tools, max_tool_calls, timeout=600, resume=None):
         if max_tool_calls <= 0:
             return AgentResult("", exhausted_budget=True)
         return self._run_structured(audit_instruction(prompt, max_tool_calls), tools,
-                                    verdict_schema(), max_tool_calls, timeout)
+                                    verdict_schema(), max_tool_calls, timeout, session=resume, persist=True)
 
     def map_document(self, instruction, tools, schema, timeout=90):
         return self._run_structured(instruction, tools, schema, 0, timeout)
 
-    def _run_structured(self, instruction, tools, schema, max_tool_calls, timeout):
+    @staticmethod
+    def close_session(session_id):
+        root = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex") / "sessions"
+        for path in root.glob(f"**/rollout-*-{session_id}.jsonl"):
+            path.unlink(missing_ok=True)
+
+    def _run_structured(self, instruction, tools, schema, max_tool_calls, timeout, session=None, persist=False):
         with tempfile.TemporaryDirectory(prefix="apk-audit-codex-") as temp:
             schema_path = Path(temp) / "verdict.schema.json"
             result_path = Path(temp) / "verdict.json"
             stderr_path = Path(temp) / "codex.stderr"
             schema_path.write_text(json.dumps(schema), encoding="utf-8")
-            command = [
-                "codex", "exec", "--ephemeral", "--skip-git-repo-check",
-                "--sandbox", "read-only", "--model", self.model,
-                "--config", f'model_reasoning_effort="{self.reasoning_effort}"',
-                "--output-schema", str(schema_path), "--output-last-message", str(result_path),
-                "--json", "--cd", str(tools.root), *self.isolation, "-",
-            ]
+            effort = ["--config", f'model_reasoning_effort="{self.reasoning_effort}"']
+            outputs = ["--output-schema", str(schema_path), "--output-last-message", str(result_path), "--json"]
+            if session:
+                # resume has no --sandbox/--cd: force read-only through config and run from the workspace.
+                command = ["codex", "exec", "resume", session, "--skip-git-repo-check", "--model", self.model,
+                           *effort, "--config", 'sandbox_mode="read-only"', *outputs, *self.isolation, "-"]
+            else:
+                command = ["codex", "exec", *([] if persist else ["--ephemeral"]), "--skip-git-repo-check",
+                           "--sandbox", "read-only", "--model", self.model, *effort, *outputs,
+                           "--cd", str(tools.root), *self.isolation, "-"]
             if max_tool_calls == 0:
                 command[2:2] = ['--config', 'features.shell_tool=false',
                                 '--config', 'web_search="disabled"']
             with stderr_path.open("wb") as stderr:
-                process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr)
+                process = subprocess.Popen(command, cwd=tools.root, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr)
                 try:
                     process.stdin.write(instruction.encode("utf-8"))
                     process.stdin.close()
@@ -94,8 +107,11 @@ class CodexEngine:
                     process.wait()
                     process.stdout.close()
             usage = next((event['usage'] for event in reversed(events) if isinstance(event.get('usage'), dict)), {})
+            thread = session or next((e.get("thread_id") for e in events if e.get("type") == "thread.started"), None)
+            events = [e for e in events if e.get("type") != "thread.started"]
             if exhausted:
-                return AgentResult("", tool_calls=calls, events=events, exhausted_budget=True, usage=usage)
+                return AgentResult("", tool_calls=calls, events=events, exhausted_budget=True, usage=usage,
+                                   session_id=thread if persist else None)
             if process.returncode:
                 # Quota/auth failures arrive as JSON error events on stdout, not stderr.
                 detail = next((e["message"] for e in reversed(events) if e.get("type") in {"error", "turn.failed"} and e.get("message")), "")
@@ -103,7 +119,8 @@ class CodexEngine:
                 raise agent_error("Codex CLI lỗi: " + (detail or f"exit {process.returncode}"), calls, usage)
             if not result_path.is_file():
                 raise agent_error("Codex CLI không trả kết quả", calls, usage)
-            return AgentResult(result_path.read_text(encoding="utf-8"), tool_calls=calls, events=events, usage=usage)
+            return AgentResult(result_path.read_text(encoding="utf-8"), tool_calls=calls, events=events, usage=usage,
+                               session_id=thread if persist else None)
 
     @staticmethod
     def _collect(process, max_tool_calls, timeout):
@@ -145,6 +162,8 @@ class CodexEngine:
                             exhausted = True
                             process.kill()
                             break
+                    if kind == "thread.started" and event.get("thread_id"):
+                        events.append({"type": kind, "thread_id": str(event["thread_id"])})
                     if kind == "turn.completed" and isinstance(event.get("usage"), dict):
                         events.append({"type": kind, "usage": event["usage"]})
                     if kind == 'item.completed' and item_type == 'command_execution':

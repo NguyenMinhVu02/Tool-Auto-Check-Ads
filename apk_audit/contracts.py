@@ -50,6 +50,7 @@ class Finding:
     reason: str = ""
     hint: str = ""
     marketing_summary: str = ""
+    screen_report: dict = field(default_factory=dict)
     resolved_by: str = ""
     tool_calls: int = 0
     exhausted_budget: bool = False

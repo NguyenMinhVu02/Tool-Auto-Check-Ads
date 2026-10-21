@@ -40,31 +40,25 @@
   budget: {max_tool_calls: 40}
 
 - id: ADS_ID_SOURCE_AND_COVERAGE
-  title: Phân phối ID theo local/remote và inventory placement
+  title: Nguồn ID ads trong code (getter → config.id → SDK load)
   mode: agent
   area: config
   severity: high
   question: >-
-    Lập danh sách placement và ID từ assets, sau đó lần từng màn đến config.id đưa vào SDK.
-    Kiểm tra remote và local cùng schema/key, không trộn ID giữa slot hoặc dùng ID hard-code
-    bỏ qua config. Đối chiếu ID chính xác với ads_scripts nếu tài liệu được cung cấp;
-    nếu thiếu tài liệu, chỉ kết luận về logic và báo slot thiếu/thừa/không dùng dạng inventory,
-    không kết luận ID của app đúng hay sai so với ID mẫu base.
-    Loại placement disabled/unknown khỏi yêu cầu coverage theo integration_policy;
-    inter_onboarding là tùy chọn, không FAIL do thiếu config/load/show của slot này.
-    Không coi missing_local là lỗi nếu chưa lần alias/key tương đương đến ID thật.
-    Phạm vi rule là nguồn ID, key/schema trong code, getter/alias và ID truyền vào lệnh SDK load.
-    Không bắt bao phủ toàn bộ callback/render/show/navigation của từng slot ở rule ID; các phần
-    đó thuộc rule placement/render. Không cần JSON Firebase live để chấm logic parse/schema/key
-    đã thể hiện trong source; chưa có remote snapshot chỉ giới hạn kết luận về dữ liệu triển khai.
-    Nếu tài liệu còn cả dòng cũ/mới mà chưa rõ quan hệ thay thế hoặc trạng thái không dùng,
-    nêu blocker hợp đồng cụ thể; không tự coi tất cả là slot độc lập hoặc tự loại dòng cũ.
+    Việc so sánh ID với ADS SCRIPTS, thiếu/thừa/không dùng đã do bước kiểm kê tất định làm
+    (inventory và tóm tắt Marketing), không cần lặp lại. Chỉ kiểm logic trong code: mỗi slot đang dùng
+    lấy ID từ đúng key/getter trong config (local hoặc remote cùng schema), không trộn ID giữa slot,
+    không hard-code ID bỏ qua config, và config.id được truyền vào lệnh SDK load. Chấp nhận alias/getter
+    tương đương. Không bắt bao phủ callback/render/show/navigation của từng slot (thuộc rule placement/render).
+    Không cần JSON Firebase live để chấm logic parse/schema/key trong source. Loại placement
+    disabled/unknown và inter_onboarding (tùy chọn) khỏi yêu cầu. Không FAIL chỉ vì ID app khác ADS SCRIPTS:
+    đó là việc của inventory.
   verdict:
-    pass_when: "Mỗi slot đang dùng lấy ID từ đúng config; nếu có ads_scripts thì ID và coverage khớp tài liệu."
-    fail_when: "Có bằng chứng slot lấy ID của slot khác, hard-code sai nguồn, hoặc lệch ads_scripts đã cung cấp."
-    unknown_when: "Chưa nối được nguồn ID tới lệnh load hoặc hợp đồng thiếu/không rõ trạng thái dòng cũ-mới. Remote live và hành vi render chưa đo không tự chặn kết luận về nguồn ID tĩnh."
+    pass_when: "Mỗi slot đang dùng lấy ID từ đúng key/getter trong config và config.id đi tới lệnh SDK load."
+    fail_when: "Có bằng chứng slot lấy ID của slot khác, hard-code ID bỏ qua config, hoặc key/schema local và remote không cùng nhau."
+    unknown_when: "Chưa nối được nguồn ID tới lệnh load do thiếu mã. Remote live và hành vi render chưa đo không tự chặn kết luận về nguồn ID tĩnh."
   start_hints: ["resources/assets/ad_config.json", "sources/"]
-  budget: {max_tool_calls: 45}
+  budget: {max_tool_calls: 35}
 
 - id: ADS_SPLASH_PLACEMENT
   title: Splash, uninstall shortcut và preload Language
@@ -83,6 +77,13 @@
     fail_when: "Có bằng chứng load sai slot/thiếu preload hoặc callback khiến Splash kẹt."
     unknown_when: "Không tìm đủ nhánh hoặc dữ liệu đã làm rối."
   start_hints: ["sources/", "resources/AndroidManifest.xml"]
+  params:
+    checklist:
+      - "Banner và inter Splash lấy đúng cặp ID cấu hình, kể cả bản shortcut uninstall"
+      - "Inter Splash được tải ngay khi vào màn và chỉ hiện khi đã sẵn sàng"
+      - "Banner Splash hiển thị đúng vị trí đáy màn"
+      - "Mất mạng, đã mua gói, quảng cáo lỗi hoặc hết thời gian chờ thì app vẫn chuyển màn, không bị kẹt"
+      - "Native màn Language được tải sẵn trước khi vào màn Language (không tải ở nhánh uninstall)"
   budget: {max_tool_calls: 40}
 
 - id: ADS_LANGUAGE_PLACEMENT
@@ -99,6 +100,13 @@
     fail_when: "Có bằng chứng click không đổi slot, observer chồng hoặc mất preload/render fallback."
     unknown_when: "Không xác định được liên kết slot với màn hoặc trạng thái observer."
   start_hints: ["sources/"]
+  params:
+    checklist:
+      - "Native lúc vào màn và native khi bấm chọn ngôn ngữ dùng hai luồng riêng, đúng ID"
+      - "Khi bấm chọn, app đổi sang native click và hủy luồng cũ, không đăng ký chồng nhau"
+      - "Màn theo dõi liên tục kết quả tải quảng cáo (không chỉ kiểm tra một lần): quảng cáo về trễ vẫn hiện, lỗi hoặc mất mạng thì ẩn"
+      - "Native Onboarding trang 1 được tải sẵn (trừ khi vào từ Cài đặt)"
+      - "Nút Done được trì hoãn theo Remote Config và có giá trị dự phòng khi chưa tải xong"
   budget: {max_tool_calls: 45}
 
 - id: ADS_ONBOARDING_PLACEMENT
@@ -122,6 +130,13 @@
     fail_when: "Có bằng chứng native sai slot/thiếu gate, hoặc đường quảng cáo thực sự được dùng gây điều hướng kẹt. Không FAIL vì inter_onboarding không được triển khai hoặc bị tắt."
     unknown_when: "Không thể nối page động với placement hoặc hành vi SDK nằm ngoài APK."
   start_hints: ["sources/"]
+  params:
+    checklist:
+      - "Native trang 1, trang 4 và trang full dùng đúng ID cho từng trang thực tế"
+      - "Trang 4 và trang full được tải sẵn sau khi vào Onboarding; trang 1 được tải sẵn từ màn Language"
+      - "Native full screen có kiểm tra người dùng UA (organic/non-organic)"
+      - "Từng trang theo dõi liên tục kết quả tải quảng cáo theo vòng đời màn, quảng cáo về trễ vẫn hiện và được tải/hiện đúng thời điểm"
+      - "Chuyển sang màn Home an toàn, không phụ thuộc vào inter cuối Onboarding"
   budget: {max_tool_calls: 40}
 
 - id: ADS_WELCOME_RESUME
@@ -145,6 +160,12 @@
     fail_when: "Có bằng chứng hai quảng cáo cùng được phép show, sai màn resume, thiếu gate của slot có trong hợp đồng hoặc Welcome không thoát khi không có ad."
     unknown_when: "Không nối được route lifecycle, gate hoặc callback cần cho kết luận tĩnh do thiếu mã; chưa chạy runtime không tự làm rule UNKNOWN."
   start_hints: ["sources/"]
+  params:
+    checklist:
+      - "Chỉ dùng các vị trí quảng cáo mà hợp đồng yêu cầu cho màn Welcome back / App Open"
+      - "Welcome back và App Open không hiện cùng lúc"
+      - "Có điều kiện chặn: màn bị loại trừ, đã mua gói, inter đang hiện, kiểm tra người dùng UA"
+      - "Quảng cáo được tải và hiện đúng cách, nếu dùng native thì theo dõi liên tục kết quả tải; không có quảng cáo thì thoát khỏi màn Welcome"
   budget: {max_tool_calls: 40}
 
 - id: ADS_LOAD_OBSERVE_GATES
@@ -161,26 +182,6 @@
     pass_when: "Luồng load-update-observe-render/hide hiện diện cho các slot đang dùng."
     fail_when: "Có đường load bỏ gate hoặc UI giữ ad/shimmer khi stream null, hoặc observer bị ngắt."
     unknown_when: "Không nối được load-update-observe-render/hide qua mã, gồm helper/lambda liên quan; chưa đo emission runtime không tự làm rule UNKNOWN."
-  start_hints: ["sources/"]
-  budget: {max_tool_calls: 45}
-
-- id: ADS_FIREBASE_EVENTS
-  title: Firebase tracking theo hành động và màn hình
-  mode: agent
-  area: tracking
-  severity: medium
-  question: >-
-    Kiểm call site thực sự gửi FirebaseAnalytics.logEvent hoặc wrapper tương đương:
-    splash_scr_view lúc vào Splash; splash_request_ad khi bắt đầu request;
-    splash_ad_load trong callback load thành công; splash_user_close_ad sau inter;
-    language_scr_view khi vào Language; language_scr_click khi chọn;
-    obd_1/2/3/4th_scr_view cho page tương ứng, obd_full_1/full_2_scr_view chỉ khi
-    full page thực sự hiện; home_scr_view khi vào Home. Mapping page động phải dựa
-    loại page, không chỉ chỉ số cứng. Không yêu cầu event Welcome vì base không có.
-  verdict:
-    pass_when: "Các event liên quan màn/nhánh có call site đúng thời điểm và page động map đúng."
-    fail_when: "Có bằng chứng event thiếu ở call site, gửi sai nhánh, hoặc page động gán sai event."
-    unknown_when: "Chỉ thấy hằng số/event string mà chưa nối được call site UI/callback tới wrapper gửi event. Không yêu cầu chứng minh Firebase server nhận event để chấm logic tĩnh."
   start_hints: ["sources/"]
   budget: {max_tool_calls: 45}
 
@@ -224,3 +225,79 @@
     unknown_when: "Không tìm được lỗi mới có bằng chứng hoặc không thể chứng minh hành vi do mã giải biên dịch thiếu."
   start_hints: ["sources/", "resources/assets/ad_config.json"]
   budget: {max_tool_calls: 45}
+
+- id: ADS_CONFIG_FLAGS
+  title: Cờ isEnable và enable_ua_check trong ad_config
+  mode: static
+  check: ad_config_flags
+  area: config
+  severity: high
+  params:
+    files: [ad_config.json, ad_config_debug.json]
+    # UA check (organic/non-organic) is only required for the four Onboarding full-screen natives.
+    ua_check_true: ["native_onboarding_fullscreen_*"]
+    optional: [inter_onboarding]
+
+- id: ADS_LANGUAGE_DEV_TOGGLE
+  title: Màn Language gắn mở Dev setting (Unlimited ads)
+  mode: static
+  check: language_dev_toggle
+  area: language
+  severity: medium
+  params:
+    marker: setOnAdminAdToggleListener
+
+- id: ADS_REMOTE_KEYS
+  title: Key Remote Config bắt buộc có trong app
+  mode: static
+  check: remote_config_keys
+  area: remote_config
+  severity: medium
+  params:
+    required: [ad_remote_config, on_show_dialog_consent, delay_button_done_language, time_delay_show_language_done_button]
+    optional: [on_show_navigation_button, on_enable_uninstall_widget, force_update_config]
+
+- id: ADS_INTERSTITIAL_INTERVAL
+  title: Khoảng cách giữa hai inter (35 giây)
+  mode: static
+  check: interstitial_interval
+  area: init
+  severity: medium
+  params:
+    seconds: 35
+
+- id: ADS_SCREEN_NAMES
+  title: Tên class 4 màn đầu theo quy định
+  mode: static
+  check: screen_class_names
+  area: splash
+  severity: low
+  params:
+    screens:
+      Splash: [SplashActivity]
+      Language: [LanguageActivity]
+      Onboarding: [OnBoardingActivity, OnboardingActivity]
+      Welcome: [WelcomeActivity]
+
+- id: ADS_DEBUG_TEST_IDS
+  title: ad_config_debug dùng ID test của Google
+  mode: static
+  check: debug_test_ids
+  area: config
+  severity: high
+  params:
+    debug_file: ad_config_debug.json
+    release_file: ad_config.json
+
+- id: ADS_SCREEN_ORIENTATION
+  title: Chặn xoay màn hình ở 4 màn đầu
+  mode: static
+  check: screen_orientation_lock
+  area: splash
+  severity: medium
+  params:
+    screens:
+      Splash: [SplashActivity]
+      Language: [LanguageActivity]
+      Onboarding: [OnBoardingActivity, OnboardingActivity]
+      Welcome: [WelcomeActivity]

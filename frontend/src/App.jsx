@@ -3,7 +3,7 @@ import { findingText } from './findingText';
 import { unknownExplanation } from './findingExplanation';
 import {
   Alert, Button, Card, Collapse, Empty, Layout, List, Progress, Space,
-  Checkbox, Select, Statistic, Steps, Table, Tag, Typography, Upload,
+  Checkbox, Select, Statistic, Steps, Table, Tabs, Tag, Typography, Upload, message,
 } from 'antd';
 import {
   AppstoreOutlined, CheckCircleOutlined, CloudUploadOutlined,
@@ -32,7 +32,7 @@ const steps = [
   { title: 'Đối chiếu', description: 'Các rule ads' },
   { title: 'Báo cáo', description: 'JSON & Markdown' },
 ];
-const statusLabels = { PASS: 'Đạt', FAIL: 'Cần xử lý', UNKNOWN: 'Chưa đủ căn cứ', SKIPPED: 'Bỏ qua' };
+const statusLabels = { PASS: 'Đạt', FAIL: 'Cần sửa', UNKNOWN: 'Cần dev xem lại', SKIPPED: 'Không áp dụng' };
 const statusColors = { PASS: 'success', FAIL: 'error', UNKNOWN: 'warning', SKIPPED: 'default' };
 
 async function readJson(response) {
@@ -59,7 +59,7 @@ async function uploadDocument(kind, file) {
   return { id: data.id, sheets: data.sheets || [] };
 }
 
-function uploadArchive(file, documentIds, engine, crossFlow, onProgress) {
+function uploadArchive(file, documentIds, engine, crossFlow, recheckAll, onProgress) {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
     request.open('POST', '/api/jobs');
@@ -67,6 +67,7 @@ function uploadArchive(file, documentIds, engine, crossFlow, onProgress) {
     request.setRequestHeader('X-Filename', encodeURIComponent(file.name));
     request.setRequestHeader('X-Audit-Engine', engine);
     if (crossFlow) request.setRequestHeader('X-Cross-Flow', '1');
+    if (recheckAll) request.setRequestHeader('X-Recheck-All', '1');
     if (documentIds) {
       request.setRequestHeader('X-Ads-Scripts-Id', documentIds.ads_scripts.id);
       request.setRequestHeader('X-Checklist-Id', documentIds.checklist.id);
@@ -166,12 +167,27 @@ function elapsed(since, now) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
-const levelTags = { ok: 'success', issue: 'error', check: 'warning' };
+const fmtTokens = (value) => (value >= 1000 ? `${(value / 1000).toFixed(value >= 100000 ? 0 : 1)}K` : String(value || 0));
+const requirementIcons = { ok: '✅', issue: '❌', unknown: '❔', na: '➖' };
+const levelTags = { ok: 'success', issue: 'error', check: 'warning', skip: 'default' };
 
-function MarketingSummary({ data }) {
+function idProblemText(data) {
+  const rows = (data.screens || []).flatMap((screen) => screen.placements.filter((item) => item.problem)
+    .map((item) => `${screen.title} — ${item.name} — ${item.status}${item.document_id || item.app_id ? ` (ADS SCRIPTS: ${item.document_id || '—'} | app: ${item.app_id || '—'})` : ''}`));
+  return rows.length ? `${rows.length} ID ads đang có vấn đề:\n${rows.join('\n')}` : 'Không thấy ID ads nào sai hoặc thiếu ở các màn đầu.';
+}
+
+function MarketingSummary({ data, jobId }) {
   const problems = data.id_problems || [];
+  const copyProblems = () => navigator.clipboard.writeText(idProblemText(data))
+    .then(() => message.success('Đã copy danh sách ID lỗi'), () => message.error('Không copy được, hãy tải CSV'));
   return (
-    <Card className="marketing-card" title="Tóm tắt cho Marketing · 4 màn đầu" style={{ marginBottom: 16 }}>
+    <Card className="marketing-card" title="Tóm tắt cho Marketing · 4 màn đầu" style={{ marginBottom: 16 }}
+      extra={<Space wrap>
+        <Button size="small" onClick={copyProblems}>Copy danh sách ID lỗi</Button>
+        <Button size="small" href={`/api/jobs/${jobId}/ids.csv`} icon={<DownloadOutlined />}>Tải CSV</Button>
+        <Button size="small" href={`/api/jobs/${jobId}/report.html`} target="_blank" icon={<DownloadOutlined />}>Báo cáo HTML</Button>
+      </Space>}>
       <Space direction="vertical" size={10} style={{ width: '100%' }}>
         {!data.documents_available && <Alert type="info" showIcon message="Chưa có ADS SCRIPTS nên chưa đối chiếu được ID ads." />}
         {data.publisher_note && <Alert type="error" showIcon message="ID ads thuộc tài khoản AdMob khác" description={data.publisher_note} />}
@@ -181,6 +197,22 @@ function MarketingSummary({ data }) {
           ? <Alert type="error" showIcon message={`${problems.length} ID ads đang có vấn đề`}
               description={<ul className="marketing-problems">{problems.map((item) => <li key={item.name}><Text strong>{item.name}</Text> <Text type="secondary">({item.screen})</Text> — {item.status}</li>)}</ul>} />
           : <Alert type="success" showIcon message="Không thấy ID ads nào sai hoặc thiếu ở các màn đầu." />)}
+        {(data.config_checks || []).map((check) => (
+          <Alert key={check.rule_id} type={check.level === 'ok' ? 'success' : check.level === 'issue' ? 'error' : 'warning'} showIcon
+            message={`${check.title}: ${check.label}`}
+            description={<Space direction="vertical" size={6} style={{ width: '100%' }}>
+              {check.explanation && <Text>{check.explanation}</Text>}
+              {check.issues.length > 0 && <Table size="small" pagination={false} scroll={{ x: 'max-content' }}
+                rowKey={(row) => `${row.file}-${row.placement}-${row.field}`} dataSource={check.issues}
+                columns={[
+                  { title: 'File', dataIndex: 'file' },
+                  { title: 'Vị trí', dataIndex: 'placement', render: (value) => <Text code>{value}</Text> },
+                  { title: 'Trường', dataIndex: 'field' },
+                  { title: 'Cần là', dataIndex: 'expected', render: (value) => String(value) },
+                  { title: 'Đang là', dataIndex: 'actual', render: (value) => <Text type="danger">{String(value)}</Text> },
+                ]} />}
+            </Space>} />
+        ))}
         <div className="marketing-grid">
           {data.screens.map((screen) => (
             <div className={`marketing-screen level-${screen.level}`} key={screen.key}>
@@ -190,6 +222,17 @@ function MarketingSummary({ data }) {
                 <Tag color={levelTags[screen.flow_level]}>Luồng quảng cáo: {screen.flow_label}</Tag>
               </Space>
               {screen.explanation && <Paragraph className="marketing-explanation">{screen.explanation}</Paragraph>}
+              {screen.logic && (screen.logic.load || screen.logic.show) && <div className="screen-logic">
+                <Text strong>Logic hiện tại{screen.logic.verified ? '' : ' (chưa xác minh đủ)'}</Text>
+                <div><Text type="secondary">Tải quảng cáo: </Text>{screen.logic.load || '—'}</div>
+                <div><Text type="secondary">Hiển thị: </Text>{screen.logic.show || '—'}</div>
+              </div>}
+              {screen.requirements?.length > 0 && <div className="screen-requirements">
+                <Text strong>Đã đúng yêu cầu chưa?</Text>
+                <ul>{screen.requirements.map((item, index) => <li key={index} className={`req-${item.status}`}>
+                  <span className="req-icon">{requirementIcons[item.status] || '❔'}</span> {item.text}{item.note && <Text type="secondary"> — {item.note}</Text>}
+                </li>)}</ul>
+              </div>}
               {screen.placements.length > 0 && <Table size="small" pagination={false} rowKey="name" scroll={{ x: 'max-content' }} dataSource={screen.placements}
                 rowClassName={(row) => (row.problem ? 'marketing-row-problem' : '')}
                 columns={[
@@ -205,6 +248,34 @@ function MarketingSummary({ data }) {
         <Text type="secondary">ID trong app lấy từ {data.id_source}. Chi tiết kỹ thuật cho dev ở các mục bên dưới.</Text>
       </Space>
     </Card>
+  );
+}
+
+function DevView({ view }) {
+  return (
+    <div className="dev-view">
+      {view.groups.map((group) => (
+        <Card key={group.key} size="small" className={`dev-group level-${group.level}`} title={group.title}
+          extra={<Space size={4}>
+            {group.summary.FAIL > 0 && <Tag color="error">{group.summary.FAIL} cần sửa</Tag>}
+            {group.summary.UNKNOWN > 0 && <Tag color="warning">{group.summary.UNKNOWN} cần xem lại</Tag>}
+            {group.summary.PASS > 0 && <Tag color="success">{group.summary.PASS} đạt</Tag>}
+            {group.summary.SKIPPED > 0 && <Tag>{group.summary.SKIPPED} không áp dụng</Tag>}
+          </Space>}>
+          {group.rules.map((rule) => (
+            <div className={`dev-rule level-${rule.level}`} key={rule.rule_id}>
+              <Space size={8} wrap><Tag color={levelTags[rule.level]}>{rule.status_label}</Tag><Text strong>{rule.title || rule.rule_id}</Text></Space>
+              {rule.conclusion && <div>{rule.conclusion}</div>}
+              {rule.unknown_reason && rule.status !== 'PASS' && <Text type="secondary">Lý do: {rule.unknown_reason}</Text>}
+              {rule.fixes && <div><Text strong>Cần sửa: </Text>{rule.fixes}</div>}
+              {rule.locations.length > 0 && <div><Text strong>Vị trí code: </Text>{rule.locations.map((loc) => <Text code key={loc} copyable>{loc}</Text>)}</div>}
+              {(rule.verified || rule.unverified) && <Collapse ghost size="small" items={[{ key: 'more', label: 'Đã đúng / chưa xác minh',
+                children: <Space direction="vertical" size={2}>{rule.verified && <Text>Đã đúng: {rule.verified}</Text>}{rule.unverified && <Text type="secondary">Chưa xác minh: {rule.unverified}</Text>}</Space> }]} />}
+            </div>
+          ))}
+        </Card>
+      ))}
+    </div>
   );
 }
 
@@ -246,6 +317,7 @@ export default function App() {
   const [ads, setAds] = useState(null);
   const [working, setWorking] = useState(null);
   const [crossFlow, setCrossFlow] = useState(false);
+  const [recheckAll, setRecheckAll] = useState(false);
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState(null);
   const [uploadPercent, setUploadPercent] = useState(null);
@@ -446,7 +518,7 @@ export default function App() {
       }
       setNotice(`Đang tải ${apk.name}…`);
       setUploadPercent(0);
-      const id = await uploadArchive(apk, documentIds, selectedEngine, crossFlow, setUploadPercent);
+      const id = await uploadArchive(apk, documentIds, selectedEngine, crossFlow, recheckAll, setUploadPercent);
       viewedJobRef.current = id;
       sessionStorage.setItem(jobStorageKey, id);
       poll(id);
@@ -507,7 +579,9 @@ export default function App() {
   const ruleTotal = report?.summary?.total ?? job?.rule_total;
   const displayedEngine = report?.engine || job?.engine || selectedEngine;
   const reportEngineLabels = {
-    'codex:gpt-6.1-sol:medium': 'Codex GPT-6.1 Sol · medium',
+    'codex:gpt-6-sol:low': 'Codex GPT-6 Sol · low',
+    'codex:gpt-6.1-sol:low': 'Codex GPT-6.1 Sol · low (báo cáo cũ)',
+    'codex:gpt-6.1-sol:medium': 'Codex GPT-6.1 Sol · medium (báo cáo cũ)',
     'claude:claude-sonnet-5-5:medium': 'Claude Sonnet 5.5 · medium',
     'claude:claude-haiku-5-5:low': 'Claude Haiku 5.5 · low (báo cáo cũ)',
     'codex:gpt-6-luna': 'Codex GPT-6 Luna (báo cáo cũ)',
@@ -558,10 +632,11 @@ export default function App() {
                 onChange={setSelectedEngine} options={engines.map((item) => ({ value: item.id, label: `${item.label}${item.installed ? '' : ' — chưa cài'}`, disabled: !item.installed }))} />
               <Button onClick={refreshEngines} loading={enginesLoading} disabled={busy}>Phát hiện lại</Button>
             </Space>
-            <Text type="secondary">CLI cần được đăng nhập sẵn. Claude cố định Sonnet 5.5 / medium; Codex dùng GPT-6.1 Sol / medium.</Text>
+            <Text type="secondary">CLI cần được đăng nhập sẵn. Claude cố định Sonnet 5.5 / low; Codex dùng GPT-6 Sol / low.</Text>
             {engineError && <Alert type="error" showIcon message={engineError} />}
             {!enginesLoading && !engineError && !selectedEngine && <Alert type="warning" showIcon message="Cài và đăng nhập Codex CLI hoặc Claude CLI, sau đó khởi động lại server nếu PATH thay đổi và bấm Phát hiện lại." />}
           </div>
+          <Checkbox className="cross-flow-option" checked={recheckAll} disabled={busy} onChange={(event) => setRecheckAll(event.target.checked)}>Kiểm lại cả rule đã đạt ở bản trước (hiện áp dụng cho Firebase tracking)</Checkbox>
           <Checkbox className="cross-flow-option" checked={crossFlow} disabled={busy} onChange={(event) => setCrossFlow(event.target.checked)}>Rà thêm lỗi chéo giữa các luồng (chậm hơn ~5 phút, tốn thêm token)</Checkbox>
           <div className="start-row"><Text type="secondary">{documentHint}</Text><Button id="start-button" type="primary" size="large" icon={busy ? <LoadingOutlined /> : <FileSearchOutlined />} disabled={!apk || busy || enginesLoading || !selectedEngine || documentsLoading || sheetMissing} onClick={beginAudit}>{busy ? 'Đang kiểm tra' : 'Bắt đầu kiểm tra'}</Button></div>
           <Paragraph type="secondary">Tự nhận dạng cột và dòng tiêu đề. Khi chưa hiểu mẫu, AI đã chọn sẽ hỗ trợ ánh xạ cột (tối đa 90 giây/tài liệu); giá trị vẫn lấy từ file gốc. Hai tài liệu cần thuộc cùng app.</Paragraph>
@@ -595,7 +670,10 @@ export default function App() {
         <section className="results-section" id="results">
           <div className="results-header"><div><Text className="eyebrow">KẾT QUẢ</Text><Title level={3}>Tổng quan kiểm tra</Title></div>{report && <Button href={`/api/jobs/${job.id}/report`} icon={<DownloadOutlined />}>Tải report.json</Button>}</div>
           <Alert className="ai-notice" type="info" showIcon icon={<InfoCircleOutlined />} message={ruleTotal ? `${engineLabel} đánh giá ${ruleTotal} rule ads` : `${engineLabel} đọc mã và đánh giá các rule ads`} description="PASS và FAIL cần bằng chứng file/dòng hợp lệ. Khi thiếu dữ liệu hoặc không thể kết nối AI, kết quả là Chưa đủ căn cứ (UNKNOWN), chưa phải lỗi APK được xác nhận. Nội dung mã và tài liệu được gửi tới nhà cung cấp AI đã chọn, sử dụng quota của tài khoản CLI." />
-          {report?.marketing && <MarketingSummary data={report.marketing} />}
+          {report ? <Tabs className="report-tabs" defaultActiveKey="marketing" items={[
+            { key: 'marketing', label: 'Marketing', children: report.marketing ? <MarketingSummary data={report.marketing} jobId={job.id} /> : <Empty description="Báo cáo này chưa có tóm tắt Marketing" /> },
+            { key: 'dev', label: 'Dev', children: <>
+              {report.dev_view && <DevView view={report.dev_view} />}
           {report?.metrics?.documents?.parsed?.length > 0 && <Card size="small" title="Tài liệu đã đọc" style={{ marginBottom: 16 }}>
             <List size="small" dataSource={report.metrics.documents.parsed} renderItem={(document) => <List.Item>
               <Space wrap><Text strong>{document.kind === 'ads_scripts' ? 'ADS SCRIPTS' : 'Working file'}</Text>
@@ -609,10 +687,11 @@ export default function App() {
               {!report.metrics.verdict_cache_enabled && report.engine !== 'none' && <Alert type="warning" showIcon message="Chưa xác định đầy đủ model/phiên bản CLI: lượt này không dùng lại kết luận cũ." />}
               {report.metrics.tool_budget?.overrun > 0 && <Alert type="warning" showIcon message="CLI báo công cụ sau khi đã bắt đầu; đã phát hiện vượt ngân sách và dừng phần phân tích liên quan." />}
               <Text type="secondary">{report.metrics.workers} rule có thể chạy đồng thời. Thời gian từng rule có thể chồng lấp.</Text>
+              {report.metrics.usage_totals && <Text type="secondary">Token tổng: đọc cache {fmtTokens(report.metrics.usage_totals.cache_read)} · ghi cache {fmtTokens(report.metrics.usage_totals.cache_write)} · đầu vào mới {fmtTokens(report.metrics.usage_totals.input)} · đầu ra {fmtTokens(report.metrics.usage_totals.output)}</Text>}
               {report.metrics.base_reference_source?.commit && <Text type="secondary">Đối chiếu code base tại commit {report.metrics.base_reference_source.commit.slice(0, 8)}. Bằng chứng kết luận vẫn lấy từ APK.</Text>}
               <List size="small" dataSource={report.metrics.rules || []} renderItem={(metric) => <List.Item>
                 <Text>{report.findings.find((finding) => finding.rule_id === metric.rule_id)?.title || metric.rule_id}</Text>
-                <Text type="secondary">{metric.duration_seconds.toFixed(1)}s · {metric.from_checkpoint ? 'checkpoint' : metric.from_cache ? 'cache' : `${metric.tool_calls} lượt công cụ`}{metric.repair_attempts ? ` · ${metric.repair_attempts} lượt sửa bằng chứng` : ''}{metric.investigation_attempts ? ` · ${metric.investigation_attempts} lượt điều tra bổ sung` : ''}{metric.review_attempts ? ' · đã review' : ''}</Text>
+                <Text type="secondary">{metric.duration_seconds.toFixed(1)}s · {metric.from_checkpoint ? 'checkpoint' : metric.from_scoped_cache ? 'dùng lại vì code liên quan không đổi' : metric.from_cache ? 'cache' : `${metric.tool_calls} lượt công cụ`}{metric.repair_attempts ? ` · ${metric.repair_attempts} lượt sửa bằng chứng` : ''}{metric.investigation_attempts ? ` · ${metric.investigation_attempts} lượt điều tra bổ sung` : ''}{metric.review_attempts ? ' · đã review' : ''}{metric.resumed_attempts ? ` · ${metric.resumed_attempts} lượt nối phiên` : ''}{metric.usage && (metric.usage.cache_read || metric.usage.output) ? ` · token: đọc ${fmtTokens(metric.usage.cache_read)} / ghi ${fmtTokens(metric.usage.cache_write)} / ra ${fmtTokens(metric.usage.output)}` : ''}</Text>
               </List.Item>} />
             </Space> }]} />}
           {report?.inventory?.documents_available && <Alert className="inventory-notice" type={report.inventory.missing_local.length || report.inventory.mismatched_ids.length || report.inventory.package_match === false || report.inventory.app_id_match === false ? 'warning' : 'success'} showIcon
@@ -630,10 +709,52 @@ export default function App() {
               <Text type="secondary">Kiểm kê từ tài liệu và assets; chưa chứng minh ID được dùng khi chạy.</Text>
             </Space>} />}
           <div className="metric-grid"><Metric title="ĐẠT" value={report?.summary?.pass} color="pass" help="Có bằng chứng phù hợp" /><Metric title="CẦN XỬ LÝ" value={report?.summary?.fail} color="fail" help="Có bằng chứng sai lệch" /><Metric title="CHƯA RÕ" value={report?.summary?.unknown} color="unknown" help="Cần thêm dữ liệu" /><Metric title="BỎ QUA" value={report?.summary?.skipped} color="skipped" help="Chưa đủ điều kiện" /></div>
-          <Card className="findings-card" title="Chi tiết phân tích" extra={<Tag color={error ? 'error' : stage === 'done' ? 'success' : 'default'}>{phase}</Tag>}>
+          <Card className="findings-card" title="Chi tiết đầy đủ từng rule (kèm bằng chứng)" extra={<Tag color={error ? 'error' : stage === 'done' ? 'success' : 'default'}>{phase}</Tag>}>
             {job && <Paragraph type="secondary" className="report-subtitle">{job.filename}{job.package ? ` · ${job.package}` : ''}{job.state === 'done' ? ` · ${job.docs_used ? 'Đã nhận 2 tài liệu' : 'Không kèm tài liệu'}` : ''}</Paragraph>}
             {report ? <List className="findings-list" split={false} dataSource={report.findings || []} locale={{ emptyText: 'Không có luật nào trong báo cáo.' }} renderItem={(item, index) => <Finding item={item} index={index} />} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Chọn APK và bấm Bắt đầu kiểm tra để xem báo cáo." />}
           </Card>
+            </> },
+          ]} /> : <>
+          {report?.metrics?.documents?.parsed?.length > 0 && <Card size="small" title="Tài liệu đã đọc" style={{ marginBottom: 16 }}>
+            <List size="small" dataSource={report.metrics.documents.parsed} renderItem={(document) => <List.Item>
+              <Space wrap><Text strong>{document.kind === 'ads_scripts' ? 'ADS SCRIPTS' : 'Working file'}</Text>
+                <Tag color={document.method === 'ai_mapping' ? 'blue' : 'default'}>{document.method === 'ai_mapping' ? 'AI hỗ trợ nhận dạng' : 'Đọc trực tiếp'}</Tag>
+                <Text type="secondary">{document.sheet ? `${document.sheet} · ` : ''}{document.rows} dòng dữ liệu{document.header_line ? ` · tiêu đề dòng ${document.header_line}` : ''}</Text>
+              </Space>
+            </List.Item>} />
+          </Card>}
+          {report?.metrics && <Collapse style={{ marginBottom: 16 }} items={[{ key: 'metrics', label: `Thời gian ${Math.round(report.summary.duration_seconds)} giây · ${report.summary.from_cache}/${report.summary.total} rule dùng lại kết quả`,
+            children: <Space direction="vertical" style={{ width: '100%' }}>
+              {!report.metrics.verdict_cache_enabled && report.engine !== 'none' && <Alert type="warning" showIcon message="Chưa xác định đầy đủ model/phiên bản CLI: lượt này không dùng lại kết luận cũ." />}
+              {report.metrics.tool_budget?.overrun > 0 && <Alert type="warning" showIcon message="CLI báo công cụ sau khi đã bắt đầu; đã phát hiện vượt ngân sách và dừng phần phân tích liên quan." />}
+              <Text type="secondary">{report.metrics.workers} rule có thể chạy đồng thời. Thời gian từng rule có thể chồng lấp.</Text>
+              {report.metrics.usage_totals && <Text type="secondary">Token tổng: đọc cache {fmtTokens(report.metrics.usage_totals.cache_read)} · ghi cache {fmtTokens(report.metrics.usage_totals.cache_write)} · đầu vào mới {fmtTokens(report.metrics.usage_totals.input)} · đầu ra {fmtTokens(report.metrics.usage_totals.output)}</Text>}
+              {report.metrics.base_reference_source?.commit && <Text type="secondary">Đối chiếu code base tại commit {report.metrics.base_reference_source.commit.slice(0, 8)}. Bằng chứng kết luận vẫn lấy từ APK.</Text>}
+              <List size="small" dataSource={report.metrics.rules || []} renderItem={(metric) => <List.Item>
+                <Text>{report.findings.find((finding) => finding.rule_id === metric.rule_id)?.title || metric.rule_id}</Text>
+                <Text type="secondary">{metric.duration_seconds.toFixed(1)}s · {metric.from_checkpoint ? 'checkpoint' : metric.from_scoped_cache ? 'dùng lại vì code liên quan không đổi' : metric.from_cache ? 'cache' : `${metric.tool_calls} lượt công cụ`}{metric.repair_attempts ? ` · ${metric.repair_attempts} lượt sửa bằng chứng` : ''}{metric.investigation_attempts ? ` · ${metric.investigation_attempts} lượt điều tra bổ sung` : ''}{metric.review_attempts ? ' · đã review' : ''}{metric.resumed_attempts ? ` · ${metric.resumed_attempts} lượt nối phiên` : ''}{metric.usage && (metric.usage.cache_read || metric.usage.output) ? ` · token: đọc ${fmtTokens(metric.usage.cache_read)} / ghi ${fmtTokens(metric.usage.cache_write)} / ra ${fmtTokens(metric.usage.output)}` : ''}</Text>
+              </List.Item>} />
+            </Space> }]} />}
+          {report?.inventory?.documents_available && <Alert className="inventory-notice" type={report.inventory.missing_local.length || report.inventory.mismatched_ids.length || report.inventory.package_match === false || report.inventory.app_id_match === false ? 'warning' : 'success'} showIcon
+            message={`Kiểm kê ID: ${report.inventory.matching_ids.length}/${report.inventory.expected_count} placement khớp config local`}
+            description={<Space direction="vertical" size={2}>
+              {report.inventory.missing_local.length > 0 && <Text>Thiếu trong config: {report.inventory.missing_local.join(', ')}</Text>}
+              {report.inventory.mismatched_ids.length > 0 && <Text>ID lệch: {report.inventory.mismatched_ids.join(', ')}</Text>}
+              {report.inventory.extra_local.length > 0 && <Text>Thừa trong config: {report.inventory.extra_local.join(', ')}</Text>}
+              {report.inventory.optional_placements?.length > 0 && <Text>Tùy chọn: {report.inventory.optional_placements.join(', ')}</Text>}
+              {report.inventory.disabled_placements?.length > 0 && <Text>Không dùng theo tài liệu: {report.inventory.disabled_placements.join(', ')}</Text>}
+              {report.inventory.uncertain_placements?.length > 0 && <Text>Chưa rõ trạng thái trong tài liệu: {report.inventory.uncertain_placements.join(', ')}</Text>}
+              {report.inventory.document_warnings?.map((warning, index) => <Text key={`doc-warning-${index}`}>{warning}</Text>)}
+              {report.inventory.package_match !== null && report.inventory.package_match !== undefined && <Text>Package: {report.inventory.package_match ? 'khớp working file' : 'không khớp working file'}</Text>}
+              {report.inventory.app_id_match !== null && report.inventory.app_id_match !== undefined && <Text>AdMob App ID: {report.inventory.app_id_match ? 'khớp ADS SCRIPTS' : 'không khớp ADS SCRIPTS'}</Text>}
+              <Text type="secondary">Kiểm kê từ tài liệu và assets; chưa chứng minh ID được dùng khi chạy.</Text>
+            </Space>} />}
+          <div className="metric-grid"><Metric title="ĐẠT" value={report?.summary?.pass} color="pass" help="Có bằng chứng phù hợp" /><Metric title="CẦN XỬ LÝ" value={report?.summary?.fail} color="fail" help="Có bằng chứng sai lệch" /><Metric title="CHƯA RÕ" value={report?.summary?.unknown} color="unknown" help="Cần thêm dữ liệu" /><Metric title="BỎ QUA" value={report?.summary?.skipped} color="skipped" help="Chưa đủ điều kiện" /></div>
+          <Card className="findings-card" title="Chi tiết đầy đủ từng rule (kèm bằng chứng)" extra={<Tag color={error ? 'error' : stage === 'done' ? 'success' : 'default'}>{phase}</Tag>}>
+            {job && <Paragraph type="secondary" className="report-subtitle">{job.filename}{job.package ? ` · ${job.package}` : ''}{job.state === 'done' ? ` · ${job.docs_used ? 'Đã nhận 2 tài liệu' : 'Không kèm tài liệu'}` : ''}</Paragraph>}
+            {report ? <List className="findings-list" split={false} dataSource={report.findings || []} locale={{ emptyText: 'Không có luật nào trong báo cáo.' }} renderItem={(item, index) => <Finding item={item} index={index} />} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Chọn APK và bấm Bắt đầu kiểm tra để xem báo cáo." />}
+          </Card>
+          </>}
         </section>
         <footer><Space><CheckCircleOutlined /> APK Audit · Local workspace</Space></footer>
       </Content>

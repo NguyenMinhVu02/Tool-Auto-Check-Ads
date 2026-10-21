@@ -22,7 +22,9 @@ class VerdictCache:
         from dataclasses import asdict
         return digest_json({"tool":"audit-policy-v2", "policy": policy, "engine_identity": identity, "apk": facts["source"].get("sha256"),
                             "workspace":facts["workspace"]["content_sha256"],
-                            "pack_name":pack.name, "pack_version":pack.version,
+                            # No pack version: bumping it for new rules must not invalidate unchanged rules.
+                            # Rule text/params, context and policy below already change the key when they matter.
+                            "pack_name":pack.name,
                             "context":pack.context, "extract":pack.extract,
                             "rule":asdict(rule), "engine":engine,
                             "documents":documents, "dependencies":dependencies})
