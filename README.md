@@ -2,12 +2,16 @@
 
 Công cụ kiểm tra tự động cách một app Android tích hợp quảng cáo Infinity: **ID quảng cáo có đúng không, 4 màn đầu (Splash, Language, Onboarding, Welcome) tải và hiển thị quảng cáo có đúng yêu cầu không**. Chạy trên máy cá nhân, kết quả là báo cáo dễ đọc cho cả Marketing và Dev.
 
-## Dùng nhanh (cho Marketing)
+## Dùng nhanh (mỗi người chạy trên máy của mình)
 
-1. Nhờ dev chạy `uv run apk-audit serve`, rồi mở **http://127.0.0.1:8765**.
-2. Kéo file **APK / XAPK / APKM** vào ô tải lên.
-3. *(Khuyến nghị)* Chọn **ADS SCRIPTS** và **working file** của đúng app đó (XLSX hoặc CSV). Phải chọn đủ cả hai. Workbook nhiều app thì chọn đúng sheet ở ô hiện ra bên dưới.
-4. Chọn AI (**Claude CLI** hoặc **Codex CLI**) rồi bấm **Bắt đầu kiểm tra**. Mỗi lượt thường mất vài phút.
+Tool **chưa có server chung**: mỗi Marketer và Dev tự cài và chạy trên máy cá nhân. APK, tài liệu và kết quả **không rời khỏi máy** (chỉ phần code cần kiểm được gửi tới AI bạn chọn qua CLI). Cài một lần theo mục [Cài đặt](#cài-đặt-một-lần-trên-máy-của-bạn), sau đó mỗi lần dùng:
+
+1. Mở terminal ở thư mục tool, chạy `uv run apk-audit serve`, giữ cửa sổ này mở.
+2. Mở trình duyệt vào **http://127.0.0.1:8765**.
+3. Kéo file **APK / XAPK / APKM** vào ô tải lên.
+4. Chọn **ADS SCRIPTS** và **working file** của đúng app đó (XLSX hoặc CSV). Phải chọn đủ cả hai. Workbook nhiều app thì chọn đúng sheet ở ô hiện ra bên dưới.
+5. Chọn AI (**Claude CLI** hoặc **Codex CLI**) rồi bấm **Bắt đầu kiểm tra**. Mỗi lượt thường mất vài phút.
+6. Xong thì tắt bằng `Ctrl+C` trong terminal.
 
 ## Đọc báo cáo
 
@@ -38,37 +42,43 @@ Tên vị trí trong tài liệu và trong app đôi khi khác nhau: tool nhận
 
 Rule kiểm tra **tất định** chạy tức thì, không tốn token AI. Danh sách đầy đủ: `uv run apk-audit rules list`.
 
-## Cài đặt (cho Dev)
+## Cài đặt một lần trên máy của bạn
+
+Ai dùng tool cũng cần đủ các công cụ dưới đây trên **chính máy đó**. Nếu chưa quen terminal, nhờ dev cài giúp lần đầu; từ đó chỉ cần lệnh `serve`.
 
 ### 1. Cần chuẩn bị
 
-| Thành phần | Yêu cầu | Kiểm tra |
-|---|---|---|
-| Hệ điều hành | Linux hoặc macOS (đã chạy thật trên Linux) | |
-| Python + [uv](https://docs.astral.sh/uv/) | Python ≥ 3.11 | `uv --version` |
-| Java | JDK 17 trở lên (JADX cần) | `java -version` |
-| [JADX](https://github.com/skylot/jadx) | Có lệnh `jadx` trong `PATH` | `jadx --version` |
-| AI CLI | **Một** trong hai, đã đăng nhập: `claude` (Claude Code) hoặc `codex` (Codex CLI) | `claude --version` / `codex --version` |
-| Node.js ≥ 20 | **Chỉ** khi sửa giao diện. Bản build sẵn nằm trong `apk_audit/web_assets/` | `node -v` |
+| Công cụ | Dùng để | Cài | Kiểm tra |
+|---|---|---|---|
+| **Git** | Tải và cập nhật tool | https://git-scm.com | `git --version` |
+| **uv** (kèm Python ≥ 3.11) | Chạy tool | https://docs.astral.sh/uv/getting-started/installation/ | `uv --version` |
+| **Java JDK 17+** | JADX cần | Linux: `sudo apt install openjdk-17-jdk`; macOS: `brew install openjdk@17` | `java -version` |
+| **JADX** | Giải mã APK | https://github.com/skylot/jadx/releases (macOS: `brew install jadx`); thêm vào `PATH` | `jadx --version` |
+| **AI CLI**, chọn **một**: `claude` (Claude Code) hoặc `codex` (Codex CLI) | Phần AI đọc code | Theo hướng dẫn của nhà cung cấp; **đăng nhập tài khoản của bạn** | `claude --version` hoặc `codex --version` |
+| Node.js ≥ 20 | **Chỉ** khi sửa giao diện | https://nodejs.org | `node -v` |
 
-Không cần AI CLI nếu chỉ chạy `--engine none` (rule tất định, không tốn token).
+- Hạn mức AI tính trên **tài khoản của từng người** (gói đăng ký), không tính theo token tiền. Mỗi lượt đầy đủ tốn đáng kể hạn mức 5 giờ, nên tránh chạy liên tục nhiều app.
+- Chỉ muốn xem ID và cấu hình, không cần AI: dùng `--engine none`, khi đó không cần cài AI CLI.
+- Windows: chưa được kiểm thử; nên dùng WSL2 (Ubuntu) rồi làm theo hướng dẫn Linux.
 
-### 2. Cài và chạy
+### 2. Tải tool và chạy thử
 
 ```bash
-git clone git@github.com:NguyenMinhVu02/Tool-Auto-Check-Ads.git
-cd Tool-Auto-Check-Ads            # (thư mục apk-audit nếu đã có sẵn)
+git clone git@github.com:NguyenMinhVu02/Tool-Auto-Check-Ads.git apk-audit
+cd apk-audit
 uv sync --extra mcp
 uv run apk-audit doctor           # báo thiếu gì: jadx, Java, claude, codex
 uv run apk-audit serve            # mở http://127.0.0.1:8765
 ```
 
-- `serve` chạy **6 rule song song**; đổi bằng `--workers 1-10`. Máy yếu hoặc hay hết hạn mức thì dùng 3–4.
-- Web chỉ lắng nghe `127.0.0.1` (không mở ra mạng ngoài). Kết quả và cache lưu ở `out/web/`.
-- Cần đăng nhập AI trước khi chạy: gõ `claude` hoặc `codex` một lần trong terminal để đăng nhập.
-- Muốn xóa sạch: dừng server, xóa `out/web/` (lịch sử, cache verdict, workspace đã giải mã).
+- Repo riêng tư: cần được cấp quyền và có SSH key (hoặc dùng HTTPS với token) mới `git clone` được. Hỏi dev nếu bị "Repository not found".
+- **Cập nhật khi có bản mới:** `git pull` rồi `uv sync --extra mcp`.
+- Đăng nhập AI trước khi chạy: gõ `claude` hoặc `codex` một lần trong terminal.
+- `serve` chỉ lắng nghe `127.0.0.1`, người khác trong mạng **không** truy cập được. Kết quả, lịch sử và cache lưu ở thư mục `out/web/` trên máy bạn.
+- Chạy **6 rule song song**; máy yếu hoặc hay hết hạn mức thì dùng `--workers 3`.
+- Muốn xóa sạch: tắt `serve`, xóa thư mục `out/web/`.
 
-### 3. Hướng dẫn sử dụng từng bước
+### 3. Hướng dẫn sử dụng chi tiết
 
 1. Mở web, kéo APK/XAPK/APKM vào ô tải lên.
 2. Chọn **ADS SCRIPTS** và **working file** của **đúng app đó** (XLSX tốt nhất). Workbook nhiều app thì chọn đúng sheet.

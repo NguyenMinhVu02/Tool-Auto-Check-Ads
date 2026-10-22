@@ -35,6 +35,15 @@
 - Vận hành/Git: Giữ feat/audit-optimization và mọi diff trước; chưa commit/push/restartserver hoặc sửa APK. Cần restart backend trước auditweb mới để nạp code/model. Báo cáo web cũ không tự đổi; pilot3rule ở thư mục riêng.
 - Bước tiếp theo đề xuất: Sửa đóng gói/đường dẫn và context theo rule trước; benchmark tùy chọn 2 workers đã có với cùng đầu vào/model/cache. Sau đó bổ sung tiến độ live cho repair/investigation/review và hủy audit truyền tới CLI. Trước phát hành ổn định cần kiểm full 11 rule với hợp đồng thật, ca APK có kết luận chuẩn và cài/chạy ngoài repo trên máy mới. Chưa triển khai các đề xuất này trong lượt rà soát; runtime/SDK thiếu mã thật vẫn phải giữ UNKNOWN có lý do.
 
+## 2026-10-22 (chiều) - Đối chiếu A/B slicer, README chạy local, khớp tên theo ID
+
+- Mục tiêu: so slicer có/không tweak, viết README cho Marketing tự cài chạy local, giảm "Cần dev xem lại".
+- Kết quả A/B (AI Short Drama, Codex gpt-6-sol low): tweak 4.99M token/272 s; baseline 6.16M/566 s nhưng có thêm CROSS_FLOW và Language chạy thật. Chênh lệch nằm trong dao động giữa các lần chạy, không chứng minh tweak có ích. Giữ baseline; đã xóa nhánh `exp/graphify-call-graph` và worktree.
+- Nguyên nhân UNKNOWN thật: Welcome UNKNOWN vì ADS SCRIPTS là CSV nên `open_resume` không rõ đang dùng (chính sách có chủ đích). ID UNKNOWN là reviewer hạ FAIL hợp lệ.
+- Sửa: `placement_policy.config_key` khớp tên gõ sai trong tài liệu (`ative_` so với `native_`) khi cùng ID, cùng số vị trí, ảnh khuyết duy nhất; Marketing giải thích UNKNOWN của Welcome do CSV. Thêm `tests/test_placement_policy.py`. 241 test pass.
+- README: viết lại mục cài đặt cho từng máy chạy local (chưa có server chung).
+- Chưa làm: giảm token ở lượt repair (gửi chỉ phần sửa khi resume). Chưa commit các thay đổi sau `ba16fc4`.
+
 ## Lịch sử phiên
 
 ### 2026-10-22 17:30 — Đưa slicer về bản KHÔNG có tweak để so sánh A/B (Asia/Ho_Chi_Minh)

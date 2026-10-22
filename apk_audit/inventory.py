@@ -50,7 +50,9 @@ def build_inventory(workspace, facts, documents, files=None):
         config = {}
     local = {key: value for key, value in config.items() if isinstance(value, dict) and "id" in value}
     # Compare under the app's own placement name when the document uses a known alias.
-    documented = {(config_key(row["name"], local) or row["name"]): row for row in rows or [] if isinstance(row, dict) and row.get("name")}
+    names = {row["name"] for row in rows or [] if isinstance(row, dict) and row.get("name")}
+    documented = {(config_key(row["name"], local, row.get("id"), names) or row["name"]): row
+                  for row in rows or [] if isinstance(row, dict) and row.get("name")}
     expected = {key: row for key, row in documented.items() if row['state'] == 'active'}
     optional = {key for key in documented.keys() | local.keys() if key.casefold() == 'inter_onboarding'}
     shared = sorted(expected.keys() & local.keys())

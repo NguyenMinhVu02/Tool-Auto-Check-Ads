@@ -88,12 +88,12 @@ def build_marketing_summary(documents, facts, inventory, findings):
     by_rule = {f['rule_id']: f for f in findings}
     screens, problems = [], []
     for key, title, rule_id, fragments in SCREENS:
-        claimed = {config_key(name, local) for name in documented} - {None}
+        claimed = {config_key(name, local, row.get('id'), documented.keys()) for name, row in documented.items()} - {None}
         names = sorted(name for name in documented.keys() | (local.keys() - claimed)
                        if any(fragment in name.lower() for fragment in fragments))
         placements = []
         for name in names:
-            key = config_key(name, local)
+            key = config_key(name, local, (documented.get(name) or {}).get('id'), documented.keys())
             item = _placement(name, documented.get(name), local.get(key) if key else None, optional)
             if key and key != name:
                 item['app_name'] = key
@@ -120,6 +120,9 @@ def build_marketing_summary(documents, facts, inventory, findings):
             explanation = 'Chưa kiểm được màn này vì AI hết hạn mức sử dụng giữa chừng. Chạy lại sau khi hạn mức làm mới (các rule đã xong được dùng lại).'
         elif finding and finding['status'] == 'UNKNOWN' and finding.get('reason') in {'engine_error', 'repair_error', 'review_error'}:
             explanation = 'Chưa kiểm được màn này vì lỗi khi gọi AI. Chạy lại để kiểm.'
+        elif finding and finding['status'] == 'UNKNOWN' and key == 'welcome' and 'open_resume' in inventory.get('uncertain_placements', []):
+            explanation = ('Tài liệu không cho biết vị trí open_resume có đang dùng hay không (thường do file CSV mất màu/gạch ngang). '
+                           'Chọn lại ADS SCRIPTS dạng XLSX để tool kết luận được màn này.')
         elif finding and finding['status'] == 'UNKNOWN':
             explanation = ('Tool chưa đủ căn cứ để kết luận, cần dev xem lại.'
                            + (' Ghi chú của AI: ' + explanation if explanation else ''))

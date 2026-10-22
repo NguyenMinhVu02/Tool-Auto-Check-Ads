@@ -1,5 +1,7 @@
 """Partner placement applicability, independent of APK enable flags."""
 
+import difflib
+import re
 import unicodedata
 
 
@@ -8,11 +10,23 @@ import unicodedata
 PLACEMENT_ALIASES = {'inter_welcome_back': ('inter_welcome',), 'inter_welcome': ('inter_welcome_back',)}
 
 
-def config_key(name, available):
-    """Config key that stands for a document placement name (itself, else a known alias), or None."""
+def config_key(name, available, doc_id=None, documented_names=()):
+    """Config key that stands for a document placement name, or None.
+
+    Order: the name itself, a known alias, then a typo in the document: the app key must carry the same
+    non-empty ID, look almost identical (e.g. ative_ vs native_) with the same position numbers (fullscreen_1_2 vs 1_3 is never a typo), not be named by another document row,
+    and be the only such candidate.
+    """
     if name in available:
         return name
-    return next((alias for alias in PLACEMENT_ALIASES.get(name, ()) if alias in available), None)
+    alias = next((alias for alias in PLACEMENT_ALIASES.get(name, ()) if alias in available), None)
+    if alias or not doc_id:
+        return alias
+    candidates = [key for key, value in available.items()
+                  if isinstance(value, dict) and value.get('id') == doc_id and key not in documented_names
+                  and re.findall(r'\d+', name) == re.findall(r'\d+', key)
+                  and difflib.SequenceMatcher(None, name, key).ratio() >= 0.9]
+    return candidates[0] if len(candidates) == 1 else None
 
 
 def label(value):
