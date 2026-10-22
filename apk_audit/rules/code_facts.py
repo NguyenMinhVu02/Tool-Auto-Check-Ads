@@ -8,6 +8,8 @@ attributes and asset JSON are never renamed. Static rules use this profile to an
 from pathlib import Path
 import re
 
+from ..utils import read_text
+
 GAP_MARKERS = re.compile(r'Code restructure failed|Method dump skipped|Failed to decompile|Can\'t decompile')
 MAX_READ = 400_000
 _cache = {}
@@ -55,11 +57,16 @@ def code_profile(workspace, roots=()):
                     app_gaps += 1
                     if len(gap_samples) < 3:
                         gap_samples.append(relative)
+    manifest = root / 'resources' / 'AndroidManifest.xml'
+    try:
+        debuggable = 'android:debuggable="true"' in read_text(manifest)
+    except (OSError, ValueError):
+        debuggable = False
     ratio = short / classes if classes else 0.0
     level = 'cao' if ratio >= 0.3 else 'vừa' if ratio >= 0.1 else 'thấp'
     profile = {'classes': classes, 'short_name_ratio': round(ratio, 3), 'obfuscation': level,
                'decompile_gap_files': app_gaps, 'all_gap_files': gaps, 'gap_samples': gap_samples,
-               'app_roots': list(roots)}
+               'app_roots': list(roots), 'build': 'debug' if debuggable else 'release'}
     _cache[key] = profile
     return profile
 

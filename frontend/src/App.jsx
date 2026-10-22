@@ -59,7 +59,7 @@ async function uploadDocument(kind, file) {
   return { id: data.id, sheets: data.sheets || [] };
 }
 
-function uploadArchive(file, documentIds, engine, crossFlow, recheckAll, onProgress) {
+function uploadArchive(file, documentIds, engine, crossFlow, recheckAll, fullScope, onProgress) {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
     request.open('POST', '/api/jobs');
@@ -68,6 +68,7 @@ function uploadArchive(file, documentIds, engine, crossFlow, recheckAll, onProgr
     request.setRequestHeader('X-Audit-Engine', engine);
     if (crossFlow) request.setRequestHeader('X-Cross-Flow', '1');
     if (recheckAll) request.setRequestHeader('X-Recheck-All', '1');
+    if (fullScope) request.setRequestHeader('X-Full-Scope', '1');
     if (documentIds) {
       request.setRequestHeader('X-Ads-Scripts-Id', documentIds.ads_scripts.id);
       request.setRequestHeader('X-Checklist-Id', documentIds.checklist.id);
@@ -319,6 +320,7 @@ export default function App() {
   const [working, setWorking] = useState(null);
   const [crossFlow, setCrossFlow] = useState(false);
   const [recheckAll, setRecheckAll] = useState(false);
+  const [fullScope, setFullScope] = useState(false);
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState(null);
   const [uploadPercent, setUploadPercent] = useState(null);
@@ -394,6 +396,11 @@ export default function App() {
       setUploadPercent(null);
       changeBusy(false);
       refreshHistory();
+      if (next.state === 'awaiting_confirmation') {
+        setError(false);
+        setNotice('Cần xác nhận tài liệu trước khi chạy AI (chưa tốn quota).');
+        return;
+      }
       if (next.state === 'error') {
         changeBusy(false);
         setError(true);
@@ -519,7 +526,7 @@ export default function App() {
       }
       setNotice(`Đang tải ${apk.name}…`);
       setUploadPercent(0);
-      const id = await uploadArchive(apk, documentIds, selectedEngine, crossFlow, recheckAll, setUploadPercent);
+      const id = await uploadArchive(apk, documentIds, selectedEngine, crossFlow, recheckAll, fullScope, setUploadPercent);
       viewedJobRef.current = id;
       sessionStorage.setItem(jobStorageKey, id);
       poll(id);
@@ -560,6 +567,29 @@ export default function App() {
       setError(true);
       setNotice(cause.message);
       refreshHistory();
+    }
+  }
+
+  async function answerMismatch(action) {
+    if (!job || busyRef.current) return;
+    const id = job.id;
+    clearTimeout(timerRef.current);
+    try {
+      await readJson(await fetch(`/api/jobs/${id}/${action}`, { method: 'POST' }));
+      viewedJobRef.current = id;
+      if (action === 'confirm') {
+        changeBusy(true);
+        setError(false);
+        setNotice('Đã xác nhận tài liệu, đang chạy kiểm tra…');
+        poll(id);
+      } else {
+        poll(id);
+      }
+      refreshHistory();
+    } catch (cause) {
+      changeBusy(false);
+      setError(true);
+      setNotice(cause.message);
     }
   }
 
@@ -639,6 +669,7 @@ export default function App() {
             {engineError && <Alert type="error" showIcon message={engineError} />}
             {!enginesLoading && !engineError && !selectedEngine && <Alert type="warning" showIcon message="Cài và đăng nhập Codex CLI hoặc Claude CLI, sau đó khởi động lại server nếu PATH thay đổi và bấm Phát hiện lại." />}
           </div>
+          <Checkbox className="cross-flow-option" checked={fullScope} disabled={busy} onChange={(event) => setFullScope(event.target.checked)}>Kiểm đầy đủ cho dev (thêm Load/observe và Banner; mặc định chỉ khởi tạo, Remote/consent/fallback, ID và 4 màn đầu)</Checkbox>
           <Checkbox className="cross-flow-option" checked={recheckAll} disabled={busy} onChange={(event) => setRecheckAll(event.target.checked)}>Kiểm lại cả rule đã đạt ở bản trước (hiện áp dụng cho Firebase tracking)</Checkbox>
           <Checkbox className="cross-flow-option" checked={crossFlow} disabled={busy} onChange={(event) => setCrossFlow(event.target.checked)}>Rà thêm lỗi chéo giữa các luồng (chậm hơn ~5 phút, tốn thêm token)</Checkbox>
           <div className="start-row"><Text type="secondary">{documentHint}</Text><Button id="start-button" type="primary" size="large" icon={busy ? <LoadingOutlined /> : <FileSearchOutlined />} disabled={!apk || busy || enginesLoading || !selectedEngine || documentsLoading || sheetMissing} onClick={beginAudit}>{busy ? 'Đang kiểm tra' : 'Bắt đầu kiểm tra'}</Button></div>
@@ -665,8 +696,18 @@ export default function App() {
             <Button key="open" disabled={busy} onClick={() => openJob(item)}>{item.state === 'done' ? 'Mở báo cáo' : 'Xem trạng thái'}</Button>,
             ...(item.resumable ? [<Button key="resume" disabled={busy} onClick={() => resumeJob(item)}>Tiếp tục</Button>] : []),
           ]}>
-            <List.Item.Meta title={item.filename} description={<Space wrap><Tag color={item.state === 'done' ? 'success' : item.state === 'error' ? 'error' : 'processing'}>{item.interrupted ? 'Bị gián đoạn' : item.state === 'done' ? 'Hoàn tất' : item.state === 'error' ? 'Có lỗi' : 'Đang chạy'}</Tag><Text type="secondary">{item.created_at ? new Date(item.created_at).toLocaleString('vi-VN') : ''}</Text></Space>} />
+            <List.Item.Meta title={item.filename} description={<Space wrap><Tag color={item.state === 'done' ? 'success' : item.state === 'error' ? 'error' : 'processing'}>{item.interrupted ? 'Bị gián đoạn' : item.state === 'awaiting_confirmation' ? 'Chờ xác nhận tài liệu' : item.state === 'done' ? 'Hoàn tất' : item.state === 'error' ? 'Có lỗi' : 'Đang chạy'}</Tag><Text type="secondary">{item.created_at ? new Date(item.created_at).toLocaleString('vi-VN') : ''}</Text></Space>} />
           </List.Item>} />
+          {job?.state === 'awaiting_confirmation' && job.preflight && <Alert className="preflight-alert" type="warning" showIcon
+            message="Tài liệu có thể không thuộc app này — chưa chạy AI"
+            description={<Space direction="vertical" size={6} style={{ width: '100%' }}>
+              <ul className="marketing-problems">{job.preflight.reasons.map((item) => <li key={item.code}>{item.message}</li>)}</ul>
+              <Text type="secondary">Chạy AI trên tài liệu sai app sẽ tốn quota mà kết quả so ID không có giá trị. Nếu chắc tài liệu đúng (ví dụ app dùng ID riêng của đối tác) hãy tiếp tục.</Text>
+              <Space wrap>
+                <Button type="primary" onClick={() => answerMismatch('confirm')}>Tiếp tục kiểm tra</Button>
+                <Button onClick={() => answerMismatch('cancel')}>Hủy để chọn lại tài liệu</Button>
+              </Space>
+            </Space>} />}
           {job?.resumable && <Alert type="info" showIcon message="Lượt kiểm tra bị gián đoạn" description="Bấm Tiếp tục để chạy lại các bước cần thiết và dùng kết quả đã hoàn tất còn cache hợp lệ." action={<Button disabled={busy} onClick={() => resumeJob(job)}>Tiếp tục</Button>} />}
         </Card>
 

@@ -69,6 +69,10 @@ uv run apk-audit audit app.apk --engine claude --out out/app \
 
 Mã thoát `1` nghĩa là báo cáo có rule **Cần sửa**.
 
+## Phạm vi mặc định và trích mã sẵn
+
+Mặc định AI **chỉ đọc phần liên quan**: khởi tạo SDK, Remote Config / consent / fallback local, nguồn ID và **4 màn đầu** (Splash, Language, Onboarding, Welcome). Rule Load/observe và Banner chỉ chạy khi chọn **Kiểm đầy đủ cho dev** (web) hoặc `--full` (CLI). Trước khi gọi AI, tool **trích sẵn các hàm quan trọng** của từng phạm vi (`apk_audit/slicer.py`): chọn theo thứ tự bền với làm rối (class trong manifest, chuỗi/tên vị trí quảng cáo, getter, vòng đời `onCreate/onResume`), theo một bước gọi/khởi tạo lớp trong app, bỏ qua thư viện bên thứ ba, ghi rõ `KHÔNG CÓ MÃ` khi JADX không xuất được file của một màn. Mỗi khối có đường dẫn và **số dòng thật** nên AI dùng thẳng làm dẫn chứng và chỉ cần vài lệnh đọc thêm; đo thử trên app huyết áp: số lệnh đọc mỗi rule giảm từ 9–12 xuống 0–5.
+
 ## Chọn AI và tiết kiệm token
 
 - **Claude Sonnet 5 (low)** và **Codex GPT-6 Sol (low)** đều cố định model, không tự đổi khi lỗi. Mỗi lượt dùng hạn mức của gói đăng ký, không tính tiền theo token.
@@ -85,6 +89,10 @@ Công cụ đọc mã **giải mã từ APK** (JADX), không phải mã nguồn 
 - Mỗi rule tĩnh ghi **Căn cứ** (manifest / file cấu hình / chuỗi trong mã / lời gọi hàm) và **giới hạn** (mức làm rối, số file giải mã lỗi); tab Dev cảnh báo khi mã bị làm rối vừa/cao. AI cũng nhận thông tin này và được yêu cầu không kết luận lỗi chỉ vì mất một tên hàm.
 - **Cổng chặn báo oan cho rule AI:** mỗi nhận định lỗi phải ghi `basis`: *defect_present* (đoạn code được dẫn thể hiện hành vi sai) hoặc *behavior_absent* (đã tìm nhưng không thấy). Kết quả ❌ chỉ chỉ dựa trên "không thấy" sẽ tự hạ thành ❔ khi mã bị làm rối hoặc có file giải mã lỗi; lỗi có đoạn code sai rõ ràng vẫn là ❌ và vẫn phải qua review độc lập. Reviewer được yêu cầu tự tìm lại hành vi bằng chuỗi/hằng số/import.
 - **Độ tin cậy** (cao / trung bình / thấp) hiện bên cạnh từng rule: *cao* khi đạt ngay lượt đầu và đủ căn cứ, *trung bình* khi phải sửa bằng chứng/điều tra thêm hoặc lỗi chỉ dựa trên việc không thấy, *thấp* với ❔. Màn Marketing ghi "nên dev xác nhận" khi ❌ chỉ ở mức trung bình.
+
+## Kiểm tra tài liệu có đúng app trước khi gọi AI
+
+Sau khi đọc APK và tài liệu, **trước khi tốn quota AI**, tool kiểm tra ba dấu hiệu tài liệu thuộc app khác: package của working file lệch package APK, AdMob App ID lệch, hoặc **tài khoản AdMob** của ID trong app và trong ADS SCRIPTS không trùng nhau (ID test của Google không tính). Nếu lệch, web dừng ở trạng thái *Chờ xác nhận tài liệu* và hỏi **Tiếp tục kiểm tra** hay **Hủy để chọn lại tài liệu**; CLI dừng với mã `7` và chấp nhận `--confirm-mismatch`. Chạy `--engine none` không bị chặn. Lượt đã xác nhận ghi cảnh báo `documents_may_not_match_app` trong báo cáo.
 
 ## Giới hạn cần biết
 

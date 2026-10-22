@@ -166,6 +166,23 @@ class PipelineOptimizationTests(unittest.TestCase):
         self.assertIsNone(screen)  # fixture rule is not one of the four marketing screens
         self.assertIn('hết hạn mức', report['dev_view']['groups'][0]['rules'][0]['unknown_reason'])
 
+    def test_mismatched_documents_stop_before_any_ai_call_unless_confirmed(self):
+        from apk_audit.preflight import DocumentMismatch
+        ads=self.root/'ads.json'
+        ads.write_text(json.dumps({'placements':[{'name':'inter_splash','id':'ca-app-pub-111/1','enabled':True}]}))
+        (self.ws/'resources/assets/ad_config.json').write_text('{"inter_splash":{"id":"ca-app-pub-222/1"}}')
+        class Forbidden(ReplayEngine):
+            def run_agent(inner,*args,**kwargs):
+                raise AssertionError('AI must not be called')
+        with self.assertRaises(DocumentMismatch) as caught:
+            run(self.ws,engine=Forbidden([]),ads_scripts=ads,**self.kwargs)
+        self.assertEqual(caught.exception.details['reasons'][0]['code'],'publisher')
+        report=run(self.ws,engine=ReplayEngine([self.payload]),ads_scripts=ads,confirm_mismatch=True,**self.kwargs)
+        self.assertEqual(report['preflight']['level'],'block')
+        self.assertTrue(any(w.startswith('documents_may_not_match_app') for w in report['warnings']))
+        offline=run(self.ws,engine='none',ads_scripts=ads,**self.kwargs)    # no AI quota at stake: never blocks
+        self.assertEqual(offline['summary']['agent'],1)
+
     def test_rule_is_skipped_without_ai_when_document_marks_area_unused(self):
         (self.pack/'rules/a.yaml').write_text('- id: WELCOME\n  title: Welcome\n  area: welcome\n  mode: agent\n  question: Inspect\n  verdict: {pass_when: "y", fail_when: "n", unknown_when: u}\n')
         ads=self.root/'ads.json'

@@ -12,6 +12,7 @@ from uuid import uuid4
 from .documents import list_sheets, load_document
 from .dev_view import build_dev_view
 from .passed_history import PassedHistory
+from .preflight import DocumentMismatch
 from .marketing import build_marketing_summary
 from .report_html import ids_csv, render_html
 from .errors import AuditError
@@ -31,9 +32,9 @@ JOB_PUBLIC_FIELDS = {
     "id", "filename", "state", "stage", "docs_used", "engine", "upload_complete",
     "resumable", "interrupted", "created_at", "updated_at", "error", "summary", "package",
     "warnings", "rule_total", "rule_completed", "current_rule", "current_rule_title",
-    "current_rules", "active_rules", "last_rule",
+    "current_rules", "active_rules", "last_rule", "preflight",
 }
-JOB_PRIVATE_FIELDS = {"documents", "archive_path", "output_path", "report_path"}
+JOB_PRIVATE_FIELDS = {"documents", "archive_path", "output_path", "report_path", "confirm_mismatch"}
 
 
 class AuditJobs:
@@ -113,7 +114,7 @@ class AuditJobs:
                 job = json.loads(path.read_text(encoding="utf-8"))
                 if not isinstance(job, dict) or path != self._metadata_path(job.get("id")):
                     continue
-                if job.get("state") not in {"uploading", "running", "done", "error"} or job.get("engine") not in {"codex", "claude"}:
+                if job.get("state") not in {"uploading", "running", "done", "error", "awaiting_confirmation"} or job.get("engine") not in {"codex", "claude"}:
                     continue
                 job = {key: value for key, value in job.items() if key in JOB_PUBLIC_FIELDS | JOB_PRIVATE_FIELDS}
                 if any(not isinstance(job.get(key, ""), str) for key in ("created_at", "updated_at", "filename", "stage")):
@@ -197,6 +198,32 @@ class AuditJobs:
         threading.Thread(target=self._execute, args=(job_id, archive, True), daemon=True).start()
         return job_id
 
+    def confirm(self, job_id):
+        """Continue a job that stopped on a document/app mismatch; the user vouched for the documents."""
+        with self.lock:
+            if self.active is not None:
+                raise RuntimeError("Đang xử lý một file khác; hãy đợi kết quả")
+            self._metadata_path(job_id)
+            job = self.jobs[job_id]
+            if job["state"] != "awaiting_confirmation":
+                raise ValueError("Lượt kiểm tra này không chờ xác nhận")
+            archive = self._validate_paths(job, inputs=True)
+            self.active = job_id
+            self.update(job_id, state="running", stage="documents", confirm_mismatch=True, preflight=None,
+                        error=None, current_rules=[], active_rules=[], current_rule=None,
+                        current_rule_title=None, rule_completed=0)
+        threading.Thread(target=self._execute, args=(job_id, archive, False), daemon=True).start()
+        return job_id
+
+    def cancel(self, job_id):
+        with self.lock:
+            self._metadata_path(job_id)
+            job = self.jobs[job_id]
+            if job["state"] != "awaiting_confirmation":
+                raise ValueError("Lượt kiểm tra này không chờ xác nhận")
+            self.update(job_id, state="error", preflight=None,
+                        error="Đã hủy vì tài liệu có thể không thuộc app này. Chọn lại đúng ADS SCRIPTS/working file rồi chạy lại.")
+
     def store_document(self, kind, filename, stream, size):
         name = Path(unquote(filename).replace("\\", "/")).name
         if kind not in DOCUMENT_KINDS or Path(name).suffix.lower() not in DOCUMENT_EXTENSIONS:
@@ -226,7 +253,7 @@ class AuditJobs:
         return document_id, sheets
 
     def reserve(self, filename, ads_id=None, checklist_id=None, engine=None, ads_sheet=None, checklist_sheet=None,
-                cross_flow=False, recheck_all=False):
+                cross_flow=False, recheck_all=False, full_scope=False):
         name = Path(unquote(filename).replace("\\", "/")).name
         if not name or Path(name).suffix.lower() not in ALLOWED_EXTENSIONS:
             raise ValueError("Chỉ nhận file .apk, .xapk hoặc .apkm")
@@ -262,7 +289,7 @@ class AuditJobs:
             archive = self._path(self.output_root / "uploads" / (job_id + Path(name).suffix.lower()))
             self._path(self.output_root / job_id)
             self.jobs[job_id] = {"id": job_id, "filename": name, "state": "uploading", "stage": "upload", "docs_used": bool(documents), "engine": engine,
-                                 "cross_flow": bool(cross_flow), "recheck_all": bool(recheck_all)}
+                                 "cross_flow": bool(cross_flow), "recheck_all": bool(recheck_all), "full_scope": bool(full_scope)}
             self.jobs[job_id].update(documents=documents, document_sheets=sheets, archive_path=str(archive),
                                      output_path=str(self.output_root / job_id), upload_complete=False,
                                      resumable=False, interrupted=False,
@@ -276,7 +303,7 @@ class AuditJobs:
             self.jobs[job_id].update(fields)
             self.jobs[job_id]["updated_at"] = datetime.now(timezone.utc).isoformat()
             self._persist(self.jobs[job_id])
-            if fields.get("state") in {"done", "error"} and self.active == job_id:
+            if fields.get("state") in {"done", "error", "awaiting_confirmation"} and self.active == job_id:
                 self.active = None
 
     def get(self, job_id):
@@ -340,6 +367,8 @@ class AuditJobs:
                 resume=resumed,
                 engine=self.get(job_id)["engine"],
                 cross_flow=self.get(job_id).get("cross_flow", False),
+                full_scope=self.get(job_id).get("full_scope", False),
+                confirm_mismatch=self.get(job_id).get("confirm_mismatch", False),
                 recheck_all=self.get(job_id).get("recheck_all", False),
                 ads_scripts=self._path(documents["ads_scripts"], exists=True) if documents else None,
                 checklist=self._path(documents["checklist"], exists=True) if documents else None,
@@ -360,6 +389,9 @@ class AuditJobs:
                 warnings=report["warnings"],
                 report_path=str(report_path),
             )
+        except DocumentMismatch as exc:
+            self.update(job_id, state="awaiting_confirmation", stage="preflight", preflight=exc.details,
+                        current_rules=[], active_rules=[], error=None)
         except (AuditError, OSError, ValueError) as exc:
             self.update(job_id, state="error", error=str(exc))
         except Exception:
@@ -429,6 +461,23 @@ def make_handler(jobs):
         def do_POST(self):
             route = urlsplit(self.path).path
             parts = route.strip("/").split("/")
+            if len(parts) == 4 and parts[:2] == ["api", "jobs"] and parts[3] in {"confirm", "cancel"}:
+                try:
+                    if parts[3] == "confirm":
+                        jobs.confirm(parts[2])
+                    else:
+                        jobs.cancel(parts[2])
+                except KeyError:
+                    self._json(404, {"error": "Không tìm thấy lượt kiểm tra"})
+                    return
+                except RuntimeError as exc:
+                    self._json(409, {"error": str(exc)})
+                    return
+                except (ValueError, OSError) as exc:
+                    self._json(400, {"error": str(exc)})
+                    return
+                self._json(202 if parts[3] == "confirm" else 200, {"id": parts[2]})
+                return
             if len(parts) == 4 and parts[:2] == ["api", "jobs"] and parts[3] == "resume":
                 try:
                     job_id = jobs.resume(parts[2])
@@ -478,6 +527,7 @@ def make_handler(jobs):
                     unquote(self.headers.get("X-Checklist-Sheet", "")) or None,
                     self.headers.get("X-Cross-Flow") == "1",
                     self.headers.get("X-Recheck-All") == "1",
+                    self.headers.get("X-Full-Scope") == "1",
                 )
             except (ValueError, OSError) as exc:
                 self._json(400, {"error": str(exc)})

@@ -4,6 +4,8 @@ import time
 from .agent import evaluate, _verify_evidence
 from .cache_identity import engine_identity
 from .scoped_cache import ScopedIndex, dependency_paths, hash_dependencies, scoped_key, tree_digest
+from .engine_common import SLICE_MARK
+from .slicer import SLICE_VERSION, build_slices
 from .context_scope import SCOPE_VERSION, compact_prior, not_applicable_by_document, scope_documents, scope_inventory
 from .engine_common import ACTIVITY, policy_identity
 from .execution import CROSS_FLOW_RULE, RuleOutcome, execute_rules, MAX_WORKERS, valid_workers
@@ -19,6 +21,7 @@ from .errors import AuditError
 from .facts import build_facts
 from .inventory import build_inventory, inventory_observations
 from .agent import checklist_placeholder
+from .preflight import DocumentMismatch, check_documents
 from .rules.code_facts import app_roots, code_profile
 from .dev_view import build_dev_view
 from .passed_history import PassedHistory
@@ -103,6 +106,7 @@ def _cached_finding(cached, rule, tools, strict):
     return finding
 
 
+SLICED_BUNDLE_CHARS = 5000  # the slice already carries the relevant code; keep only a small heuristic bundle
 BUNDLE_CHARS = 12000  # heuristic code hints; the AI reads files itself, so a smaller bundle saves tokens on every turn
 
 
@@ -120,7 +124,7 @@ def run(target, *, rules=None, out=None, engine="codex", only=None, cache_dir=No
         refresh=False, refresh_rule=None, max_tool_calls=400, trace=False,
         format="both", no_cache=False, ads_scripts=None, checklist=None, provider=None,
         progress=None, rule_progress=None, workers=1, resume=False, ads_sheet=None, checklist_sheet=None,
-        cross_flow=False, scoped_cache=True, recheck_all=False):
+        cross_flow=False, scoped_cache=True, recheck_all=False, full_scope=False, confirm_mismatch=False):
     started = time.monotonic()
     if type(max_tool_calls) is not int or max_tool_calls < 0:
         raise AuditError("max_tool_calls phải >= 0")
@@ -139,6 +143,9 @@ def run(target, *, rules=None, out=None, engine="codex", only=None, cache_dir=No
             progress(name)
     pack = load_pack(rules)
     selected = [r for r in pack.rules if only is None or only in {r.id, r.area}]
+    if not full_scope and only is None:
+        # Core scope: initialisation, Remote Config/consent/fallback, IDs and the four first screens.
+        selected = [r for r in selected if r.params.get("tier") != "full"]
     if not cross_flow and only is None:
         # Cross-flow re-reads every other rule's result; opt-in because it costs a full extra session.
         selected = [r for r in selected if r.id != CROSS_FLOW_RULE]
@@ -167,6 +174,9 @@ def run(target, *, rules=None, out=None, engine="codex", only=None, cache_dir=No
     output.mkdir(parents=True, exist_ok=True)
     write_json(output / "facts.json", facts)
     inventory = build_inventory(workspace, facts, documents, files=workspace_files)
+    preflight = check_documents(documents, facts, inventory)
+    if preflight["level"] == "block" and adapter.name != "none" and not confirm_mismatch:
+        raise DocumentMismatch(preflight)   # before any AI quota is spent
     write_json(output / "inventory.json", inventory)
     tools = WorkspaceTools(workspace, facts, files=workspace_files)
     write_json(output / "xref_index.json", tools.xref_index)
@@ -198,6 +208,9 @@ def run(target, *, rules=None, out=None, engine="codex", only=None, cache_dir=No
         "config_references", "code_references", "package_match", "app_id_match",
         "optional_placements", "disabled_placements", "uncertain_placements", "integration_policy", "document_warnings")}
     flow_map_json = json.dumps(build_flow_map(workspace, facts, workspace_files), ensure_ascii=False)
+    config_names = set((facts.get("assets", {}).get("json", {}).get("ad_config.json") or {}))
+    doc_names = {row.get("name") for row in (documents.get("ads_scripts") or {}).get("placements", []) if isinstance(row, dict)}
+    slices = build_slices(workspace, facts, workspace_files, sorted(n for n in config_names | doc_names if n))
     profile_data = code_profile(workspace, app_roots(facts))
     profile_json = json.dumps({k: v for k, v in profile_data.items() if k != 'gap_samples'}, ensure_ascii=False)
 
@@ -237,10 +250,12 @@ def run(target, *, rules=None, out=None, engine="codex", only=None, cache_dir=No
                 reasoning=(f"Kết luận: bỏ qua. Rule này đã Đạt ở bản trước (version {earlier.get('version_name') or '?'}, "
                            f"{earlier.get('at') or '?'}); tool bỏ qua theo cấu hình để tiết kiệm token. Chọn kiểm lại mọi rule để chạy lại."),
                 marketing_summary="Phần này đã đạt ở bản trước nên không kiểm lại; chọn 'kiểm lại mọi rule' nếu cần."))
-        bundle = source_index.bundle(rule, facts, inventory, max_chars=rule.budget.get('context_chars', BUNDLE_CHARS))
+        sliced = slices.get(rule.area) if rule.mode == "agent" else ""
+        bundle = source_index.bundle(rule, facts, inventory,
+                                     max_chars=rule.budget.get('context_chars', SLICED_BUNDLE_CHARS if sliced else BUNDLE_CHARS))
         reference = {'source': pack.references.get('source', {}), 'rule': pack.references.get('rules', {}).get(rule.id, {})}
         rule_policy = {**policy, "bundle_policy":bundle.get("policy"), 'base_reference': digest_json(reference),
-                       'context_scope': SCOPE_VERSION,
+                       'context_scope': SCOPE_VERSION, 'slice': SLICE_VERSION,
                        'absence_gate': profile_data['obfuscation'] == 'thấp' and not profile_data['decompile_gap_files']}
         key = cache.key(facts, pack, rule, adapter.name, documents, dependencies=prior, policy=rule_policy, identity=identity)
         finding = None
@@ -272,7 +287,7 @@ def run(target, *, rules=None, out=None, engine="codex", only=None, cache_dir=No
                     from_scoped = True
                     cache.put(key,finding,run_trace)
         if finding is None:
-            context = context_for(rule) + "\nevidence_bundle (gợi ý heuristic, không chứng minh thiếu hành vi):\n" + json.dumps(bundle, ensure_ascii=False)
+            context = context_for(rule) + (SLICE_MARK + sliced + SLICE_MARK if sliced else "") + "\nevidence_bundle (gợi ý heuristic, không chứng minh thiếu hành vi):\n" + json.dumps(bundle, ensure_ascii=False)
             if reference['rule']:
                 context += '\nbase_reference (mã mẫu để hiểu logic, KHÔNG phải evidence của APK; integration_policy và rule hiện tại có ưu tiên):\n' + json.dumps(reference, ensure_ascii=False)
             if prior is not None:
@@ -340,6 +355,8 @@ def run(target, *, rules=None, out=None, engine="codex", only=None, cache_dir=No
                "input_fingerprint":fingerprint,"usage":"Không ước lượng token/chi phí khi CLI không cung cấp",
                "usage_totals":usage_totals}
     warnings = facts["warnings"]+([] if selected else ["no_rules"])
+    if preflight["level"] == "block":
+        warnings.append("documents_may_not_match_app: " + "; ".join(item["message"] for item in preflight["reasons"]) + " (đã được xác nhận tiếp tục)")
     quota = next((f["reasoning"] for f in findings if "usage limit" in str(f.get("reasoning"))), None)
     if quota:
         blocked = sum("usage limit" in str(f.get("reasoning")) for f in findings)
@@ -356,7 +373,7 @@ def run(target, *, rules=None, out=None, engine="codex", only=None, cache_dir=No
         "engine":adapter.name,"docs_provided":{k:k in documents for k in ("ads_scripts","checklist")},"summary":summary,
         "findings":findings,"inventory":inventory,"observations":inventory_observations(inventory),"metrics":metrics,
         "marketing":marketing,"dev_view":build_dev_view(findings,marketing),
-        "code_profile":code_profile(workspace,app_roots(facts)),
+        "code_profile":code_profile(workspace,app_roots(facts)),"preflight":preflight,
         "warnings":warnings,"output":str(output),"tool_versions":facts["tool_versions"]}
     phase("report")
     passed_history.record(report, apk_sha)

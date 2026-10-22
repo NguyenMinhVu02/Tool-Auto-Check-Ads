@@ -231,7 +231,9 @@ class ClaimTests(unittest.TestCase):
             result['claims'][0][field] = value
             finding, trace, _ = self.run_result(result)
             self.assertEqual(finding.status, 'UNKNOWN')
-            self.assertEqual(len(trace['attempts']), 1)
+            # A missing path may get one cheap repair round, but a malformed claim never reaches the reviewer.
+            self.assertFalse(any(a.get('review') for a in trace['attempts']))
+            self.assertLessEqual(len(trace['attempts']), 2)
             self.assertIn('Chưa đủ căn cứ', finding.reasoning)
             self.assertIn('Important original detail', finding.reasoning)
             self.assertNotIn('\nKết luận: FAIL', finding.reasoning)

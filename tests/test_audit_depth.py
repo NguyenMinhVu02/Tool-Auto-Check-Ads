@@ -168,7 +168,7 @@ class RangedEvidenceTests(unittest.TestCase):
 
     def test_wrong_anchor_oversized_or_out_of_file_ranges_fail(self):
         for item in ({'line': 10, 'end_line': 11, 'anchor': 'sdk.show(id);'},      # not in the cited lines
-                     {'line': 1, 'end_line': 30, 'anchor': 'int v1 = 1;'},         # range too large
+                     {'line': 1, 'end_line': 45, 'anchor': 'int v1 = 1;'},         # range too large
                      {'line': 58, 'end_line': 70, 'anchor': 'int v58 = 58;'},      # beyond the file
                      {'line': 11, 'end_line': 10, 'anchor': 'sdk.load(id);'},      # reversed
                      {'line': 10, 'end_line': 10, 'anchor': 'if'}):               # anchor too short
@@ -260,6 +260,39 @@ class FailGateTests(unittest.TestCase):
                                                                      self.fail_payload('defect_present')]), '', 40,
                                   profile={'obfuscation': 'thấp', 'decompile_gap_files': 0})
         self.assertEqual((finding.status, finding.verification['confidence']), ('FAIL', 'trung bình'))
+
+
+class SliceAndDowngradeTests(unittest.TestCase):
+    def test_slice_travels_as_raw_text_outside_the_json_envelope(self):
+        from apk_audit.engine_common import SLICE_MARK
+        prompts = []
+        class Recording(LiveReplay):
+            def run_agent(inner, prompt, *args, **kwargs):
+                prompts.append(prompt)
+                return super(Recording, inner).run_agent(prompt, *args, **kwargs)
+        root = Path(tempfile.mkdtemp())
+        (root / 'Flow.java').write_text('if (enabled) load();\nonLoaded() { show(); }\n')
+        rule = Rule('R', 'T', 'agent', budget={'max_tool_calls': 40})
+        payload = verdict(); payload['rule_id'] = 'R'
+        evaluate(rule, WorkspaceTools(root), Recording([payload]), 'CTX' + SLICE_MARK + '1| if (a == "b") {\n2| }' + SLICE_MARK + 'TAIL', 40)
+        prompt = prompts[0]
+        self.assertIn('1| if (a == "b") {\n2| }', prompt)            # real newline and quotes, not \\n / \\"
+        self.assertIn('source_slice', prompt)
+        self.assertNotIn('@@SOURCE_SLICE@@', prompt)
+        self.assertIn('TAIL', prompt)
+
+    def test_downgraded_unknown_never_keeps_verified_checklist_answers(self):
+        payload = verdict('FAIL'); payload['rule_id'] = 'R'; payload['claims'][0]['basis'] = 'behavior_absent'
+        payload['screen_report'] = {'load': 'L', 'show': 'S', 'requirements': [
+            {'index': 0, 'status': 'ok', 'note': 'a'}, {'index': 1, 'status': 'issue', 'note': 'b'}]}
+        root = Path(tempfile.mkdtemp())
+        (root / 'Flow.java').write_text('if (enabled) load();\nonLoaded() { show(); }\n')
+        rule = Rule('R', 'T', 'agent', params={'checklist': ['x', 'y']}, budget={'max_tool_calls': 40})
+        finding, _ = evaluate(rule, WorkspaceTools(root), LiveReplay([payload, payload]), '', 40,
+                              profile={'obfuscation': 'cao', 'decompile_gap_files': 0})
+        self.assertEqual((finding.status, finding.reason), ('UNKNOWN', 'absence_not_conclusive'))
+        self.assertEqual([r['status'] for r in finding.screen_report['requirements']], ['unknown', 'unknown'])
+        self.assertFalse(finding.screen_report['verified'])
 
 
 class ScreenReportTests(unittest.TestCase):

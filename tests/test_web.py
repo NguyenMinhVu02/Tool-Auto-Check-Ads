@@ -220,6 +220,46 @@ class WebTests(unittest.TestCase):
             self.assertEqual((job["state"], job["stage"]), ("done", "done"))
             self.assertEqual(job["last_rule"]["status"], "FAIL")
 
+    def test_document_mismatch_waits_for_confirmation_then_runs_or_cancels(self):
+        from apk_audit.preflight import DocumentMismatch
+        calls = []
+
+        def fake_run(archive, *, out, confirm_mismatch=False, **kwargs):
+            calls.append(confirm_mismatch)
+            if not confirm_mismatch:
+                raise DocumentMismatch({"level": "block", "reasons": [{"code": "publisher", "message": "lệch tài khoản"}]})
+            output = Path(out)
+            output.mkdir(parents=True, exist_ok=True)
+            report = {"output": str(output), "package": "demo.app", "warnings": [], "engine": "x",
+                      "summary": {"pass": 0, "fail": 0, "unknown": 0, "skipped": 0}, "findings": []}
+            (output / "report.json").write_text(json.dumps(report))
+            return report
+
+        def wait_for(job_id, states):
+            for _ in range(100):
+                job = json.load(self.request(f"/api/jobs/{job_id}"))
+                if job["state"] in states:
+                    return job
+                time.sleep(0.02)
+            self.fail(f"state stayed {job['state']}")
+
+        with patch("apk_audit.web.run", side_effect=fake_run):
+            job_id = json.load(self.request("/api/jobs", b"fake archive", "demo.apk"))["id"]
+            job = wait_for(job_id, {"awaiting_confirmation"})
+            self.assertEqual((job["stage"], job["preflight"]["reasons"][0]["code"]), ("preflight", "publisher"))
+            self.assertIsNone(self.jobs.active)                       # no slot is held while the user decides
+            self.assertEqual(json.load(self.request(f"/api/jobs/{job_id}/confirm", b"x"))["id"], job_id)
+            self.assertEqual(wait_for(job_id, {"done", "error"})["state"], "done")
+            self.assertEqual(calls, [False, True])
+            second = json.load(self.request("/api/jobs", b"fake archive", "demo.apk"))["id"]
+            wait_for(second, {"awaiting_confirmation"})
+            self.request(f"/api/jobs/{second}/cancel", b"x")
+            cancelled = wait_for(second, {"error"})
+            self.assertIn("Đã hủy", cancelled["error"])
+            with self.assertRaises(HTTPError) as response:
+                self.request(f"/api/jobs/{second}/confirm", b"x")
+            self.assertEqual(response.exception.code, 400)
+
     def test_html_report_and_id_csv_are_served_for_finished_jobs(self):
         marketing = {"documents_available": True, "id_problems": [{"screen": "Splash", "name": "inter_splash", "status": "Sai ID"}],
                      "screens": [{"title": "Màn Splash", "level": "issue", "flow_level": "ok", "flow_label": "Đạt", "id_issues": 1,

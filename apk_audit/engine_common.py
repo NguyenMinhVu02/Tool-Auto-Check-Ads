@@ -5,6 +5,9 @@ import json
 from pathlib import Path
 
 # Per-rule live activity sink; set by the pipeline in each rule's worker thread.
+# Marks where the raw source slice starts inside a rule context; the agent moves it out of the JSON
+# envelope so the model reads real code instead of an escaped string.
+SLICE_MARK = '\n@@SOURCE_SLICE@@\n'
 ACTIVITY = contextvars.ContextVar('audit_activity', default=None)
 
 

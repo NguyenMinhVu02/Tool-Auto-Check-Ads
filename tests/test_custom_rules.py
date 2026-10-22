@@ -193,6 +193,17 @@ class CustomRuleTests(unittest.TestCase):
         code_facts._cache.clear()
         self.assertEqual(evaluate_static(keys, facts, {}, workspace=self.root).status, 'PASS')
 
+    def test_profile_reports_release_unless_manifest_is_debuggable(self):
+        from apk_audit.rules import code_facts
+        manifest = self.root / 'resources' / 'AndroidManifest.xml'
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text('<manifest><application android:label="x"/></manifest>')
+        code_facts._cache.clear()
+        self.assertEqual(code_facts.code_profile(self.root)['build'], 'release')
+        manifest.write_text('<manifest><application android:debuggable="true"/></manifest>')
+        code_facts._cache.clear()
+        self.assertEqual(code_facts.code_profile(self.root)['build'], 'debug')
+
 
 if __name__ == '__main__':
     unittest.main()

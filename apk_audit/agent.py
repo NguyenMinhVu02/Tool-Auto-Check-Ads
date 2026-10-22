@@ -2,11 +2,11 @@ import json
 import time
 from .contracts import Finding
 from .claim_verifier import verify_claims
-from .engine_common import report_activity, verdict_schema
+from .engine_common import SLICE_MARK, report_activity, verdict_schema
 from .utils import safe_path, read_text
 
 
-PROMPT_POLICY_VERSION = 'claims-review-13-fail-gate'
+PROMPT_POLICY_VERSION = 'claims-review-15-build-type'
 AUDIT_PROMPT = (
     'Lần đường đi mã từ nguồn cấu hình/ID qua load, callback thành công/lỗi, gate, observer, '
     'render/show và nhánh điều hướng khi phù hợp. Kiểm cả disabled, purchase, offline, timeout. '
@@ -15,6 +15,10 @@ AUDIT_PROMPT = (
     'applicability applicable|unknown|not_applicable, evidence_indices đánh số từ 0 trong evidence, '
     'path gồm các role và evidence_indices, conditions, unresolved và limitations (đều là list string). '
     'Dùng 6-12 evidence ngắn bao phủ các nhánh quan trọng thay cho hàng chục dòng rời rạc. '
+    'source_slice là mã đã được trích sẵn từ APK cho đúng phạm vi rule (khởi tạo, Remote Config/consent/fallback, ID, 4 màn đầu), '
+    'mỗi khối ghi file:dòng thật: hãy kết luận chủ yếu từ đó và dùng chính các dòng đó làm evidence. Chỉ chạy lệnh đọc (tối đa '
+    'khoảng 4) khi cần một hàm/lớp được gọi mà chưa có trong slice; không đọc rộng ra ngoài phạm vi đó. Dòng "KHÔNG CÓ MÃ" nghĩa '
+    'là JADX không xuất được file của màn đó: không kết luận lỗi chỉ vì thiếu mã. '
     'Số lệnh là giới hạn cứng, vì vậy GỘP nhiều đoạn cần đọc vào một lệnh (ví dụ sed -n "a,bp;c,dp" file hoặc nhiều file trong '
     'cùng một lệnh), mỗi lệnh khoảng 150-300 dòng; không cat/nl cả file lớn vì mọi lượt sau phải mang theo output đó. '
     'Bắt đầu từ flow_map và evidence_bundle, tránh đọc lại file đã đọc và dành lệnh cuối để trả JSON. '
@@ -28,6 +32,9 @@ AUDIT_PROMPT = (
     'được dẫn chứng trong path (ví dụ gate/callback, source/load, callback/navigation). '
     'Dẫn chính xác các nhánh quan trọng, điều kiện và call site; với hành vi bị thiếu nêu giới hạn tìm kiếm. '
     'Không suy từ việc không tìm thấy lexical hit thành hành vi không tồn tại. '
+    'code_profile.build cho biết loại APK. build = release: BuildConfig.DEBUG đã bị trình biên dịch gập thành false nên '
+    'mọi nhánh debug (ad_config_debug.json, tham số debug) bị loại khỏi mã; vắng nhánh debug hoặc hằng số debug không dùng '
+    'là bình thường, KHÔNG phải lỗi. Chỉ FAIL khi bản release đọc nhầm file debug hoặc không đọc file release. '
     'Mã đến từ APK đã giải mã (JADX), không phải mã nguồn gốc: xem code_profile. Khi obfuscation là vừa/cao hoặc có '
     'decompile_gap_files, tên lớp/hàm/biến có thể bị đổi và một số hàm không giải mã được, nên KHÔNG kết luận FAIL chỉ vì '
     'không thấy một tên hàm; hãy lần theo chuỗi ký tự, hằng số, cấu trúc gọi và import (không đổi tên) để tìm hành vi tương '
@@ -120,7 +127,9 @@ def _repair_feedback(payload, checked, verification, tools):
             'evidence_catalog': catalog, 'source_windows': windows,
             'instruction': 'Sửa file/line/end_line/anchor (hoặc excerpt) và toàn bộ chỉ số claims/path; anchor phải nằm trong đoạn line..end_line. '
                            'Chỉ số ngoài catalog không có bằng chứng: đọc source để bổ sung hoặc sửa claim; '
-                           'không tự dịch số hoặc xóa blocker. Trả JSON đầy đủ, không chỉ bản vá.'}
+                           'không tự dịch số hoặc xóa blocker; claim cần path có ít nhất hai vai trò khác nhau (ví dụ gate và '
+                           'callback/load), mỗi vai trò dẫn evidence riêng đã có trong catalog, nếu chưa đủ thì đổi kind sang uncertain. '
+                           'Trả JSON đầy đủ, không chỉ bản vá.'}
 
 
 def absence_conclusive(profile):
@@ -142,6 +151,13 @@ def _gate_and_grade(finding, trace, profile, live):
     bases = {c.get('basis') or 'defect_present' for c in supporting}   # legacy replays carry no basis
     if finding.status == 'FAIL' and profile and 'defect_present' not in bases and not absence_conclusive(profile):
         finding.status, finding.reason = 'UNKNOWN', 'absence_not_conclusive'
+    if finding.status == 'UNKNOWN' and finding.screen_report:
+        # A draft the guards rejected must not show unproven checks: everything becomes unverified.
+        report = finding.screen_report
+        report['verified'] = False
+        for item in report.get('requirements', []):
+            if item.get('status') in {'ok', 'issue'}:
+                item['status'] = 'unknown'
     attempts = trace.get('attempts', [])
     redone = any(a.get('repair') or a.get('investigation') for a in attempts)
     absence_only = bool(supporting) and bases == {'behavior_absent'}
@@ -223,7 +239,7 @@ def _excerpt_matches(excerpt, lines, number):
     return position > 0
 
 
-MAX_RANGE_LINES = 20
+MAX_RANGE_LINES = 40
 MIN_ANCHOR = 4
 
 
@@ -311,12 +327,18 @@ def evaluate(rule, tools, engine, context, max_tool_calls=None, profile=None):
     if budget <= 0:
         finding.reason, finding.exhausted_budget = 'global_budget', True
         return finish()
+    raw_slice = ''
+    if isinstance(context, str) and context.count(SLICE_MARK) == 2:
+        head, raw_slice, tail = context.split(SLICE_MARK)
+        context = head + tail
     prompt = json.dumps({'context': context, 'rule_id': rule.id, 'question': rule.question,
                          'verdict': rule.verdict, 'start_hints': rule.start_hints,
                          **({'checklist': rule.params['checklist']} if rule.params.get('checklist') else {}),
                          'rule_total_tool_budget': budget,
                          # Live CLIs already receive the schema natively; only offline engines need it in the prompt.
-                         **({} if live else {'output_schema': verdict_schema()})}, ensure_ascii=False) + '\n' + AUDIT_PROMPT
+                         **({} if live else {'output_schema': verdict_schema()})}, ensure_ascii=False) + (
+        '\n\nsource_slice (mã đã trích sẵn từ APK cho đúng phạm vi rule; đường dẫn và số dòng là thật, dùng trực tiếp làm evidence):\n'
+        + raw_slice if raw_slice else '') + '\n' + AUDIT_PROMPT
     trace['prompt'] = prompt
 
     def call(text, *, repair=False, review=False, investigation=False, limit=None, followup=None):
@@ -478,7 +500,7 @@ def evaluate(rule, tools, engine, context, max_tool_calls=None, profile=None):
                 finding.status, finding.reason = 'UNKNOWN', 'unverified_claims'
 
     apply(payload, checked)
-    link_errors = {'invalid_evidence_indices', 'invalid_path_evidence'}
+    link_errors = {'invalid_evidence_indices', 'invalid_path_evidence', 'incomplete_path'}
     if (live and not evidence_repaired and checked and all(e['verified'] for e in checked)
             and any(error.split(':')[-1] in link_errors for error in finding.verification.get('errors', []))
             and finding.tool_calls < budget):

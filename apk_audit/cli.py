@@ -33,6 +33,8 @@ def parser():
     audit.add_argument("--checklist", type=Path)
     audit.add_argument("--no-scoped-cache", dest="scoped_cache", action="store_false", help="Không dùng lại kết quả theo file liên quan giữa các bản build")
     audit.add_argument("--recheck-all", action="store_true", help="Chạy lại cả rule đã đạt ở bản trước (rule có skip_after_pass)")
+    audit.add_argument("--confirm-mismatch", action="store_true", help="Tiếp tục dù tài liệu có vẻ không thuộc app (package/AdMob App ID/tài khoản AdMob lệch)")
+    audit.add_argument("--full", dest="full_scope", action="store_true", help="Kiểm đầy đủ: thêm rule Load/observe và Banner (mặc định chỉ khởi tạo, Remote/consent/fallback, ID và 4 màn đầu)")
     audit.add_argument("--cross-flow", action="store_true", help="Chạy thêm rule rà lỗi chéo giữa các luồng (tốn thêm token)")
     audit.add_argument("--ads-sheet", help="Tên sheet XLSX của ADS SCRIPTS khi workbook có nhiều app")
     audit.add_argument("--checklist-sheet", help="Tên sheet XLSX của working file khi workbook có nhiều app")

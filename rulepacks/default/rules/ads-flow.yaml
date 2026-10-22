@@ -20,7 +20,7 @@
     fail_when: "Có bằng chứng load trước init/config, thiếu đăng ký lifecycle cần cho resume, hoặc đường App Open theo hợp đồng thực sự tới lệnh load với ID rỗng sau mọi gate. Không dùng sai nguồn config hay chỉ cờ đăng ký callback làm lý do FAIL của rule này."
     unknown_when: "Không thấy Application/SDK do obfuscation hoặc bước được thực hiện ngoài mã đã giải mã."
   start_hints: ["resources/AndroidManifest.xml", "sources/"]
-  budget: {max_tool_calls: 35}
+  budget: {max_tool_calls: 20}
 
 - id: ADS_REMOTE_FALLBACK
   title: Remote Config, timeout và fallback local
@@ -32,12 +32,15 @@
     timeout ở Splash và việc parse dữ liệu. Có fallback local khi remote chưa xong,
     rỗng hoặc parse lỗi; chỉ load sau khi chọn config; phân biệt debug/release?
     Ghi rõ các mốc thời gian tìm được, không buộc đúng literal của base nếu logic tương đương.
+    APK release (code_profile.build = release) đã gập BuildConfig.DEBUG thành false nên nhánh debug bị loại khi
+    biên dịch: việc không thấy ad_config_debug.json được chọn, hay hằng số debug không dùng, không phải lỗi; chỉ FAIL
+    nếu bản release đọc nhầm file debug hoặc không đọc ad_config.json. Chỉ APK debug mới cần chứng minh phân biệt hai file.
   verdict:
     pass_when: "Có chọn nguồn config nhất quán, timeout và fallback local cho các nhánh lỗi quan sát được."
     fail_when: "Có bằng chứng release dùng config debug, remote bị đọc nhưng không áp dụng, hoặc lỗi/timeout dẫn đến config rỗng, crash hay load trước khi chọn config."
     unknown_when: "Không xác định được nhánh chọn config/fallback/timeout do mã thiếu; remote live chưa quan sát chỉ là giới hạn ngoài phần kiểm logic tĩnh."
   start_hints: ["resources/assets/ad_config.json", "sources/"]
-  budget: {max_tool_calls: 40}
+  budget: {max_tool_calls: 26}
 
 - id: ADS_ID_SOURCE_AND_COVERAGE
   title: Nguồn ID ads trong code (getter → config.id → SDK load)
@@ -58,7 +61,7 @@
     fail_when: "Có bằng chứng slot lấy ID của slot khác, hard-code ID bỏ qua config, hoặc key/schema local và remote không cùng nhau."
     unknown_when: "Chưa nối được nguồn ID tới lệnh load do thiếu mã. Remote live và hành vi render chưa đo không tự chặn kết luận về nguồn ID tĩnh."
   start_hints: ["resources/assets/ad_config.json", "sources/"]
-  budget: {max_tool_calls: 35}
+  budget: {max_tool_calls: 20}
 
 - id: ADS_SPLASH_PLACEMENT
   title: Splash, uninstall shortcut và preload Language
@@ -84,7 +87,7 @@
       - "Banner Splash hiển thị đúng vị trí đáy màn"
       - "Mất mạng, đã mua gói, quảng cáo lỗi hoặc hết thời gian chờ thì app vẫn chuyển màn, không bị kẹt"
       - "Native màn Language được tải sẵn trước khi vào màn Language (không tải ở nhánh uninstall)"
-  budget: {max_tool_calls: 40}
+  budget: {max_tool_calls: 26}
 
 - id: ADS_LANGUAGE_PLACEMENT
   title: Language native, click native và preload Onboarding
@@ -107,7 +110,7 @@
       - "Màn theo dõi liên tục kết quả tải quảng cáo (không chỉ kiểm tra một lần): quảng cáo về trễ vẫn hiện, lỗi hoặc mất mạng thì ẩn"
       - "Native Onboarding trang 1 được tải sẵn (trừ khi vào từ Cài đặt)"
       - "Nút Done được trì hoãn theo Remote Config và có giá trị dự phòng khi chưa tải xong"
-  budget: {max_tool_calls: 45}
+  budget: {max_tool_calls: 26}
 
 - id: ADS_ONBOARDING_PLACEMENT
   title: Onboarding page 1, page 4, full và điều hướng Home
@@ -137,7 +140,7 @@
       - "Native full screen có kiểm tra người dùng UA (organic/non-organic)"
       - "Từng trang theo dõi liên tục kết quả tải quảng cáo theo vòng đời màn, quảng cáo về trễ vẫn hiện và được tải/hiện đúng thời điểm"
       - "Chuyển sang màn Home an toàn, không phụ thuộc vào inter cuối Onboarding"
-  budget: {max_tool_calls: 40}
+  budget: {max_tool_calls: 26}
 
 - id: ADS_WELCOME_RESUME
   title: Welcome và App Open loại trừ nhau
@@ -166,7 +169,7 @@
       - "Welcome back và App Open không hiện cùng lúc"
       - "Có điều kiện chặn: màn bị loại trừ, đã mua gói, inter đang hiện, kiểm tra người dùng UA"
       - "Quảng cáo được tải và hiện đúng cách, nếu dùng native thì theo dõi liên tục kết quả tải; không có quảng cáo thì thoát khỏi màn Welcome"
-  budget: {max_tool_calls: 40}
+  budget: {max_tool_calls: 24}
 
 - id: ADS_LOAD_OBSERVE_GATES
   title: Gate load và quan sát native liên tục
@@ -183,6 +186,8 @@
     fail_when: "Có đường load bỏ gate hoặc UI giữ ad/shimmer khi stream null, hoặc observer bị ngắt."
     unknown_when: "Không nối được load-update-observe-render/hide qua mã, gồm helper/lambda liên quan; chưa đo emission runtime không tự làm rule UNKNOWN."
   start_hints: ["sources/"]
+  # Outside the core scope (init, Remote/consent/fallback, IDs, first four screens); run with --full.
+  params: {tier: full}
   budget: {max_tool_calls: 45}
 
 - id: ADS_BANNER_RELOAD
@@ -202,6 +207,8 @@
     fail_when: "Có bằng chứng banner sai slot, interval không được áp dụng ở màn thực sự yêu cầu reload, hoặc timer hoạt động sai/thiếu cleanup gây leak. Không FAIL chỉ vì Splash load một lần."
     unknown_when: "Không xác định được container hoặc vòng đời qua mã đã giải mã."
   start_hints: ["sources/", "resources/AndroidManifest.xml"]
+  # Outside the core scope (init, Remote/consent/fallback, IDs, first four screens); run with --full.
+  params: {tier: full}
   budget: {max_tool_calls: 35}
 
 - id: ADS_CROSS_FLOW_BUGS

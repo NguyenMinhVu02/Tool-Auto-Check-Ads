@@ -2,6 +2,15 @@
 
 ## Trạng thái hiện tại
 
+- Cập nhật: 2026-10-22 (Asia/Ho_Chi_Minh). Trạng thái công việc: **Hoàn tất bàn giao, chờ kiểm thử thực tế**.
+- Code: `main` tại 1446c4a đã push (remote HEAD khớp). Bộ luật 0.10.0 (17 rule: 9 AI, 7+ tĩnh), 227/227 unittest, frontend build đạt. Engine: Claude Sonnet 5 low, Codex GPT-6 Sol low; web 6 workers; cross-flow tắt mặc định.
+- Đã có: báo cáo Marketing/Dev, logic từng màn + checklist, rule tĩnh theo manifest/assets/chuỗi, hồ sơ làm rối + cổng chặn báo oan + độ tin cậy, alias tên placement, dẫn chứng theo đoạn dòng + anchor, resume phiên Claude/Codex, cache theo file, chọn sheet XLSX.
+- Chưa kiểm live: prompt/schema mới nhất (basis, code_profile) với AI thật; Codex với evidence dạng đoạn dòng; token thực tế sau các tối ưu.
+- Việc cần làm tiếp: (1) chạy audit lại ≥1 app bằng Claude Sonnet 5 low và đối chiếu bằng mắt các ❌/độ tin cậy; (2) xác nhận `native_onboarding_fullscreen_*_3` tương ứng `_2` trong tài liệu để thêm alias; (3) cân nhắc nút "Đánh dấu báo oan"; (4) git fetch HTTPS đang báo "Repository not found" (repo private) — dùng SSH hoặc đăng nhập lại credential.
+- Ghi chú trạng thái các phiên trước được giữ ngay dưới đây.
+
+### Ghi chú trạng thái cũ (lưu)
+
 - 2026-10-21 09:40: Đã lập kế hoạch triển khai `docs/superpowers/plans/2026-10-21-readable-fast-cheap-audit.md` (đo → báo cáo Dev/MKT → rule tĩnh, bỏ rule không áp dụng, cache theo file, bản đồ luồng → cắt context/đầu ra). Chưa bắt đầu code; chờ người dùng đổi model rồi triển khai.
 - **Việc cho phiên 2026-10-21 (người dùng ghi chú, Đang làm):**
   1. Kiểm tra ad config đúng yêu cầu chưa: nội dung `ad_config.json`/`ad_config_debug.json` và Remote Config so với ADS SCRIPTS/working file (ID, isEnable, các trường cấu hình), không chỉ so ID.
@@ -27,6 +36,39 @@
 - Bước tiếp theo đề xuất: Sửa đóng gói/đường dẫn và context theo rule trước; benchmark tùy chọn 2 workers đã có với cùng đầu vào/model/cache. Sau đó bổ sung tiến độ live cho repair/investigation/review và hủy audit truyền tới CLI. Trước phát hành ổn định cần kiểm full 11 rule với hợp đồng thật, ca APK có kết luận chuẩn và cài/chạy ngoài repo trên máy mới. Chưa triển khai các đề xuất này trong lượt rà soát; runtime/SDK thiếu mã thật vẫn phải giữ UNKNOWN có lý do.
 
 ## Lịch sử phiên
+
+### 2026-10-22 14:10 — Preflight tài liệu có đúng app không (Asia/Ho_Chi_Minh)
+
+- Yêu cầu: dừng và hỏi xác nhận trên web khi package/tài khoản AdMob tài liệu lệch app, trước khi tốn AI. `apk_audit/preflight.py` (`check_documents`: package_match False, app_id_match False, tài khoản AdMob không giao nhau giữa ID active của ADS SCRIPTS và ad_config.json, bỏ qua ID demo Google; `DocumentMismatch` mã 7). Pipeline kiểm sau inventory, trước slice/rule; `confirm_mismatch`; engine none không chặn; báo cáo có `preflight` + cảnh báo `documents_may_not_match_app` khi đã xác nhận. Web: trạng thái `awaiting_confirmation` (không giữ slot active), `POST /api/jobs/<id>/confirm|cancel`; UI Alert + 2 nút, lịch sử "Chờ xác nhận tài liệu". CLI `--confirm-mismatch`.
+- Kiểm trên job cũ: Silly (96ec2ada) và AI Learn (837e1e00) sẽ bị chặn (App ID + tài khoản lệch); app huyết áp (02754ccc) OK — nhận định trước "cả hai lượt đều lệch" chỉ đúng với Silly và AI Learn. 238/238 test (thêm test_preflight, pipeline, luồng web); build; server restart. Chưa commit.
+
+### 2026-10-22 13:10 — Job 454e5fb8 (Claude Sonnet 5 low, Silly) và sửa báo oan REMOTE_FALLBACK (Asia/Ho_Chi_Minh)
+
+- Kết quả: 8 PASS / 3 FAIL (static CONFIG_FLAGS, DEBUG_TEST_IDS + AI REMOTE_FALLBACK) / 3 UNKNOWN (DEV_TOGGLE, INTERVAL obfuscated; WELCOME unverified_claims), 308s, 60 tool calls, cache read 2.47M, cache write 0.42M, output 97K. Lệnh mỗi rule AI: INIT 2, ID 5, SPLASH 5, ONBOARDING 10, LANGUAGE 11, REMOTE 11, WELCOME 16 (TB 8.6); 5/7 rule vẫn cần 1 lượt sửa nối tiếp (conf trung bình). So Codex cùng app (96ec2ada): Codex 4 màn UNKNOWN, Claude 3 PASS + 1 UNKNOWN; bất đồng chỉ ở REMOTE (Codex PASS, Claude FAIL).
+- Phát hiện: REMOTE_FALLBACK FAIL của Claude ("hardcode RELEASE_FILE_NAME, DEBUG_FILE_NAME không dùng") là báo oan trên APK release: base dùng `if (BuildConfig.DEBUG)` nhưng trình biên dịch gập DEBUG=false nên nhánh debug bị loại khỏi release APK. Cùng kiểu kết luận đã xuất hiện ở các app trước. Sửa: `code_profile.build` (debug nếu manifest có android:debuggable="true", còn lại release), AI nhận build trong code_profile + prompt claims-review-15 (release: vắng nhánh debug không phải lỗi, chỉ FAIL nếu release đọc nhầm file debug hoặc không đọc ad_config.json), câu hỏi rule REMOTE bổ sung; pack 0.11.1. Slicer default-package cũng đã nạp (restart xong). 232/232 test.
+
+### 2026-10-22 12:40 — Vì sao Claude vẫn 10–17 lệnh (Asia/Ho_Chi_Minh)
+
+- Quan sát job 454e5fb8 (Claude, Silly) đang chạy: mỗi rule 6–8 lệnh ở lượt đầu, thêm sửa/review lên 10–17. Lệnh là Grep/Read vào `sources/defpackage/*` (cx1, bx1, j5, ex1, o12, rn1…): lớp helper của R8 nằm ở package mặc định, được gọi bằng tên trần không có import nên slicer chưa lần tới.
+- Sửa (chưa nạp vào server vì job đang chạy): slicer nhận diện lớp default package (`sources/defpackage/*`, `sources/*.java`), theo token tham chiếu trần trong hàm đã chọn, hop 2 bước, hạ hạng file registry cấu hình (nhiều tên vị trí) cho rule màn hình, điểm file helper nhỏ 12. Đo slice trên app Silly: Language nay chứa cx1, bx1 (AI từng đọc cx1/bx1/j5/ex1) nhưng chưa đủ (j5, ex1 thiếu); onboarding/splash chưa chứa o12/rn1 — ngân sách ký tự bị nhiều file ngắn tên giống nhau chiếm. 231/231 test. Cần restart khi job xong.
+
+### 2026-10-22 12:10 — Kiểm job 96ec2ada (Silly, Codex GPT-6 Sol low, pack 0.11.0) (Asia/Ho_Chi_Minh)
+
+- Kết quả: 6 PASS / 2 FAIL (static) / 6 UNKNOWN, 186s, input 5.29M (cache 4.68M), output 67K, 74 tool calls — so với job 0fd0c7af (cùng app, trước slice/scope): 295s, 8.64M, 104K, 115 calls ⇒ -37% thời gian, -39% token vào, -36% lệnh. Phạm vi đúng (7 rule AI core; không chạy GATES/BANNER/CROSS). Lệnh mỗi rule vẫn 6–15 (mục tiêu 2–4 chưa đạt với Codex low; Claude đo 0–5).
+- 4 màn đều UNKNOWN: Splash/Onboarding do 1–2 evidence trượt làm vô hiệu claim violation; Language claim bị `applicability_not_proven/unresolved_blocker`; Welcome `review_unknown` (thiếu WelcomeActivity). INIT/REMOTE/ID đều PASS.
+- Lỗi phát hiện: screen_report của rule bị hạ UNKNOWN vẫn hiện ✅/❌ và `verified=True` (tính lúc apply theo draft FAIL). Đã sửa trong `_gate_and_grade`: UNKNOWN ⇒ mọi ok/issue → unknown, verified=False.
+- Cải tiến thêm: slice truyền dạng văn bản thô ngoài JSON envelope (SLICE_MARK) để model đọc mã thật thay vì chuỗi bị escape. 231/231 test; server restart. Chưa commit. Đề xuất chờ duyệt: bỏ evidence trượt nhưng giữ claim còn đủ ≥2 vai trò; dùng Claude cho 4 màn.
+
+### 2026-10-22 11:30 — Phạm vi đọc hẹp + trích mã sẵn (slice) (Asia/Ho_Chi_Minh)
+
+- Yêu cầu: AI chỉ đọc khởi tạo, remote/consent/fallback/ID và 4 màn đầu; đưa sẵn hàm quan trọng vào prompt để cần 2–4 lệnh thay vì 12–18.
+- Đã làm: `apk_audit/slicer.py` (parse method bằng đếm ngoặc bỏ qua chuỗi/comment; seed theo vùng: Application class, file chứa literal Remote/consent/ID, Activity màn trong manifest + sibling + file chứa tên/getter vị trí của màn; chấm điểm theo literal vị trí, getter Kotlin, API ads, lifecycle; 1 bước gọi `X.m(` và `new X(`; bỏ thư viện, giữ code app/obfuscated; file ≤40 dòng lấy nguyên; ngân sách ký tự theo vùng; ghi "KHÔNG CÓ MÃ" khi manifest khai báo Activity mà JADX không xuất file — app huyết áp thiếu WelcomeActivity.java). Pipeline thêm `source_slice` vào context (bundle gợi ý giảm còn 5000), prompt claims-review-14. Rule `tier: full` cho LOAD_OBSERVE_GATES và BANNER_RELOAD (cần `--full`/ô web "Kiểm đầy đủ"); ngân sách lệnh INIT 20, ID 20, REMOTE/SPLASH/LANGUAGE/ONBOARDING 26, WELCOME 24; pack 0.11.0. MAX_RANGE_LINES 20→40 (AI hay trích 23 dòng); lượt sửa cũng kích hoạt khi `incomplete_path`.
+- Đo live Claude Sonnet 5 low trên app huyết áp (từng rule): Language 12→4 lệnh (PASS), Welcome 3 lệnh (UNKNOWN do thiếu file Welcome), Onboarding 0–3 lệnh (PASS sau 1 repair resume), Remote fallback 5 lệnh/4 lượt (FAIL). Replay: prompt 7 rule core ~62KB/rule (lớn hơn trước) nhưng ít lệnh hơn nên tổng token nhỏ hơn; chưa đo toàn lượt Codex.
+- Test: 227/227 + test_slicer; build; server restart. Chưa commit.
+
+### 2026-10-22 — Rà trạng thái (Asia/Ho_Chi_Minh)
+
+- Người dùng hỏi đã triển khai tới đâu và cần làm gì. Kiểm: remote HEAD (SSH) = 1446c4a; fetch HTTPS lỗi "Repository not found" (repo private, cần đăng nhập); web server không chạy nên đã khởi động lại (HTTP 200). Cập nhật phần Trạng thái hiện tại. Không đổi code.
 
 ### 2026-10-21 20:10 — Alias tên placement (Asia/Ho_Chi_Minh)
 
