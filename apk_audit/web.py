@@ -406,7 +406,7 @@ def make_handler(jobs):
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
-            self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'")
+            self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'")
             self.end_headers()
             self.wfile.write(body)
 
@@ -422,8 +422,9 @@ def make_handler(jobs):
                 self._json(200, detect_engines())
                 return
             static = {"/": ("index.html", "text/html"), "/app.css": ("app.css", "text/css"), "/app.js": ("app.js", "text/javascript")}
-            for weight in ("Regular", "Medium", "SemiBold", "Bold"):
-                static[f"/fonts/Poppins-{weight}.ttf"] = (f"fonts/Poppins-{weight}.ttf", "font/ttf")
+            for subset in ("latin", "latin-ext", "vietnamese"):
+                for weight in (400, 500, 600, 700):
+                    static[f"/fonts/BeVietnamPro-{subset}-{weight}.woff2"] = (f"fonts/BeVietnamPro-{subset}-{weight}.woff2", "font/woff2")
             if route in static:
                 filename, mime = static[route]
                 self._send(200, (ASSETS / filename).read_bytes(), mime + ("; charset=utf-8" if mime.startswith("text/") else ""))

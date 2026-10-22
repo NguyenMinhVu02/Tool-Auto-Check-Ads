@@ -40,15 +40,53 @@ Rule kiểm tra **tất định** chạy tức thì, không tốn token AI. Danh
 
 ## Cài đặt (cho Dev)
 
-Yêu cầu: Python ≥ 3.11 với [uv](https://docs.astral.sh/uv/), `jadx` và Java, và **một** trong hai CLI đã đăng nhập: `claude` hoặc `codex`. Node.js chỉ cần khi sửa giao diện.
+### 1. Cần chuẩn bị
+
+| Thành phần | Yêu cầu | Kiểm tra |
+|---|---|---|
+| Hệ điều hành | Linux hoặc macOS (đã chạy thật trên Linux) | |
+| Python + [uv](https://docs.astral.sh/uv/) | Python ≥ 3.11 | `uv --version` |
+| Java | JDK 17 trở lên (JADX cần) | `java -version` |
+| [JADX](https://github.com/skylot/jadx) | Có lệnh `jadx` trong `PATH` | `jadx --version` |
+| AI CLI | **Một** trong hai, đã đăng nhập: `claude` (Claude Code) hoặc `codex` (Codex CLI) | `claude --version` / `codex --version` |
+| Node.js ≥ 20 | **Chỉ** khi sửa giao diện. Bản build sẵn nằm trong `apk_audit/web_assets/` | `node -v` |
+
+Không cần AI CLI nếu chỉ chạy `--engine none` (rule tất định, không tốn token).
+
+### 2. Cài và chạy
 
 ```bash
+git clone git@github.com:NguyenMinhVu02/Tool-Auto-Check-Ads.git
+cd Tool-Auto-Check-Ads            # (thư mục apk-audit nếu đã có sẵn)
 uv sync --extra mcp
-uv run apk-audit doctor        # kiểm tra jadx, Java, CLI AI
-uv run apk-audit serve         # mở web tại http://127.0.0.1:8765
+uv run apk-audit doctor           # báo thiếu gì: jadx, Java, claude, codex
+uv run apk-audit serve            # mở http://127.0.0.1:8765
 ```
 
-`serve` mặc định chạy **6 rule song song**; đổi bằng `--workers 1-10`. Kết quả lưu ở `out/web/`.
+- `serve` chạy **6 rule song song**; đổi bằng `--workers 1-10`. Máy yếu hoặc hay hết hạn mức thì dùng 3–4.
+- Web chỉ lắng nghe `127.0.0.1` (không mở ra mạng ngoài). Kết quả và cache lưu ở `out/web/`.
+- Cần đăng nhập AI trước khi chạy: gõ `claude` hoặc `codex` một lần trong terminal để đăng nhập.
+- Muốn xóa sạch: dừng server, xóa `out/web/` (lịch sử, cache verdict, workspace đã giải mã).
+
+### 3. Hướng dẫn sử dụng từng bước
+
+1. Mở web, kéo APK/XAPK/APKM vào ô tải lên.
+2. Chọn **ADS SCRIPTS** và **working file** của **đúng app đó** (XLSX tốt nhất). Workbook nhiều app thì chọn đúng sheet.
+3. Chọn AI. Mặc định **không** tick hai ô tùy chọn: *Kiểm đầy đủ cho dev* (thêm Load/observe và Banner, +~20% token) và *Rà lỗi chéo giữa các luồng* (chậm hơn ~5 phút, tốn thêm token). Chỉ tick khi chốt bản build.
+4. Bấm **Bắt đầu kiểm tra**. Bảng *agent đang chạy* cho thấy lệnh nào đang chạy; tab trình duyệt có hiệu ứng quay khi đang audit.
+5. Nếu hiện *Chờ xác nhận tài liệu* nghĩa là tài liệu có vẻ thuộc app khác: chọn **Hủy** để chọn lại, hoặc **Tiếp tục** nếu chắc chắn đúng.
+6. Xong: Marketing xem tab **Marketing** (ID sai/thiếu, logic từng màn); dev xem tab **Dev** (vị trí `file:dòng`, bằng chứng, token). Có thể **Copy danh sách ID lỗi**, **Tải CSV**, **Báo cáo HTML**.
+7. Sửa app, build bản mới, chạy lại: rule đã có kết quả với code không đổi được dùng lại nên rẻ hơn.
+
+### 4. Lỗi thường gặp
+
+| Hiện tượng | Cách xử lý |
+|---|---|
+| `doctor` báo thiếu `jadx` | Cài JADX, thêm vào `PATH` |
+| Rule ra ❔ "AI hết hạn mức" | Chờ hạn mức làm mới rồi chạy lại; rule đã xong được giữ |
+| Rule ra ❔ "mã bị làm rối" | Bình thường với APK release; dev xác nhận tay |
+| Tải lên báo lỗi font/CSP | Chạy lại `serve` sau khi cập nhật code |
+| Muốn đổi AI model | Model được cố định trong code (`engines.py`, `claude_engine.py`), không đổi tự động |
 
 ## Dòng lệnh
 
@@ -106,6 +144,8 @@ Sau khi đọc APK và tài liệu, **trước khi tốn quota AI**, tool kiểm
 [Tham chiếu chi tiết](docs/technical-reference.md) · [Chuẩn ads/init của base](docs/base-ads-contract.md) · [Tối ưu và kiểm chứng](docs/audit-optimization.md) · [Kế hoạch triển khai](docs/superpowers/plans/)
 
 ## Phát triển
+
+Giao diện React + Ant Design, nền tương tác và khối 3D ở thanh bên dùng **Three.js** (`frontend/src/PointerField.jsx`): lưới chấm tản ra và vầng sáng đi theo con trỏ chuột, tự tắt chuyển động khi hệ điều hành bật "giảm chuyển động" và bỏ qua nếu trình duyệt không có WebGL.
 
 ```bash
 uv run python -m unittest discover -s tests     # kiểm thử

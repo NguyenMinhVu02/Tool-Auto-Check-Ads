@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { findingText } from './findingText';
 import { unknownExplanation } from './findingExplanation';
+import { useTabIndicator } from './tabIndicator';
+import { PointerField, TiltGem } from './PointerField';
 import {
   Alert, Button, Card, Collapse, Empty, Layout, List, Progress, Space,
   Checkbox, Select, Statistic, Steps, Table, Tabs, Tag, Typography, Upload, message,
@@ -319,7 +321,7 @@ export default function App() {
   const [ads, setAds] = useState(null);
   const [working, setWorking] = useState(null);
   const [crossFlow, setCrossFlow] = useState(false);
-  const [recheckAll, setRecheckAll] = useState(false);
+  const [recheckAll] = useState(false);  // no rule currently opts into skip-after-pass, so the option is not offered in the UI
   const [fullScope, setFullScope] = useState(false);
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState(null);
@@ -606,6 +608,9 @@ export default function App() {
       ? 'Mới có một file. Lượt kiểm tra sẽ bỏ qua cả hai tài liệu.'
       : 'Không bắt buộc. Có thể kiểm tra APK mà không kèm tài liệu.';
   const currentStep = stage === 'done' ? steps.length : Math.max(0, stageOrder.indexOf(stage));
+  const tabState = busy ? 'running' : job?.state === 'awaiting_confirmation' ? 'waiting' : job?.state === 'error' ? 'error' : report && stage === 'done' ? 'done' : 'idle';
+  const tabLabel = busy && stage === 'rules' && job?.rule_total ? `${job.rule_completed || 0}/${job.rule_total}` : busy ? (stageLabels[stage] || '') : '';
+  useTabIndicator(tabState, tabLabel);
   const phase = job?.state === 'error' ? 'Có lỗi' : stage === 'done' ? 'Đã tạo báo cáo' : busy ? stageLabels[stage] || 'Đang xử lý' : 'Sẵn sàng';
   const ruleTotal = report?.summary?.total ?? job?.rule_total;
   const displayedEngine = report?.engine || job?.engine || selectedEngine;
@@ -623,6 +628,8 @@ export default function App() {
   const engineLabel = reportEngineLabels[displayedEngine] || engines.find((item) => item.id === displayedEngine)?.label || displayedEngine || 'AI CLI';
 
   return (
+    <>
+    <PointerField />
     <Layout className="app-layout">
       <Sider className="sidebar" width={248} breakpoint="lg" collapsedWidth={0} trigger={null}>
         <a href="#overview" className="brand"><span className="brand-icon"><SafetyCertificateOutlined /></span><span>APK Audit<small>LOCAL WORKSPACE</small></span></a>
@@ -632,6 +639,7 @@ export default function App() {
           <a href="#upload"><CloudUploadOutlined /> Tải ứng dụng</a>
           <a href="#results"><FileSearchOutlined /> Kết quả kiểm tra</a>
         </nav>
+        <TiltGem />
         <div className="sidebar-foot"><span className="live-dot" /> Chạy trên máy của bạn<Text>Dữ liệu lưu ở localhost</Text></div>
       </Sider>
       <Content className="main-content" id="overview">
@@ -665,13 +673,12 @@ export default function App() {
                 onChange={setSelectedEngine} options={engines.map((item) => ({ value: item.id, label: `${item.label}${item.installed ? '' : ' — chưa cài'}`, disabled: !item.installed }))} />
               <Button onClick={refreshEngines} loading={enginesLoading} disabled={busy}>Phát hiện lại</Button>
             </Space>
-            <Text type="secondary">CLI cần được đăng nhập sẵn. Claude cố định Haiku 5.5 / low; Codex dùng GPT-6 Sol / low.</Text>
+            <Text type="secondary">CLI cần được đăng nhập sẵn. Model cố định theo từng lựa chọn{engines.length ? `: ${engines.map((item) => item.label).join(' · ')}` : ''}.</Text>
             {engineError && <Alert type="error" showIcon message={engineError} />}
             {!enginesLoading && !engineError && !selectedEngine && <Alert type="warning" showIcon message="Cài và đăng nhập Codex CLI hoặc Claude CLI, sau đó khởi động lại server nếu PATH thay đổi và bấm Phát hiện lại." />}
           </div>
-          <Checkbox className="cross-flow-option" checked={fullScope} disabled={busy} onChange={(event) => setFullScope(event.target.checked)}>Kiểm đầy đủ cho dev (thêm Load/observe và Banner; mặc định chỉ khởi tạo, Remote/consent/fallback, ID và 4 màn đầu)</Checkbox>
-          <Checkbox className="cross-flow-option" checked={recheckAll} disabled={busy} onChange={(event) => setRecheckAll(event.target.checked)}>Kiểm lại cả rule đã đạt ở bản trước (hiện áp dụng cho Firebase tracking)</Checkbox>
-          <Checkbox className="cross-flow-option" checked={crossFlow} disabled={busy} onChange={(event) => setCrossFlow(event.target.checked)}>Rà thêm lỗi chéo giữa các luồng (chậm hơn ~5 phút, tốn thêm token)</Checkbox>
+          <Checkbox className="cross-flow-option" checked={fullScope} disabled={busy} onChange={(event) => setFullScope(event.target.checked)}><b>Kiểm đầy đủ cho dev</b><br /><Text type="secondary">Thêm 2 rule: <i>Load/observe</i> (quảng cáo native có được theo dõi liên tục và ẩn khi rỗng/mất mạng) và <i>Banner reload</i>. Mặc định tắt vì phần này chủ yếu dev cần; tốn thêm khoảng 20% token. Không tick vẫn kiểm đủ khởi tạo, Remote/consent/fallback, ID và 4 màn đầu.</Text></Checkbox>
+          <Checkbox className="cross-flow-option" checked={crossFlow} disabled={busy} onChange={(event) => setCrossFlow(event.target.checked)}><b>Rà lỗi chéo giữa các luồng</b><br /><Text type="secondary">Thêm một lượt AI tìm lỗi chỉ xảy ra khi các màn tác động lẫn nhau (ví dụ quảng cáo màn trước vẫn đang tải khi đã sang màn sau). Chậm hơn khoảng 5 phút, tốn thêm token và hay cho kết quả "cần dev xem lại". Nên tick khi chốt bản build, không cần cho kiểm nhanh.</Text></Checkbox>
           <div className="start-row"><Text type="secondary">{documentHint}</Text><Button id="start-button" type="primary" size="large" icon={busy ? <LoadingOutlined /> : <FileSearchOutlined />} disabled={!apk || busy || enginesLoading || !selectedEngine || documentsLoading || sheetMissing} onClick={beginAudit}>{busy ? 'Đang kiểm tra' : 'Bắt đầu kiểm tra'}</Button></div>
           <Paragraph type="secondary">Tự nhận dạng cột và dòng tiêu đề. Khi chưa hiểu mẫu, AI đã chọn sẽ hỗ trợ ánh xạ cột (tối đa 90 giây/tài liệu); giá trị vẫn lấy từ file gốc. Hai tài liệu cần thuộc cùng app.</Paragraph>
         </Card>
@@ -806,5 +813,6 @@ export default function App() {
         <footer><Space><CheckCircleOutlined /> APK Audit · Local workspace</Space></footer>
       </Content>
     </Layout>
+    </>
   );
 }

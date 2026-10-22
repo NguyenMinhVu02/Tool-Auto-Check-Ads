@@ -37,6 +37,35 @@
 
 ## Lịch sử phiên
 
+### 2026-10-22 17:30 — Đưa slicer về bản KHÔNG có tweak để so sánh A/B (Asia/Ho_Chi_Minh)
+
+- Theo yêu cầu: `git restore` apk_audit/slicer.py về HEAD (WHOLE_FILE_LINES không tồn tại, ngưỡng nguyên file 130 dòng), 239 test đạt, restart server. Mốc "CÓ tweak" cùng app AI Short Drama (Codex gpt-6-sol low, pack 0.11.1): job b28b6ced54504a5f9cafdc1500ade867 — 7P/5F/2U, 272s, 4.99M in, 66K out, 67 calls; lệnh mỗi rule INIT 6, REMOTE 8, ID 11, SPLASH 16, ONBOARDING 13, WELCOME 13 (Language dùng cache). Khóa verdict cache KHÔNG chứa nội dung slice nên chạy lại cùng app sẽ dùng lại kết quả PASS/FAIL đã lưu (không phải A/B thật): đã chuyển `out/web/cache/verdicts` → `verdicts.backup-with-tweak` (đổi tên lại để khôi phục). Chờ người dùng chạy lại bản KHÔNG tweak rồi so với job mốc.
+
+### 2026-10-22 16:50 — Áp dụng cải tiến slicer từ nhánh thử nghiệm vào server (Asia/Ho_Chi_Minh)
+
+- Theo yêu cầu "áp dụng vào server để chạy thử": lấy riêng `apk_audit/slicer.py` (WHOLE_FILE_LINES=60) từ `exp/graphify-call-graph` vào working tree của main (chưa commit), 239 test đạt, restart server. Graphify KHÔNG được tích hợp vào pipeline (đánh giá: không hiệu quả). Hoàn tác: `git checkout main -- apk_audit/slicer.py` rồi restart.
+
+### 2026-10-22 16:30 — Thử nghiệm Graphify trên nhánh riêng (Asia/Ho_Chi_Minh)
+
+- Tạo worktree `../apk-audit-graphify` trên nhánh `exp/graphify-call-graph` (main và server đang chạy không bị đụng). Xác minh gói `graphifyy` 0.9.93 (metadata trỏ đúng repo Graphify-Labs/graphify, 261 bản phát hành), cài trong venv của worktree, không chạy `graphify install`.
+- Đo trên app Silly: dựng 4m23s, 222.567 nút/638.560 cạnh, graph.json 256MB; ghi vào `<sources>/graphify-out` trong workspace cache (đã dọn, workspace sạch). Độ sâu 1 từ Language/Onboarding chứa đủ các lớp AI từng phải tự đọc (cx1, bx1, j5, ex1; o12, rn1) nhưng slicer hiện có với ngân sách không giới hạn cũng tìm đủ ⇒ Graphify không thêm khả năng phát hiện; điểm nghẽn là xếp hạng/nén dưới ngân sách ~25KB. Độ sâu 2 nổ 6–9 nghìn file.
+- Kết luận: không hiệu quả để tích hợp; giữ nhánh để tham chiếu, tài liệu ở `docs/graphify-evaluation.md` trên nhánh (commit 84502ee). Thay đổi nhỏ có ích (`WHOLE_FILE_LINES`=60: helper dài chỉ góp hàm liên quan quảng cáo; Language 3/4 lớp cần thay vì 2/4) mới nằm trên nhánh, chưa vào main. Cách hủy: `git worktree remove ../apk-audit-graphify && git branch -D exp/graphify-call-graph`.
+
+### 2026-10-22 15:40 — Giao diện: Three.js theo con trỏ + font nét đều (Asia/Ho_Chi_Minh)
+
+- Font: Poppins không có glyph tiếng Việt nên dấu bị rơi sang font hệ thống → nét to nhỏ lẫn lộn. Thay bằng **Be Vietnam Pro** (nét đều, thiết kế cho tiếng Việt), 3 subset (latin, latin-ext, vietnamese) × 4 độ đậm 400/500/600/700 dạng woff2 bundle trong web_assets/fonts (224KB, OFL.txt), `unicode-range` chuẩn, route mới ở web.py, antd token + :root; font-synthesis none.
+- Three.js (`three` 0.186 + `@fontsource/be-vietnam-pro` trong frontend): `PointerField` nền cố định click-through — lưới chấm ShaderMaterial tản ra/lớn lên quanh con trỏ (làm mượt theo dt) + vầng sáng spotlight; `TiltGem` khối icosahedron wireframe ở thanh bên xoay hướng theo chuột. Cap DPR 1.5, dừng khi tab ẩn (rAF), dispose khi unmount, bỏ qua chuyển động nếu prefers-reduced-motion, im lặng nếu không có WebGL. Card kính mờ (rgba .84 + blur 3px) để thấy nền.
+- Lỗi bắt được khi kiểm: CSP `default-src 'self'` chặn `data:` nên favicon canvas của animation tab sẽ không chạy → thêm `img-src 'self' data:; font-src 'self'`. Server phải restart mới nạp route font (đã restart).
+- Kiểm bằng Chrome headless (CDP, giả lập di chuột, 1440×900): hiện đúng chấm tản/đậm quanh con trỏ và vầng sáng, gem 3D, đã nạp 7 face Be Vietnam Pro, không lỗi console. 6 test node + test web font/CSP. app.js 1.64MB. Chưa commit.
+
+### 2026-10-22 15:00 — Làm rõ ô tùy chọn trên web (Asia/Ho_Chi_Minh)
+
+- Người dùng hỏi các ô tick để làm gì. Phát hiện chữ giao diện cũ: dòng "Claude cố định Haiku 5.5 / low" sai (engine hiện là Sonnet 5; lần đổi trước sed nhầm dòng) → nay lấy tên model từ danh sách engine; ô "Kiểm lại cả rule đã đạt (… Firebase tracking)" vô nghĩa sau khi gỡ rule Firebase → bỏ khỏi UI (CLI `--recheck-all` còn); viết lại mô tả 2 ô còn lại (Kiểm đầy đủ cho dev ≈ +20% token; Rà lỗi chéo chậm ~5 phút). Build đạt, chưa commit.
+
+### 2026-10-22 14:40 — Animation trên tab trình duyệt khi audit chạy (Asia/Ho_Chi_Minh)
+
+- `frontend/src/tabIndicator.js`: hook `useTabIndicator` — khi audit chạy, tiêu đề tab quay spinner braille (⠋⠙⠹…) kèm tiến độ "3/7" và favicon canvas 32px có cung sáng quay (120ms; tab nền bị trình duyệt giãn ~1s vẫn quay); xong ✅ xanh, lỗi ⚠️ đỏ, chờ xác nhận tài liệu ❔ vàng; tôn trọng `prefers-reduced-motion` (tĩnh). Có test node (tabTitle). Build đạt, file tĩnh phục vụ từ đĩa nên không cần restart. Chưa xem trực quan trên trình duyệt; chưa commit.
+
 ### 2026-10-22 14:10 — Preflight tài liệu có đúng app không (Asia/Ho_Chi_Minh)
 
 - Yêu cầu: dừng và hỏi xác nhận trên web khi package/tài khoản AdMob tài liệu lệch app, trước khi tốn AI. `apk_audit/preflight.py` (`check_documents`: package_match False, app_id_match False, tài khoản AdMob không giao nhau giữa ID active của ADS SCRIPTS và ad_config.json, bỏ qua ID demo Google; `DocumentMismatch` mã 7). Pipeline kiểm sau inventory, trước slice/rule; `confirm_mismatch`; engine none không chặn; báo cáo có `preflight` + cảnh báo `documents_may_not_match_app` khi đã xác nhận. Web: trạng thái `awaiting_confirmation` (không giữ slot active), `POST /api/jobs/<id>/confirm|cancel`; UI Alert + 2 nút, lịch sử "Chờ xác nhận tài liệu". CLI `--confirm-mismatch`.

@@ -260,6 +260,15 @@ class WebTests(unittest.TestCase):
                 self.request(f"/api/jobs/{second}/confirm", b"x")
             self.assertEqual(response.exception.code, 400)
 
+    def test_bundled_vietnamese_fonts_are_served_and_csp_allows_canvas_favicon(self):
+        for subset in ("latin", "latin-ext", "vietnamese"):
+            response = self.request(f"/fonts/BeVietnamPro-{subset}-500.woff2")
+            self.assertEqual((response.status, response.headers["Content-Type"]), (200, "font/woff2"))
+            self.assertGreater(len(response.read()), 1000)
+        policy = self.request("/").headers["Content-Security-Policy"]
+        self.assertIn("img-src 'self' data:", policy)
+        self.assertIn("font-src 'self'", policy)
+
     def test_html_report_and_id_csv_are_served_for_finished_jobs(self):
         marketing = {"documents_available": True, "id_problems": [{"screen": "Splash", "name": "inter_splash", "status": "Sai ID"}],
                      "screens": [{"title": "Màn Splash", "level": "issue", "flow_level": "ok", "flow_label": "Đạt", "id_issues": 1,

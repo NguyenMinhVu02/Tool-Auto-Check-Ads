@@ -16,7 +16,7 @@ createRoot(document.getElementById('root')).render(
         colorWarning: '#cf8e21',
         colorError: '#d14c55',
         borderRadius: 10,
-        fontFamily: 'Poppins, sans-serif',
+        fontFamily: "'Be Vietnam Pro', system-ui, sans-serif",
       },
     }}
   >
