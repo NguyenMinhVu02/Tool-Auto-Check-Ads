@@ -26,6 +26,9 @@ CONFIG_CHECKS = (
     ('ADS_SCREEN_NAMES', 'Tên 4 màn đầu theo quy định'),
     ('ADS_SCREEN_ORIENTATION', 'Chặn xoay màn hình ở 4 màn đầu'),
     ('ADS_MEDIATION_ADAPTERS', 'Mạng mediation đủ adapter và SDK'),
+    ('ADS_SPLASH_ADS_NOTICE', 'Chữ "This action may contain ads" ở Splash'),
+    ('ADS_LANGUAGE_DONE_DELAY', 'Thời gian chờ nút Done ở màn ngôn ngữ (tham khảo)'),
+    ('ADS_UNINSTALL_SETUP', 'Shortcut Uninstall, màn xác nhận gỡ và màn khảo sát'),
 )
 REQUIREMENT_ICONS = {'ok': '✅', 'issue': '❌', 'unknown': '❔', 'na': '➖'}
 VERDICTS = {status: (STATUS_LEVELS[status], label) for status, label in STATUS_LABELS.items()}

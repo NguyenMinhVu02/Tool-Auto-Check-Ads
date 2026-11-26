@@ -375,3 +375,74 @@ class DuplicateLoadTests(unittest.TestCase):
             [self.load('native_language_1', 'Splash.java', 3, 'ads.loadNativeLanguage(this);')],
             [self.load('native_language_1', 'Language.java', 3, 'ads.somethingElse();')]), self.root)
         self.assertEqual(result['issues'], [])
+
+
+class CaseListStaticTests(unittest.TestCase):
+    """Splash ads notice, Language Done delay (information) and Uninstall setup."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        (self.root / 'resources' / 'res' / 'values').mkdir(parents=True)
+        (self.root / 'sources').mkdir()
+
+    def write(self, relative, text):
+        path = self.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+
+    def run_check(self, check, facts=None, params=None):
+        return evaluate_static(Rule('R', 'R', 'static', check=check, params=params or {}), facts or {}, {}, workspace=self.root)
+
+    def test_splash_notice_found_in_strings(self):
+        self.write('resources/res/values/strings.xml', '<resources>\n<string name="a">This action may contains ads</string>\n</resources>')
+        finding = self.run_check('splash_ads_notice')
+        self.assertEqual(finding.status, 'PASS')
+        self.assertEqual(finding.actual, 'This action may contains ads')
+        self.assertEqual(finding.evidence[0]['line'], 2)
+
+    def test_splash_notice_other_wording_passes_with_note(self):
+        self.write('resources/res/values/strings.xml', '<resources><string name="a">This action can contain ads</string></resources>')
+        finding = self.run_check('splash_ads_notice')
+        self.assertEqual(finding.status, 'PASS')
+        self.assertIn('khác câu mẫu', finding.reasoning)
+
+    def test_splash_notice_missing_fails(self):
+        self.write('resources/res/values/strings.xml', '<resources><string name="a">Loading</string></resources>')
+        self.assertEqual(self.run_check('splash_ads_notice').status, 'FAIL')
+
+    def test_done_delay_reads_default_from_code(self):
+        self.write('sources/com/app/c.java', 'x = D.x(new k("time_delay_show_language_done_button", 1500L));\n')
+        self.write('sources/com/app/K.java', 'public static final long DEFAULT_TIME_DELAY_SHOW_LANGUAGE_DONE_BUTTON = 2000;\n')
+        finding = self.run_check('language_done_delay')
+        self.assertEqual(finding.status, 'PASS')
+        self.assertEqual(finding.actual, {'milliseconds': [1500, 2000]})
+        self.assertIn('1,5 giây', finding.reasoning)
+
+    def test_done_delay_unknown_value_is_not_a_defect(self):
+        self.write('sources/com/app/c.java', 'long t = rc.getLong("time_delay_show_language_done_button");\n')
+        self.assertEqual(self.run_check('language_done_delay').status, 'SKIPPED')
+
+    def manifest(self, *names):
+        return {'manifest': {'activities': [{'name': 'com.app.' + n} for n in names]}}
+
+    def test_uninstall_setup_pass(self):
+        self.write('sources/com/app/ShortcutManager.java', 'new ShortcutInfo.Builder(context, "uninstall");\nload("native_confirm_uninstall");\n')
+        finding = self.run_check('uninstall_setup', self.manifest('SplashActivity', 'UninstallAdActivity', 'UninstallFeedbackActivity'))
+        self.assertEqual(finding.status, 'PASS')
+        self.assertEqual(finding.actual['confirm_screen'], ['UninstallAdActivity'])
+        self.assertEqual(finding.actual['survey_screen'], ['UninstallFeedbackActivity'])
+        self.assertEqual(finding.actual['native_slots'], ['native_confirm_uninstall'])
+
+    def test_uninstall_shortcut_inside_androidx_does_not_count(self):
+        self.write('sources/androidx/core/content/pm/ShortcutInfoCompat.java', 'new ShortcutInfo.Builder(c, id);\n')
+        finding = self.run_check('uninstall_setup', self.manifest('ConfirmUninstallActivity', 'SurveyActivity'))
+        self.assertEqual(finding.status, 'FAIL')
+        self.assertIn('shortcut', finding.reasoning)
+
+    def test_uninstall_missing_survey_screen_fails(self):
+        self.write('sources/com/app/S.java', 'new ShortcutInfo.Builder(context, "uninstall");\n')
+        finding = self.run_check('uninstall_setup', self.manifest('ConfirmUninstallActivity'))
+        self.assertEqual(finding.status, 'FAIL')
+        self.assertIn('Survey', finding.reasoning)

@@ -344,3 +344,26 @@
       ironsource: {name: IronSource (LevelPlay), adapter: [com/google/ads/mediation/ironsource], sdk: [com/ironsource/mediationsdk]}
       unity: {name: Unity Ads, adapter: [com/google/ads/mediation/unity], sdk: [com/unity3d/ads]}
       vungle: {name: Liftoff (Vungle), adapter: [com/google/ads/mediation/vungle], sdk: [com/vungle/ads, com/vungle/warren]}
+
+- id: ADS_SPLASH_ADS_NOTICE
+  title: Chữ báo quảng cáo ở Splash
+  mode: static
+  check: splash_ads_notice
+  area: splash
+  severity: low
+
+- id: ADS_LANGUAGE_DONE_DELAY
+  title: Thời gian chờ nút Done ở Language (thông tin)
+  mode: static
+  check: language_done_delay
+  area: language
+  severity: low
+  params:
+    key: time_delay_show_language_done_button
+
+- id: ADS_UNINSTALL_SETUP
+  title: Shortcut Uninstall, màn Confirm Uninstall và Survey
+  mode: static
+  check: uninstall_setup
+  area: splash
+  severity: medium

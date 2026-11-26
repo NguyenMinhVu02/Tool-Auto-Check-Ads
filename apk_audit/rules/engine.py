@@ -12,8 +12,10 @@ CHECK_BASIS = {
     'remote_config_keys': 'chuỗi trong mã đã giải mã', 'interstitial_interval': 'lời gọi hàm trong mã đã giải mã',
     'language_dev_toggle': 'lời gọi hàm trong mã đã giải mã',
     'mediation_adapters': 'tên lớp adapter/SDK trong mã đã giải mã',
+    'splash_ads_notice': 'strings/layout trong resources của APK', 'language_done_delay': 'hằng số trong mã đã giải mã',
+    'uninstall_setup': 'AndroidManifest.xml và lớp ShortcutInfo trong mã đã giải mã',
 }
-CODE_CHECKS = {'remote_config_keys', 'interstitial_interval', 'language_dev_toggle', 'mediation_adapters'}
+CODE_CHECKS = {'language_done_delay', 'remote_config_keys', 'interstitial_interval', 'language_dev_toggle', 'mediation_adapters'}
 
 def evaluate_static(rule, facts, documents=None, workspace=None):
     finding = Finding.for_rule(rule, resolved_by="static")

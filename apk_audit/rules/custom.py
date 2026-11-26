@@ -533,6 +533,137 @@ def mediation_adapters(rule, facts, documents, workspace):
             'marketing_summary': 'Các mạng mediation (' + ', '.join(ready) + ') đã đủ adapter và SDK.'}
 
 
+LIBRARY_DIRS = ('androidx/', 'android/', 'kotlin/', 'kotlinx/', 'com/google/', 'com/facebook/', 'org/')
+
+
+def _app_grep(workspace, pattern, limit=20):
+    """Like _grep but skips well-known library packages (androidx itself builds shortcuts, etc.)."""
+    sources = Path(workspace or '') / 'sources'
+    if not sources.is_dir():
+        return None
+    regex, hits = re.compile(pattern), []
+    for path in sorted(sources.rglob('*.java')):
+        relative = path.relative_to(sources).as_posix()
+        if relative.startswith(LIBRARY_DIRS):
+            continue
+        try:
+            for number, line in enumerate(read_text(path).splitlines(), 1):
+                match = regex.search(line)
+                if match:
+                    hits.append(('sources/' + relative, number, line.strip()[:300], match))
+                    if len(hits) >= limit:
+                        return hits
+        except OSError:
+            continue
+    return hits
+
+
+def splash_ads_notice(rule, facts, documents, workspace):
+    """Splash must tell users the action may show ads. Resources are not obfuscated, so the text
+    found (or not) in strings/layouts is conclusive."""
+    pattern = re.compile(rule.params.get('pattern', r'(?i)\b(?:may|can|might)\s+contains?\s+ads?\b'))
+    res = Path(workspace or '') / 'resources' / 'res'
+    if not res.is_dir():
+        return {'status': 'UNKNOWN', 'reason': 'missing_fact', 'reasoning': 'Không có thư mục resources đã giải mã.'}
+    evidence = []
+    for path in sorted(res.glob('values*/strings.xml')) + sorted(res.glob('layout*/*.xml')):
+        try:
+            for number, line in enumerate(read_text(path).splitlines(), 1):
+                if pattern.search(line):
+                    evidence.append(_evidence(path.relative_to(workspace).as_posix(), number, line.strip()[:300]))
+                    break
+        except OSError:
+            continue
+        if len(evidence) >= 3:
+            break
+    if not evidence:
+        for file, line, text, _ in _app_grep(workspace, pattern.pattern, limit=1) or []:
+            evidence.append(_evidence(file, line, text))
+    expected = 'Chữ "This action may contain(s) ads" ở màn Splash'
+    if evidence:
+        text = re.search(r'>([^<]+)<', evidence[0]['excerpt'])
+        shown = text.group(1).strip() if text else evidence[0]['excerpt']
+        note = '' if re.search(r'(?i)may\s+contain', shown) else ' Ghi chú: khác câu mẫu "may contain ads", tester xem lại nếu cần đúng chữ.'
+        return {'status': 'PASS', 'expected': expected, 'actual': shown, 'evidence': evidence,
+                'reasoning': f'Kết luận: app có chữ báo quảng cáo "{shown}".' + note,
+                'marketing_summary': f'Màn Splash có chữ báo quảng cáo "{shown}".'}
+    return {'status': 'FAIL', 'expected': expected, 'actual': 'không tìm thấy',
+            'reasoning': 'Kết luận: không thấy chữ "may contain(s) ads" trong strings, layout hay mã của app.\n'
+                         'Cần sửa: thêm dòng "This action may contain ads" dưới thanh tiến trình ở Splash.',
+            'marketing_summary': 'Màn Splash chưa có chữ "This action may contain ads".'}
+
+
+def language_done_delay(rule, facts, documents, workspace):
+    """Default delay before the Language Done button (information only, never a defect)."""
+    key = rule.params.get('key', 'time_delay_show_language_done_button')
+    hits = _app_grep(workspace, r'(?i)' + re.escape(key) + r'"?\)?\s*[,=]\s*(?:Long\.valueOf\()?(\d{3,5})L?\b', limit=10)
+    if hits is None:
+        return {'status': 'UNKNOWN', 'reason': 'missing_fact', 'reasoning': 'Không có thư mục sources đã giải mã.'}
+    values = sorted({int(h[3].group(1)) for h in hits})
+    evidence = [_evidence(h[0], h[1], h[2]) for h in hits[:3]]
+    if not values:
+        return {'status': 'SKIPPED', 'reason': 'not_found', 'actual': 'không xác định',
+                'reasoning': 'Thông tin: không đọc được thời gian delay mặc định của nút Done từ mã (có thể lấy hoàn toàn '
+                             'từ Remote Config). Không tính là lỗi.',
+                'marketing_summary': 'Chưa xác định được thời gian chờ nút Done ở màn ngôn ngữ (chỉ để tham khảo).'}
+    shown = ', '.join(f'{v / 1000:g} giây' for v in values).replace('.', ',')
+    return {'status': 'PASS', 'actual': {'milliseconds': values}, 'evidence': evidence,
+            'reasoning': f'Thông tin: nút Done ở màn Language hiện sau {shown} (giá trị mặc định trong mã, Remote Config '
+                         'có thể đổi). Không bắt buộc giá trị cố định.',
+            'marketing_summary': f'Nút Done ở màn chọn ngôn ngữ hiện sau {shown} (mặc định, chỉ để tham khảo).'}
+
+
+def uninstall_setup(rule, facts, documents, workspace):
+    """Uninstall widget shortcut + Confirm Uninstall and Survey screens + their native slots.
+
+    Platform class names (ShortcutInfo), manifest activity names and slot literals survive R8,
+    so this is decided by code. Button navigation inside the screens needs the AI and is not
+    checked here.
+    """
+    activities = [a['name'] for a in (facts.get('manifest') or {}).get('activities') or []
+                  if isinstance(a, dict) and a.get('name')]
+    if not activities:
+        return {'status': 'UNKNOWN', 'reason': 'missing_fact', 'reasoning': 'Không đọc được danh sách Activity trong manifest.'}
+    short = [n.rsplit('.', 1)[-1] for n in activities]
+    survey = [n for n in short if re.search(r'(?i)survey|feedback', n)]
+    confirm = [n for n in short if re.search(r'(?i)uninstall', n) and n not in survey]
+    shortcut = _app_grep(workspace, r'ShortcutInfo(?:Compat)?[.$]Builder\(', limit=1)
+    if shortcut is None:
+        return {'status': 'UNKNOWN', 'reason': 'missing_fact', 'reasoning': 'Không có thư mục sources đã giải mã.'}
+    evidence = [_evidence(h[0], h[1], h[2]) for h in shortcut]
+    res = Path(workspace) / 'resources' / 'res'
+    static_shortcut = next((p for p in sorted(res.glob('xml*/*.xml')) if '<shortcut ' in read_text(p)), None) if res.is_dir() else None
+    if static_shortcut and not evidence:
+        evidence.append(_evidence(static_shortcut.relative_to(workspace).as_posix(), 1, 'shortcuts.xml'))
+    slots = sorted({h[3].group(1) for h in _app_grep(workspace, r'"(native_[a-z0-9_]*(?:uninstall|survey)[a-z0-9_]*)"', limit=50) or []})
+    assets = (facts.get('assets') or {}).get('json') or {}
+    for config in assets.values():
+        if isinstance(config, dict):
+            slots += [k for k in config if re.fullmatch(r'native_[a-z0-9_]*(?:uninstall|survey)[a-z0-9_]*', k) and k not in slots]
+    slots = sorted(set(slots))
+    actual = {'shortcut': bool(evidence), 'confirm_screen': confirm, 'survey_screen': survey, 'native_slots': slots}
+    expected = {'shortcut': 'Uninstall trên widget khi nhấn giữ icon', 'screens': ['Confirm Uninstall', 'Survey'],
+                'native_slots': 'native cho từng màn (vd. native_uninstall / native_confirm_uninstall, native_survey)'}
+    problems = []
+    if not evidence:
+        problems.append('không có shortcut Uninstall (ShortcutInfo.Builder hoặc shortcuts.xml)')
+    if not confirm:
+        problems.append('không có màn Confirm Uninstall trong manifest')
+    if not survey:
+        problems.append('không có màn Survey trong manifest')
+    slot_note = ('Vị trí native: ' + ', '.join(slots) + '.') if slots else 'Chưa thấy vị trí native cho màn Uninstall/Survey.'
+    if problems:
+        return {'status': 'FAIL', 'expected': expected, 'actual': actual, 'evidence': evidence,
+                'reasoning': 'Kết luận: luồng Uninstall chưa đủ: ' + '; '.join(problems) + '. ' + slot_note
+                             + '\nCần sửa: làm luồng Uninstall như base (ShortcutManager, ConfirmUninstallActivity, SurveyActivity).',
+                'marketing_summary': 'Luồng gỡ app (Uninstall) chưa đủ: ' + '; '.join(problems) + '.'}
+    return {'status': 'PASS', 'expected': expected, 'actual': actual, 'evidence': evidence,
+            'reasoning': f'Kết luận: có shortcut Uninstall, màn Confirm Uninstall ({", ".join(confirm)}) và Survey '
+                         f'({", ".join(survey)}). {slot_note} Điều hướng các nút trong hai màn chưa được kiểm.',
+            'marketing_summary': 'App có đủ shortcut Uninstall, màn xác nhận gỡ và màn khảo sát. ' + slot_note}
+
+
 CUSTOM_CHECKS = {'mediation_adapters': mediation_adapters, 'screen_orientation_lock': screen_orientation_lock, 'debug_test_ids': debug_test_ids, 'ad_config_flags': ad_config_flags, 'language_dev_toggle': language_dev_toggle,
                  'remote_config_keys': remote_config_keys, 'interstitial_interval': interstitial_interval,
-                 'screen_class_names': screen_class_names}
+                 'screen_class_names': screen_class_names, 'splash_ads_notice': splash_ads_notice,
+                 'language_done_delay': language_done_delay, 'uninstall_setup': uninstall_setup}

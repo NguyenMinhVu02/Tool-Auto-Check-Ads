@@ -8,8 +8,9 @@ STATUS_LABELS = {'PASS': 'Đạt', 'FAIL': 'Cần sửa', 'UNKNOWN': 'Cần dev 
 STATUS_LEVELS = {'PASS': 'ok', 'FAIL': 'issue', 'UNKNOWN': 'check', 'SKIPPED': 'skip'}
 
 GROUPS = (
-    ('splash', 'Màn Splash', ('ADS_SPLASH_PLACEMENT',)),
-    ('language', 'Màn chọn ngôn ngữ', ('ADS_LANGUAGE_PLACEMENT', 'ADS_LANGUAGE_DEV_TOGGLE')),
+    ('splash', 'Màn Splash', ('ADS_SPLASH_PLACEMENT', 'ADS_SPLASH_ADS_NOTICE')),
+    ('language', 'Màn chọn ngôn ngữ', ('ADS_LANGUAGE_PLACEMENT', 'ADS_LANGUAGE_DEV_TOGGLE', 'ADS_LANGUAGE_DONE_DELAY')),
+    ('uninstall', 'Luồng Uninstall', ('ADS_UNINSTALL_SETUP',)),
     ('onboarding', 'Màn Onboarding', ('ADS_ONBOARDING_PLACEMENT',)),
     ('welcome', 'Welcome back / App Open', ('ADS_WELCOME_RESUME',)),
     ('config', 'Cấu hình và khởi tạo', ('ADS_INIT_ORDER', 'ADS_REMOTE_FALLBACK', 'ADS_ID_SOURCE_AND_COVERAGE',

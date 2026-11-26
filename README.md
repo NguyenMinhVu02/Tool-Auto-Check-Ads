@@ -55,6 +55,8 @@ Tool chạy **trên máy của bạn**. APK, tài liệu và kết quả không 
 | Cấu hình | `isEnable`, `enable_ua_check`, key Remote Config, khoảng cách inter 35 giây | Tự động |
 | Màn hình | Tên 4 Activity, chặn xoay màn hình, Dev setting ở màn Language | Tự động |
 | Mediation | Mỗi mạng (AppLovin, Mintegral, Pangle, Meta…) có đủ adapter và SDK | Tự động |
+| Uninstall | Shortcut Uninstall, màn Confirm Uninstall và Survey, vị trí native của hai màn | Tự động |
+| Khác | Chữ "This action may contain ads" ở Splash; thời gian chờ nút Done ở Language (chỉ để tham khảo) | Tự động |
 
 Hai tùy chọn trên trang Kiểm tra (mặc định tắt, tốn thêm token): **Kiểm đầy đủ cho dev** (thêm Load/observe và Banner) và **Rà lỗi chéo giữa các luồng**.
 
