@@ -192,7 +192,7 @@ function MarketingSummary({ data, jobId }) {
     .then((text) => navigator.clipboard.writeText(text))
     .then(() => message.success(done), () => message.error('Không copy được, hãy thử lại'));
   return (
-    <Card className="marketing-card" title="Tóm tắt cho Marketing · 4 màn đầu" style={{ marginBottom: 16 }}
+    <Card className="marketing-card" title="Tóm tắt cho Tester · 4 màn đầu" style={{ marginBottom: 16 }}
       extra={<Space wrap>
         <Button size="small" onClick={copyProblems}>Copy danh sách ID lỗi</Button>
         <Button size="small" type="primary" onClick={() => copyFrom('sheet.tsv?only_fails=1', 'Đã copy, mở Google Sheet và bấm Ctrl+V')} title="Các mục chưa đạt, đúng cột ID · Function · Test Scenario Group · Actual · … · Link Bug">Copy cho Google Sheet</Button>
@@ -209,6 +209,10 @@ function MarketingSummary({ data, jobId }) {
           ? <Alert type="error" showIcon message={`${problems.length} ID ads đang có vấn đề`}
               description={<ul className="marketing-problems">{problems.map((item) => <li key={item.name}><Text strong>{item.name}</Text> <Text type="secondary">({item.screen})</Text> — {item.status}</li>)}</ul>} />
           : <Alert type="success" showIcon message="Không thấy ID ads nào sai hoặc thiếu ở các màn đầu." />)}
+        {data.duplicate_loads?.issues?.length > 0 && <Alert type="warning" showIcon
+          message={`${data.duplicate_loads.issues.length} vị trí quảng cáo có thể bị tải trùng`}
+          description={<ul className="marketing-problems">{data.duplicate_loads.issues.map((item) => <li key={item.slot + item.kind}>
+            {item.message}<br /><Text type="secondary" className="ad-id">{item.sites.map((site) => `${site.screen}: ${site.location} (${site.trigger}${site.guarded ? ', có điều kiện chặn' : ''})`).join(' · ')}</Text></li>)}</ul>} />}
         {(data.config_checks || []).map((check) => (
           <Alert key={check.rule_id} type={check.level === 'ok' ? 'success' : check.level === 'issue' ? 'error' : 'warning'} showIcon
             message={`${check.title}: ${check.label}`}
@@ -787,7 +791,7 @@ export default function App() {
           <div className="results-header"><div><Text className="eyebrow">KẾT QUẢ</Text><Title level={3}>Tổng quan kiểm tra</Title></div>{report && <Button href={`/api/jobs/${job.id}/report`} icon={<DownloadOutlined />}>Tải report.json</Button>}</div>
           <Alert className="ai-notice" type="info" showIcon icon={<InfoCircleOutlined />} message={ruleTotal ? `${engineLabel} đánh giá ${ruleTotal} rule ads` : `${engineLabel} đọc mã và đánh giá các rule ads`} description="PASS và FAIL cần bằng chứng file/dòng hợp lệ. Khi thiếu dữ liệu hoặc không thể kết nối AI, kết quả là Chưa đủ căn cứ (UNKNOWN), chưa phải lỗi APK được xác nhận. Nội dung mã và tài liệu được gửi tới nhà cung cấp AI đã chọn, sử dụng quota của tài khoản CLI." />
           {report ? <Tabs className="report-tabs" defaultActiveKey="marketing" items={[
-            { key: 'marketing', label: 'Marketing', children: report.marketing ? <MarketingSummary data={report.marketing} jobId={job.id} /> : <Empty description="Báo cáo này chưa có tóm tắt Marketing" /> },
+            { key: 'marketing', label: 'Tester', children: report.marketing ? <MarketingSummary data={report.marketing} jobId={job.id} /> : <Empty description="Báo cáo này chưa có tóm tắt Tester" /> },
             { key: 'dev', label: 'Dev', children: <>
               {report.code_profile && (report.code_profile.obfuscation !== 'thấp' || report.code_profile.decompile_gap_files > 0) && <Alert type="warning" showIcon style={{ marginBottom: 12 }}
                 message={`Mã đã giải mã bị làm rối mức ${report.code_profile.obfuscation} (${Math.round(100 * report.code_profile.short_name_ratio)}% tên lớp ≤2 ký tự)${report.code_profile.decompile_gap_files ? `, ${report.code_profile.decompile_gap_files} file của app giải mã lỗi` : ''}`}

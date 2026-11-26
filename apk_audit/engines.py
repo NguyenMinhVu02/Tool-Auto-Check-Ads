@@ -37,7 +37,8 @@ class ReplayEngine:
         value = next(self.responses, "")
         return value if isinstance(value, AgentResult) else AgentResult(value)
 
-CODEX_FAMILY = "sol"  # balanced tier used for audits; the newest version is picked automatically
+# Tiers tried in order: the newest "terra" (efficient, cheaper) first, then the newest "sol".
+CODEX_FAMILIES = ("terra", "sol")
 _codex_models_cache = {"at": 0.0, "models": None}
 
 
@@ -63,12 +64,15 @@ def codex_models(ttl=300):
 
 
 def pick_codex_model(models):
-    """Newest ``gpt-<version>-sol`` model the CLI offers, else None (let Codex use its own default)."""
-    def version(slug):
-        match = re.fullmatch(rf"gpt-(\d+(?:\.\d+)*)-{CODEX_FAMILY}", slug)
-        return tuple(int(part) for part in match.group(1).split(".")) if match else None
-    ranked = sorted((version(slug), slug) for slug in models if version(slug))
-    return ranked[-1][1] if ranked else None
+    """Newest model of the first available tier in CODEX_FAMILIES, else None (Codex default)."""
+    for family in CODEX_FAMILIES:
+        def version(slug, family=family):
+            match = re.fullmatch(rf"gpt-(\d+(?:\.\d+)*)-{family}", slug)
+            return tuple(int(part) for part in match.group(1).split(".")) if match else None
+        ranked = sorted((version(slug), slug) for slug in models if version(slug))
+        if ranked:
+            return ranked[-1][1]
+    return None
 
 
 class CodexEngine:

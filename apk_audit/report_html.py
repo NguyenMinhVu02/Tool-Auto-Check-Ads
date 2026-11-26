@@ -24,7 +24,7 @@ def _tag(level, text):
 
 
 def _marketing(m):
-    out = ['<h2>Tóm tắt cho Marketing</h2>']
+    out = ['<h2>Tóm tắt cho Tester</h2>']
     for note in (m.get('publisher_note'),):
         if note:
             out.append(f'<div class="card issue"><b>ID ads thuộc tài khoản AdMob khác.</b> {escape(note)}</div>')
@@ -36,6 +36,12 @@ def _marketing(m):
         out.append(f'<div class="card issue"><h3>{len(problems)} ID ads đang có vấn đề</h3><ul>{rows}</ul></div>')
     elif m.get('documents_available'):
         out.append('<div class="card ok">Không thấy ID ads nào sai hoặc thiếu ở các màn đầu.</div>')
+    duplicates = (m.get('duplicate_loads') or {}).get('issues') or []
+    if duplicates:
+        rows = ''.join(f"<li>{escape(d['message'])}<br><small>"
+                       + escape(' · '.join(f"{x['screen']}: {x['location']} ({x['trigger']})" for x in d['sites']))
+                       + '</small></li>' for d in duplicates)
+        out.append(f'<div class="card check"><h3>{len(duplicates)} vị trí quảng cáo có thể bị tải trùng</h3><ul>{rows}</ul></div>')
     for check in m.get('config_checks', []):
         rows = ''.join(f"<tr><td>{escape(i['file'])}</td><td><code>{escape(i['placement'])}</code></td><td>{escape(i['field'])}</td>"
                        f"<td>{escape(str(i['expected']))}</td><td>{escape(str(i['actual']))}</td></tr>" for i in check['issues'])

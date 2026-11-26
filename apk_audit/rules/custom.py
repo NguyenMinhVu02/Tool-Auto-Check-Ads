@@ -184,8 +184,29 @@ def _grep(workspace, facts, pattern, limit=20):
     return hits
 
 
+def _consent_module(rule, workspace, facts):
+    """Consent setup the base requires: the GDPR/UMP module and its tracking events.
+
+    Package folders of the module and string literals of the events survive R8, so this part is
+    decided by code, not by the AI. Returns None when the rule does not ask for consent.
+    """
+    spec = rule.params.get('consent')
+    if not spec:
+        return None
+    sources = Path(workspace or '') / 'sources'
+    modules = [m for m in spec.get('module', []) if (sources / m).is_dir() and any((sources / m).rglob('*.java'))]
+    events, evidence = [], []
+    for name in spec.get('events', []):
+        hits = _grep(workspace, facts, r'"[a-z_]*' + re.escape(name) + r'[a-z0-9_]*"', limit=1)
+        if hits:
+            events.append(name)
+            evidence.append(_evidence(hits[0][0], hits[0][1], hits[0][2]))
+    return {'modules': modules, 'events': events, 'missing_events': [e for e in spec.get('events', []) if e not in events],
+            'evidence': evidence[:2]}
+
+
 def remote_config_keys(rule, facts, documents, workspace):
-    """Remote Config keys the base reads must exist in the app (string literals in its own code)."""
+    """Remote Config keys the base reads must exist in the app, and the consent module must be present."""
     required = rule.params.get('required', [])
     optional = rule.params.get('optional', [])
     found, missing, evidence = {}, [], []
@@ -193,29 +214,56 @@ def remote_config_keys(rule, facts, documents, workspace):
         hits = _grep(workspace, facts, r'"' + re.escape(key) + r'"', limit=1)
         if hits is None:
             return {'status': 'UNKNOWN', 'reason': 'missing_fact',
-                    'reasoning': 'Không có thư mục sources đã giải mã để kiểm key Remote Config.'}
+                    'reasoning': 'Không có thư mục sources đã giải mã để kiểm key Remote Config và consent.'}
         if hits:
             found[key] = f'{hits[0][0]}:{hits[0][1]}'
             evidence.append(_evidence(hits[0][0], hits[0][1], hits[0][2]))
         elif key in required:
             missing.append(key)
+    consent = _consent_module(rule, workspace, facts)
     expected = {'required': required, 'optional': optional}
+    actual = {'found': found}
+    if consent is not None:
+        expected['consent'] = {'module': rule.params['consent'].get('module', []),
+                               'events': rule.params['consent'].get('events', [])}
+        actual['consent'] = {k: consent[k] for k in ('modules', 'events', 'missing_events')}
+        evidence += consent['evidence']
     profile = code_profile(workspace, app_roots(facts))
-    if missing and not absence_is_conclusive(profile, 'literal'):
-        return {'status': 'UNKNOWN', 'reason': 'decompile_gaps', 'expected': expected,
-                'actual': {'not_found': missing, 'found': found},
-                'reasoning': 'Kết luận: chưa thấy key Remote Config ' + ', '.join(missing) + ' nhưng ' + str(profile['decompile_gap_files'])
-                             + ' file code của app giải mã lỗi nên chưa thể coi là thiếu. Cần dev kiểm tra các file này.',
-                'marketing_summary': 'Chưa xác nhận được một số cấu hình điều khiển từ xa vì một phần code không giải mã được, cần dev kiểm tra.'}
+    conclusive = absence_is_conclusive(profile, 'literal')
+    consent_missing = consent is not None and not consent['modules'] and not consent['events']
+    problems, sales = [], []
     if missing:
-        return {'status': 'FAIL', 'expected': expected, 'actual': {'missing': missing, 'found': found}, 'evidence': evidence,
-                'reasoning': 'Kết luận: thiếu key Remote Config bắt buộc: ' + ', '.join(missing)
-                             + '.\nCần sửa: khai báo và đọc các key này như base (RemoteConfigUtils).',
-                'marketing_summary': f'App chưa có {len(missing)} cấu hình điều khiển từ xa bắt buộc ('
-                                     + ', '.join(missing) + '), nên không chỉnh được quảng cáo qua Firebase.'}
-    return {'status': 'PASS', 'expected': expected, 'actual': {'found': found}, 'evidence': evidence,
-            'reasoning': 'Kết luận: đủ key Remote Config bắt buộc trong mã app.',
-            'marketing_summary': 'App có đủ các cấu hình điều khiển từ xa bắt buộc.'}
+        problems.append('thiếu key Remote Config bắt buộc: ' + ', '.join(missing))
+        sales.append(f'chưa có {len(missing)} cấu hình điều khiển từ xa bắt buộc (' + ', '.join(missing) + ')')
+    if consent_missing:
+        problems.append('không thấy module consent (GDPR/UMP) và không thấy event consent nào')
+        sales.append('chưa tích hợp hộp thoại xin đồng ý quảng cáo (consent/GDPR)')
+    if problems and not conclusive:
+        actual['not_found'] = missing
+        return {'status': 'UNKNOWN', 'reason': 'decompile_gaps', 'expected': expected, 'actual': actual, 'evidence': evidence,
+                'reasoning': 'Kết luận: ' + '; '.join(problems) + ', nhưng ' + str(profile['decompile_gap_files'])
+                             + ' file code của app giải mã lỗi nên chưa thể coi là thiếu. Cần dev kiểm tra các file này.',
+                'marketing_summary': 'Chưa xác nhận được cấu hình điều khiển từ xa / consent vì một phần code không giải mã được, cần dev kiểm tra.'}
+    if problems:
+        actual['missing'] = missing
+        fixes = []
+        if missing:
+            fixes.append('khai báo và đọc các key này như base (RemoteConfigUtils)')
+        if consent_missing:
+            fixes.append('tích hợp Module-Update-GDPR và ConsentHandler ở Splash như base')
+        return {'status': 'FAIL', 'expected': expected, 'actual': actual, 'evidence': evidence,
+                'reasoning': 'Kết luận: ' + '; '.join(problems) + '.\nCần sửa: ' + '; '.join(fixes) + '.',
+                'marketing_summary': 'App ' + ' và '.join(sales) + '.'}
+    note = ''
+    if consent is not None and consent['missing_events'] and consent['events']:
+        note = ' Ghi chú: chưa thấy event consent ' + ', '.join(consent['missing_events']) + ' (không tính là lỗi).'
+    elif consent is not None and not consent['events']:
+        note = ' Ghi chú: có module consent nhưng chưa thấy event tracking consent (không tính là lỗi).'
+    return {'status': 'PASS', 'expected': expected, 'actual': actual, 'evidence': evidence,
+            'reasoning': 'Kết luận: đủ key Remote Config bắt buộc' + (' và có module consent ('
+                         + ', '.join(consent['modules'] or ['event consent']) + ')' if consent is not None else '')
+                         + ' trong mã app.' + note,
+            'marketing_summary': 'App có đủ cấu hình điều khiển từ xa bắt buộc' + (' và đã tích hợp consent' if consent is not None else '') + '.'}
 
 
 def interstitial_interval(rule, facts, documents, workspace):
