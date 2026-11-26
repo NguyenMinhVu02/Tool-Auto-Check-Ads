@@ -55,6 +55,12 @@ Rule kiểm tra **tất định** chạy tức thì, không tốn token AI. Danh
 
 Tạo lại biểu tượng: `uv run apk-audit shortcut`. Mở web và trình duyệt cùng lúc: `uv run apk-audit serve --open`.
 
+### Phát hành bản ZIP (dev)
+
+- Đóng gói tại máy: `uv run python scripts/build_release.py` tạo `dist/apk-audit-<version>.zip` (chỉ gồm file đã commit: `apk_audit/`, `rulepacks/`, `installer/`, `pyproject.toml`, `uv.lock`, `README.md`).
+- Tự động: push tag dạng `v0.2.0` lên GitHub, workflow `.github/workflows/release.yml` chạy test, đóng gói và tạo GitHub Release kèm file ZIP.
+- Repo đang để riêng tư: người tải Release cần tài khoản GitHub có quyền xem repo. Với người không có tài khoản, tải ZIP về rồi chia sẻ qua Google Drive.
+
 ## Cài đặt thủ công (dev)
 
 Cách cài bằng terminal, dành cho dev hoặc khi script cài nhanh gặp lỗi.
