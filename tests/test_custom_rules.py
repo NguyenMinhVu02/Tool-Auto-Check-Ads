@@ -207,3 +207,81 @@ class CustomRuleTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class MediationRuleTests(unittest.TestCase):
+    NETWORKS = {'applovin': {'name': 'AppLovin', 'adapter': ['com/google/ads/mediation/applovin'], 'sdk': ['com/applovin/sdk']},
+                'mintegral': {'name': 'Mintegral', 'adapter': ['com/google/ads/mediation/mintegral'], 'sdk': ['com/mbridge/msdk']}}
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        (self.root / 'sources').mkdir()
+
+    def add(self, package, cls='A'):
+        folder = self.root / 'sources' / package
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / f'{cls}.java').write_text(f'package {package.replace("/", ".")};\npublic class {cls} {{}}\n')
+
+    def run_rule(self):
+        rule = Rule('ADS_MEDIATION_ADAPTERS', 'Mediation', 'static', check='mediation_adapters', params={'networks': self.NETWORKS})
+        return evaluate_static(rule, {}, {}, workspace=self.root)
+
+    def test_no_mediation_is_not_applicable(self):
+        self.add('com/example/app', 'MainActivity')
+        self.assertEqual(self.run_rule().status, 'SKIPPED')
+
+    def test_adapter_and_sdk_pass(self):
+        self.add('com/google/ads/mediation/applovin', 'AppLovinMediationAdapter')
+        self.add('com/applovin/sdk', 'AppLovinSdk')
+        finding = self.run_rule()
+        self.assertEqual(finding.status, 'PASS')
+        self.assertEqual(finding.actual['ready'], ['AppLovin'])
+
+    def test_adapter_without_sdk_fails_on_readable_code(self):
+        for index in range(30):
+            self.add('com/example/app', f'ReadableClassName{index}')
+        self.add('com/google/ads/mediation/mintegral', 'MintegralMediationAdapter')
+        finding = self.run_rule()
+        self.assertEqual(finding.status, 'FAIL')
+        self.assertEqual(finding.actual['adapter_without_sdk'], ['Mintegral'])
+
+    def test_sdk_without_adapter_needs_review(self):
+        self.add('com/applovin/sdk', 'AppLovinSdk')
+        finding = self.run_rule()
+        self.assertEqual(finding.status, 'UNKNOWN')
+        self.assertEqual(finding.actual['sdk_without_adapter'], ['AppLovin'])
+
+
+class SheetExportTests(unittest.TestCase):
+    REPORT = {
+        'package': 'com.demo.app', 'version_name': '1.2', 'summary': {'pass': 1, 'total': 2},
+        'dev_view': {'groups': [{'key': 'splash', 'title': 'Màn Splash', 'rules': [
+            {'rule_id': 'R1', 'title': 'Splash "inter"', 'status': 'FAIL', 'conclusion': 'Thiếu\\tpreload',
+             'fixes': 'Thêm preload', 'locations': ['sources/A.java:3']},
+            {'rule_id': 'R2', 'title': 'Banner', 'status': 'PASS', 'conclusion': 'Đúng', 'fixes': '', 'locations': []}]}]},
+        'marketing': {'screens': [{'title': 'Màn Splash', 'placements': [
+            {'name': 'inter_splash', 'ad_type': 'Inter', 'status': 'Sai ID', 'problem': True, 'document_id': 'a/1', 'app_id': 'a/2'}]}]},
+    }
+
+    def test_only_fails_rows_keep_kog_columns_and_escape_quotes(self):
+        import csv, io
+        from apk_audit.sheet_export import sheet_tsv
+        text = sheet_tsv(self.REPORT, only_fails=True)
+        rows = list(csv.reader(io.StringIO(text), delimiter='\t'))
+        self.assertEqual(rows[0], ['ID', 'Function', 'Test Scenario Group', 'Actual', 'Test Condition',
+                                   'Steps to Reproduce', 'Expected', 'Round 1', 'Round 2', 'Link Bug'])
+        self.assertEqual(len(rows), 3)
+        self.assertTrue(all(len(row) == 10 for row in rows))
+        self.assertEqual(rows[1][2], 'Splash "inter"')
+        self.assertIn('sources/A.java:3', rows[1][3])
+        self.assertEqual(rows[1][7], 'Fail')
+        self.assertIn('a/1', rows[2][6])
+
+    def test_partner_summary_lists_failures(self):
+        from apk_audit.sheet_export import partner_summary
+        text = partner_summary(self.REPORT)
+        self.assertIn('Đạt **1/2 tiêu chí**', text)
+        self.assertIn('[R1]', text)
+        self.assertNotIn('[R2]', text)

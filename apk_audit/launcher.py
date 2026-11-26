@@ -14,6 +14,7 @@ from .setup_tools import os_name
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SHORTCUT_NAME = "APK Audit"
+ICON_DIR = PROJECT_ROOT / "installer"
 
 
 def server_running(port):
@@ -80,23 +81,44 @@ def create_shortcut(desktop=None, uv=None):
         script = (
             "$s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:APK_LINK);"
             "$s.TargetPath=$env:APK_TARGET;$s.WorkingDirectory=$env:APK_DIR;"
-            "$s.IconLocation='%SystemRoot%\\System32\\shell32.dll,22';$s.Save()")
-        env = {**os.environ, "APK_LINK": str(link), "APK_TARGET": str(starter), "APK_DIR": project}
+            "$s.IconLocation=$env:APK_ICON;$s.Save()")
+        env = {**os.environ, "APK_LINK": str(link), "APK_TARGET": str(starter), "APK_DIR": project,
+               "APK_ICON": str(ICON_DIR / "logo.ico")}
         subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
                        check=True, env=env, timeout=60)
         created.append(link)
     elif system == "mac":
-        link = desktop / f"{SHORTCUT_NAME}.command"
-        _write_executable(link, "#!/bin/bash\n"
+        # A tiny .app bundle carries the logo; it opens Terminal on the real launcher so the
+        # user still sees the "close this window to stop" console.
+        starter = PROJECT_ROOT / "installer" / "start-macos.command"
+        _write_executable(starter, "#!/bin/bash\n"
                           f'cd "{project}" || exit 1\n'
                           'echo "APK Audit đang chạy. Đóng cửa sổ này để tắt tool."\n'
                           f'"{uv}" run --project "{project}" apk-audit serve --open\n')
+        link = desktop / f"{SHORTCUT_NAME}.app"
+        if link.exists():
+            shutil.rmtree(link)
+        (link / "Contents" / "MacOS").mkdir(parents=True)
+        (link / "Contents" / "Resources").mkdir()
+        shutil.copyfile(ICON_DIR / "logo.icns", link / "Contents" / "Resources" / "logo.icns")
+        (link / "Contents" / "Info.plist").write_text(
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
+            '<plist version="1.0"><dict>'
+            '<key>CFBundleName</key><string>APK Audit</string>'
+            '<key>CFBundleIdentifier</key><string>local.apk-audit.launcher</string>'
+            '<key>CFBundleExecutable</key><string>launcher</string>'
+            '<key>CFBundleIconFile</key><string>logo</string>'
+            '<key>CFBundlePackageType</key><string>APPL</string>'
+            '</dict></plist>\n', encoding="utf-8")
+        _write_executable(link / "Contents" / "MacOS" / "launcher",
+                          f'#!/bin/bash\nopen -a Terminal "{starter}"\n')
         created.append(link)
     else:
         line = " ".join("'" + part.replace("'", "'\\''") + "'" for part in launch_command(uv))
         entry = ("[Desktop Entry]\nType=Application\nName=APK Audit\nComment=Kiểm tra tích hợp ads trong APK\n"
                  f"Exec=bash -c \"cd '{project}' && echo 'APK Audit đang chạy. Đóng cửa sổ này để tắt tool.' && {line}\"\n"
-                 "Icon=security-high\nTerminal=true\nCategories=Development;\n")
+                 f"Icon={ICON_DIR / 'logo.png'}\nTerminal=true\nCategories=Development;\n")
         link = desktop / "apk-audit.desktop"
         _write_executable(link, entry)
         created.append(link)

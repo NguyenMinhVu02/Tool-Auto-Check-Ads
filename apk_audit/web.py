@@ -435,10 +435,11 @@ def make_handler(jobs, setup_jobs=None):
                 else:
                     self._json(200, job)
                 return
-            static = {"/": ("index.html", "text/html"), "/app.css": ("app.css", "text/css"), "/app.js": ("app.js", "text/javascript")}
+            static = {"/": ("index.html", "text/html"), "/app.css": ("app.css", "text/css"), "/app.js": ("app.js", "text/javascript"),
+                      "/logo.png": ("logo.png", "image/png"), "/favicon.png": ("favicon.png", "image/png")}
             for subset in ("latin", "latin-ext", "vietnamese"):
                 for weight in (400, 500, 600, 700):
-                    static[f"/fonts/BeVietnamPro-{subset}-{weight}.woff2"] = (f"fonts/BeVietnamPro-{subset}-{weight}.woff2", "font/woff2")
+                    static[f"/fonts/Nunito-{subset}-{weight}.woff2"] = (f"fonts/Nunito-{subset}-{weight}.woff2", "font/woff2")
             if route in static:
                 filename, mime = static[route]
                 self._send(200, (ASSETS / filename).read_bytes(), mime + ("; charset=utf-8" if mime.startswith("text/") else ""))
@@ -459,6 +460,21 @@ def make_handler(jobs, setup_jobs=None):
                         self._json(400, {"error": "Báo cáo không còn hợp lệ hoặc đã bị di chuyển"})
                         return
                     self._send(200, report, "application/json; charset=utf-8")
+                    return
+                if parts[3] in {"sheet.tsv", "summary.md"} and job["state"] == "done":
+                    from urllib.parse import parse_qs
+                    from .sheet_export import partner_summary, sheet_tsv
+                    query = parse_qs(urlsplit(self.path).query)
+                    try:
+                        report = jobs.load_report(parts[2])
+                    except (ValueError, OSError, KeyError):
+                        self._json(400, {"error": "Báo cáo không còn hợp lệ hoặc đã bị di chuyển"})
+                        return
+                    if parts[3] == "sheet.tsv":
+                        text = sheet_tsv(report, only_fails=query.get("only_fails", ["0"])[0] == "1")
+                    else:
+                        text = partner_summary(report)
+                    self._send(200, text.encode("utf-8"), "text/plain; charset=utf-8")
                     return
                 if parts[3] in {"report.html", "ids.csv"} and job["state"] == "done":
                     try:

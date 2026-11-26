@@ -7,7 +7,7 @@ from ..contracts import Rule, RulePack
 from ..errors import AuditError
 from ..utils import digest_json, source_files, read_text
 
-CHECKS = {"screen_orientation_lock", "debug_test_ids", "ad_config_flags", "language_dev_toggle", "remote_config_keys", "interstitial_interval", "screen_class_names", "manifest_meta", "manifest_has", "string_present", "string_absent", "asset_json_path", "asset_json_match", "sdk_version"}
+CHECKS = {"mediation_adapters", "screen_orientation_lock", "debug_test_ids", "ad_config_flags", "language_dev_toggle", "remote_config_keys", "interstitial_interval", "screen_class_names", "manifest_meta", "manifest_has", "string_present", "string_absent", "asset_json_path", "asset_json_match", "sdk_version"}
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 
@@ -59,7 +59,7 @@ def load_pack(directory=None):
                 if rule.mode == "static":
                     if rule.check not in CHECKS:
                         raise ValueError(f"{rule.id}: check không hỗ trợ")
-                    required = {"screen_orientation_lock": [], "debug_test_ids": [], "ad_config_flags": [], "language_dev_toggle": [], "remote_config_keys": [], "interstitial_interval": [], "screen_class_names": [], "manifest_meta": ["key"], "manifest_has": ["collection", "name"], "string_present": ["key"], "string_absent": ["key"], "asset_json_path": ["file", "path"], "asset_json_match": ["file", "path"], "sdk_version": ["key", "min"]}[rule.check]
+                    required = {"mediation_adapters": ["networks"], "screen_orientation_lock": [], "debug_test_ids": [], "ad_config_flags": [], "language_dev_toggle": [], "remote_config_keys": [], "interstitial_interval": [], "screen_class_names": [], "manifest_meta": ["key"], "manifest_has": ["collection", "name"], "string_present": ["key"], "string_absent": ["key"], "asset_json_path": ["file", "path"], "asset_json_match": ["file", "path"], "sdk_version": ["key", "min"]}[rule.check]
                     if any(k not in rule.params for k in required):
                         raise ValueError(f"{rule.id}: params cần {required}")
                 if rule.mode == "agent":

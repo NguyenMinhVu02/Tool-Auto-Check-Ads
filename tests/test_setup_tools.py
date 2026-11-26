@@ -121,6 +121,23 @@ class SetupToolsTests(unittest.TestCase):
         self.assertIn("serve", content)
         self.assertIn("--open", content)
 
+        self.assertIn("logo.png", content)
+
+    def test_create_shortcut_on_mac_builds_app_bundle_with_icon(self):
+        desktop = self.root / "Desktop"
+        starter = self.root / "start-macos.command"
+        with mock.patch.object(launcher, "os_name", return_value="mac"), \
+                mock.patch.object(launcher, "PROJECT_ROOT", self.root), \
+                mock.patch.object(launcher, "ICON_DIR", Path(launcher.__file__).resolve().parents[1] / "installer"):
+            (self.root / "installer").mkdir()
+            created = launcher.create_shortcut(desktop, uv="/opt/uv")
+        bundle = created[0]
+        self.assertEqual(bundle.name, "APK Audit.app")
+        self.assertTrue((bundle / "Contents" / "Resources" / "logo.icns").is_file())
+        self.assertIn("CFBundleIconFile", (bundle / "Contents" / "Info.plist").read_text())
+        self.assertIn("start-macos.command", (bundle / "Contents" / "MacOS" / "launcher").read_text())
+        self.assertFalse(starter.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

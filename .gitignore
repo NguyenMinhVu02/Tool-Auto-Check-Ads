@@ -12,3 +12,4 @@ frontend/node_modules/
 .superpowers/
 
 installer/start-windows.bat
+installer/start-macos.command

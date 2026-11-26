@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import selectors
 import shutil
 import subprocess
@@ -36,13 +37,45 @@ class ReplayEngine:
         value = next(self.responses, "")
         return value if isinstance(value, AgentResult) else AgentResult(value)
 
+CODEX_FAMILY = "sol"  # balanced tier used for audits; the newest version is picked automatically
+_codex_models_cache = {"at": 0.0, "models": None}
+
+
+def codex_models(ttl=300):
+    """Model slugs this Codex CLI/account offers (``codex debug models``), cached briefly."""
+    now = time.monotonic()
+    if _codex_models_cache["models"] is not None and now - _codex_models_cache["at"] < ttl:
+        return _codex_models_cache["models"]
+    models = []
+    binary = shutil.which("codex")
+    if binary:
+        try:
+            done = subprocess.run([binary, "debug", "models"], capture_output=True, text=True, timeout=20,
+                                  stdin=subprocess.DEVNULL)
+            data = json.loads(done.stdout) if done.returncode == 0 else []
+            items = data.get("models", []) if isinstance(data, dict) else data
+            models = [item["slug"] for item in items if isinstance(item, dict) and item.get("slug")
+                      and item.get("visibility", "list") == "list"]
+        except (OSError, subprocess.SubprocessError, ValueError, TypeError, KeyError):
+            models = []
+    _codex_models_cache.update(at=now, models=models)
+    return models
+
+
+def pick_codex_model(models):
+    """Newest ``gpt-<version>-sol`` model the CLI offers, else None (let Codex use its own default)."""
+    def version(slug):
+        match = re.fullmatch(rf"gpt-(\d+(?:\.\d+)*)-{CODEX_FAMILY}", slug)
+        return tuple(int(part) for part in match.group(1).split(".")) if match else None
+    ranked = sorted((version(slug), slug) for slug in models if version(slug))
+    return ranked[-1][1] if ranked else None
+
+
 class CodexEngine:
     """Run one rule in an ephemeral, read-only Codex CLI session."""
 
     requires_claims = True
-    model = "gpt-6-sol"
     reasoning_effort = "low"
-    name = f"codex:{model}:{reasoning_effort}"
     # Audits must not inherit the user's personal skills, plugins, hooks or AGENTS.md:
     # they cost tool calls/quota and can steer verdicts away from the rule pack.
     isolation = [
@@ -52,7 +85,14 @@ class CodexEngine:
         "--config", "skills.include_instructions=false", "--config", "include_apps_instructions=false",
         "--config", "project_doc_max_bytes=0",
     ]
-    label = "Codex CLI (GPT-6 Sol · low)"
+
+    def __init__(self, model=None):
+        # The model is chosen at run time from what the installed CLI supports, so a retired
+        # model never breaks audits. It is part of ``name`` and therefore of every cache key.
+        pinned = os.environ.get("APK_AUDIT_CODEX_MODEL")  # optional manual override
+        self.model = model if model is not None else pinned or pick_codex_model(codex_models())
+        self.name = f"codex:{self.model or 'cli-default'}:{self.reasoning_effort}"
+        self.label = f"Codex CLI ({self.model or 'model mặc định của CLI'} · low)"
 
     def available(self):
         return shutil.which("codex") is not None
@@ -83,14 +123,15 @@ class CodexEngine:
             stderr_path = Path(temp) / "codex.stderr"
             schema_path.write_text(json.dumps(schema), encoding="utf-8")
             effort = ["--config", f'model_reasoning_effort="{self.reasoning_effort}"']
+            model = ["--model", self.model] if self.model else []
             outputs = ["--output-schema", str(schema_path), "--output-last-message", str(result_path), "--json"]
             if session:
                 # resume has no --sandbox/--cd: force read-only through config and run from the workspace.
-                command = [shutil.which("codex") or "codex", "exec", "resume", session, "--skip-git-repo-check", "--model", self.model,
+                command = [shutil.which("codex") or "codex", "exec", "resume", session, "--skip-git-repo-check", *model,
                            *effort, "--config", 'sandbox_mode="read-only"', *outputs, *self.isolation, "-"]
             else:
                 command = [shutil.which("codex") or "codex", "exec", *([] if persist else ["--ephemeral"]), "--skip-git-repo-check",
-                           "--sandbox", "read-only", "--model", self.model, *effort, *outputs,
+                           "--sandbox", "read-only", *model, *effort, *outputs,
                            "--cd", str(tools.root), *self.isolation, "-"]
             if max_tool_calls == 0:
                 command[2:2] = ['--config', 'features.shell_tool=false',
@@ -184,11 +225,17 @@ class CodexEngine:
         return calls, events, exhausted
 
 def detect_engines():
-    engines = [{'id': 'codex', 'label': CodexEngine.label, 'model': CodexEngine.model,
-                'reasoning_effort': CodexEngine.reasoning_effort, 'installed': shutil.which('codex') is not None},
-               {'id': 'claude', 'label': ClaudeEngine.label, 'model': ClaudeEngine.model,
-                'reasoning_effort': ClaudeEngine.reasoning_effort, 'installed': shutil.which('claude') is not None}]
-    return {'engines': engines, 'default': next((item['id'] for item in engines if item['installed']), None)}
+    """Only the AI CLIs installed on this machine; one CLI means no choice to make."""
+    engines = []
+    if shutil.which('claude'):
+        claude = ClaudeEngine()
+        engines.append({'id': 'claude', 'label': claude.label, 'model': claude.model,
+                        'reasoning_effort': claude.reasoning_effort, 'installed': True})
+    if shutil.which('codex'):
+        codex = CodexEngine()
+        engines.append({'id': 'codex', 'label': codex.label, 'model': codex.model,
+                        'reasoning_effort': codex.reasoning_effort, 'installed': True})
+    return {'engines': engines, 'default': engines[0]['id'] if engines else None}
 
 
 def get_engine(name):

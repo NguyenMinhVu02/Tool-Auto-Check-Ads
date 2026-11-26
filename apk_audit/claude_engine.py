@@ -17,10 +17,12 @@ from .errors import AuditError
 
 
 class ClaudeEngine:
-    model = 'claude-sonnet-5'
+    # CLI alias for the newest Sonnet: balanced cost/accuracy and never retired. The concrete
+    # model behind it changes with Claude CLI upgrades, and the CLI version is in the cache key.
+    model = os.environ.get('APK_AUDIT_CLAUDE_MODEL') or 'sonnet'  # optional manual override
     reasoning_effort = 'low'
     name = f'claude:{model}:{reasoning_effort}'
-    label = 'Claude CLI (Sonnet 5 · low)'
+    label = 'Claude CLI (Sonnet mới nhất · low)'
     requires_claims = True
     # Follow-up repair/investigation turns continue the rule's own session, so the
     # long audit prompt and the code already read stay in the prompt cache.

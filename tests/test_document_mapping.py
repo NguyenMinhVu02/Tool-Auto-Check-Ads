@@ -3,6 +3,8 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+
+os.environ['APK_AUDIT_CODEX_MODEL'] = 'gpt-6-sol'  # fake CLIs cannot answer `codex debug models`
 from unittest.mock import Mock, patch
 
 from apk_audit.documents import load_document
@@ -134,7 +136,7 @@ if '--output-schema' in args:
  Path(args[args.index('--output-last-message')+1]).write_text(json.dumps(payload))
  print(json.dumps({'type':'turn.completed','usage':{'input_tokens':15}}))
 else:
- assert args[args.index('--model')+1]=='claude-sonnet-5'
+ assert args[args.index('--model')+1]=='sonnet'
  assert args[args.index('--tools')+1]==''
  schema=json.loads(args[args.index('--json-schema')+1])
  assert 'columns' in schema['required'] and 'evidence' not in schema['properties']

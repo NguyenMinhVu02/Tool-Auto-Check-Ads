@@ -17,7 +17,7 @@ def parser():
     audit.add_argument("target")
     audit.add_argument("--rules", type=Path)
     audit.add_argument("--out", type=Path)
-    audit.add_argument("--engine", choices=["none","claude","codex"], default="codex", help="codex: gpt-6-sol / low (mặc định); claude: Sonnet 5.5 / medium; none: tắt AI")
+    audit.add_argument("--engine", choices=["none","claude","codex"], help="AI dùng để audit; mặc định là CLI đã cài (ưu tiên claude). claude: Sonnet mới nhất / low; codex: model Sol mới nhất CLI hỗ trợ / low; none: tắt AI")
     audit.add_argument("--static-only", action="store_true")
     audit.add_argument("--only")
     audit.add_argument("--max-tool-calls", type=int, default=400)
@@ -136,6 +136,11 @@ def main(argv=None):
             quiet = args.pop("quiet")
             if args.pop("static_only"):
                 args["engine"] = "none"
+            if args["engine"] is None:
+                from .engines import detect_engines
+                args["engine"] = detect_engines()["default"] or "none"
+                if args["engine"] == "none":
+                    print("Không tìm thấy Claude CLI hoặc Codex CLI: chỉ chạy kiểm tra tĩnh.", file=sys.stderr)
             result = run(**args)
             output = Path(result["output"])
             if not quiet:
