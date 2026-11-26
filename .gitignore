@@ -10,3 +10,5 @@ dist/
 frontend/node_modules/
 
 .superpowers/
+
+installer/start-windows.bat

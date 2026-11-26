@@ -53,7 +53,7 @@ class ClaudeEngine:
                         session=None, resume=False):
         persistence = (['--resume', session] if resume else ['--session-id', session]) if session else ['--no-session-persistence']
         command = [
-            'claude', '--print', '--output-format', 'stream-json', '--verbose',
+            shutil.which('claude') or 'claude', '--print', '--output-format', 'stream-json', '--verbose',
             '--model', self.model, '--effort', self.reasoning_effort,
             '--settings', json.dumps({'availableModels': [self.model], 'fallbackModel': [],
                                       'switchModelsOnFlag': False}),

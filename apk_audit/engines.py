@@ -86,10 +86,10 @@ class CodexEngine:
             outputs = ["--output-schema", str(schema_path), "--output-last-message", str(result_path), "--json"]
             if session:
                 # resume has no --sandbox/--cd: force read-only through config and run from the workspace.
-                command = ["codex", "exec", "resume", session, "--skip-git-repo-check", "--model", self.model,
+                command = [shutil.which("codex") or "codex", "exec", "resume", session, "--skip-git-repo-check", "--model", self.model,
                            *effort, "--config", 'sandbox_mode="read-only"', *outputs, *self.isolation, "-"]
             else:
-                command = ["codex", "exec", *([] if persist else ["--ephemeral"]), "--skip-git-repo-check",
+                command = [shutil.which("codex") or "codex", "exec", *([] if persist else ["--ephemeral"]), "--skip-git-repo-check",
                            "--sandbox", "read-only", "--model", self.model, *effort, *outputs,
                            "--cd", str(tools.root), *self.isolation, "-"]
             if max_tool_calls == 0:

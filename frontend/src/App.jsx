@@ -3,6 +3,7 @@ import { findingText } from './findingText';
 import { unknownExplanation } from './findingExplanation';
 import { useTabIndicator } from './tabIndicator';
 import { PointerField, TiltGem } from './PointerField';
+import SetupPanel from './SetupPanel';
 import {
   Alert, Button, Card, Collapse, Empty, Layout, List, Progress, Space,
   Checkbox, Select, Statistic, Steps, Table, Tabs, Tag, Typography, Upload, message,
@@ -336,6 +337,7 @@ export default function App() {
   const [selectedEngine, setSelectedEngine] = useState(null);
   const [enginesLoading, setEnginesLoading] = useState(true);
   const [engineError, setEngineError] = useState('');
+  const [setupReady, setSetupReady] = useState(true);
   const busyRef = useRef(false);
   const viewedJobRef = useRef(null);
   const timerRef = useRef(null);
@@ -357,6 +359,10 @@ export default function App() {
   }, []);
 
   useEffect(() => { refreshEngines(); }, [refreshEngines]);
+  const handleSetup = useCallback((data) => {
+    setSetupReady(Boolean(data.ready));
+    refreshEngines();
+  }, [refreshEngines]);
 
   const changeBusy = useCallback((value) => {
     busyRef.current = value;
@@ -638,6 +644,7 @@ export default function App() {
           <a href="#overview"><AppstoreOutlined /> Tổng quan</a>
           <a href="#upload"><CloudUploadOutlined /> Tải ứng dụng</a>
           <a href="#results"><FileSearchOutlined /> Kết quả kiểm tra</a>
+          <a href="#setup"><SafetyCertificateOutlined /> Thiết lập máy{!setupReady && ' ⚠️'}</a>
         </nav>
         <TiltGem />
         <div className="sidebar-foot"><span className="live-dot" /> Chạy trên máy của bạn<Text>Dữ liệu lưu ở localhost</Text></div>
@@ -647,6 +654,8 @@ export default function App() {
           <div><Text className="eyebrow">DASHBOARD / TỔNG QUAN</Text><Title level={2}>Kiểm tra tích hợp Ads</Title><Text type="secondary">Kiểm tra logic quảng cáo trong ứng dụng Android bằng Codex hoặc Claude CLI.</Text></div>
           <Tag className="local-tag" color="processing"><span className="live-dot" /> Local mode</Tag>
         </header>
+
+        {!setupReady && <SetupPanel onReadyChange={handleSetup} />}
 
         <Card className="upload-card" id="upload">
           <div className="upload-heading"><div><Text className="eyebrow">BẮT ĐẦU</Text><Title level={3}>Chọn ứng dụng cần kiểm tra</Title><Paragraph type="secondary">Kéo thả APK, XAPK hoặc APKM. Việc chọn file chưa bắt đầu audit.</Paragraph></div><SafetyCertificateOutlined className="upload-art" /></div>
@@ -717,6 +726,8 @@ export default function App() {
             </Space>} />}
           {job?.resumable && <Alert type="info" showIcon message="Lượt kiểm tra bị gián đoạn" description="Bấm Tiếp tục để chạy lại các bước cần thiết và dùng kết quả đã hoàn tất còn cache hợp lệ." action={<Button disabled={busy} onClick={() => resumeJob(job)}>Tiếp tục</Button>} />}
         </Card>
+
+        {setupReady && <SetupPanel onReadyChange={handleSetup} />}
 
         <section className="results-section" id="results">
           <div className="results-header"><div><Text className="eyebrow">KẾT QUẢ</Text><Title level={3}>Tổng quan kiểm tra</Title></div>{report && <Button href={`/api/jobs/${job.id}/report`} icon={<DownloadOutlined />}>Tải report.json</Button>}</div>

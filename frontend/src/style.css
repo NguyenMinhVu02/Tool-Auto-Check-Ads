@@ -172,3 +172,7 @@ body{background:linear-gradient(160deg,#eef3fb 0%,#f7f9fd 55%,#eaf0fa 100%) fixe
 .tilt-gem{display:grid;place-items:center;margin:14px auto 4px;opacity:.95}
 .tilt-gem canvas{display:block}
 @media (prefers-reduced-motion:reduce){.tilt-gem{opacity:.85}}
+
+.setup-card { margin-bottom: 20px; }
+.setup-log { margin-top: 12px; }
+.setup-log pre { max-height: 220px; overflow: auto; background: rgba(0, 0, 0, 0.04); padding: 8px 10px; border-radius: 8px; font-size: 12px; white-space: pre-wrap; word-break: break-all; }

@@ -17,6 +17,7 @@ from .marketing import build_marketing_summary
 from .report_html import ids_csv, render_html
 from .errors import AuditError
 from .engines import detect_engines
+from . import setup_tools
 from .execution import MAX_WORKERS, valid_workers
 from .pipeline import run
 from .utils import write_json
@@ -398,7 +399,9 @@ class AuditJobs:
             self.update(job_id, state="error", error="Lỗi phân tích ngoài dự kiến; xem log server")
 
 
-def make_handler(jobs):
+def make_handler(jobs, setup_jobs=None):
+    setup_jobs = setup_jobs or setup_tools.SetupJobs()
+
     class Handler(BaseHTTPRequestHandler):
         def _send(self, status, body, content_type):
             self.send_response(status)
@@ -419,7 +422,18 @@ def make_handler(jobs):
                 self._json(200, {"jobs": jobs.list_jobs()})
                 return
             if route == '/api/engines':
+                setup_tools.activate()
                 self._json(200, detect_engines())
+                return
+            if route == "/api/setup/status":
+                self._json(200, setup_tools.check())
+                return
+            if route.startswith("/api/setup/jobs/"):
+                job = setup_jobs.get(route.rsplit("/", 1)[-1])
+                if job is None:
+                    self._json(404, {"error": "Không tìm thấy lượt cài đặt"})
+                else:
+                    self._json(200, job)
                 return
             static = {"/": ("index.html", "text/html"), "/app.css": ("app.css", "text/css"), "/app.js": ("app.js", "text/javascript")}
             for subset in ("latin", "latin-ext", "vietnamese"):
@@ -459,9 +473,33 @@ def make_handler(jobs):
                     return
             self._json(404, {"error": "Đường dẫn không tồn tại"})
 
+        def _local_origin(self):
+            origin = self.headers.get("Origin")
+            host = (self.headers.get("Host") or "").split(":")[0]
+            if host not in {"127.0.0.1", "localhost"}:
+                return False
+            return origin is None or urlsplit(origin).hostname in {"127.0.0.1", "localhost"}
+
         def do_POST(self):
             route = urlsplit(self.path).path
             parts = route.strip("/").split("/")
+            if len(parts) == 4 and parts[:2] == ["api", "setup"] and parts[2] in {"install", "login"}:
+                if not self._local_origin():
+                    self._json(403, {"error": "Chỉ cho phép thao tác cài đặt từ chính máy này"})
+                    return
+                try:
+                    if parts[2] == "install":
+                        self._json(202, {"id": setup_jobs.start(parts[3])})
+                    else:
+                        setup_tools.login(parts[3])
+                        self._json(200, {"ok": True})
+                except ValueError as exc:
+                    self._json(400, {"error": str(exc)})
+                except RuntimeError as exc:
+                    self._json(409, {"error": str(exc)})
+                except OSError as exc:
+                    self._json(500, {"error": str(exc)})
+                return
             if len(parts) == 4 and parts[:2] == ["api", "jobs"] and parts[3] in {"confirm", "cancel"}:
                 try:
                     if parts[3] == "confirm":

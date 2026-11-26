@@ -4,14 +4,14 @@ Công cụ kiểm tra tự động cách một app Android tích hợp quảng c
 
 ## Dùng nhanh (mỗi người chạy trên máy của mình)
 
-Tool **chưa có server chung**: mỗi Marketer và Dev tự cài và chạy trên máy cá nhân. APK, tài liệu và kết quả **không rời khỏi máy** (chỉ phần code cần kiểm được gửi tới AI bạn chọn qua CLI). Cài một lần theo mục [Cài đặt](#cài-đặt-một-lần-trên-máy-của-bạn), sau đó mỗi lần dùng:
+Tool **chưa có server chung**: mỗi Marketer và Dev tự cài và chạy trên máy cá nhân. APK, tài liệu và kết quả **không rời khỏi máy** (chỉ phần code cần kiểm được gửi tới AI bạn chọn qua CLI). Cài một lần theo mục [Cài đặt nhanh](#cài-đặt-nhanh-không-cần-terminal), sau đó mỗi lần dùng:
 
-1. Mở terminal ở thư mục tool, chạy `uv run apk-audit serve`, giữ cửa sổ này mở.
-2. Mở trình duyệt vào **http://127.0.0.1:8765**.
+1. Bấm đúp biểu tượng **APK Audit** trên màn hình chính. Một cửa sổ nhỏ mở ra (giữ nguyên) và trình duyệt tự vào **http://127.0.0.1:8765**. Bấm lại khi tool đang chạy chỉ mở thêm tab, không chạy server thứ hai.
+2. Lần đầu: nếu web hiện **Thiết lập máy** còn thiếu, bấm **Cài** / **Đăng nhập** theo từng dòng.
 3. Kéo file **APK / XAPK / APKM** vào ô tải lên.
 4. Chọn **ADS SCRIPTS** và **working file** của đúng app đó (XLSX hoặc CSV). Phải chọn đủ cả hai. Workbook nhiều app thì chọn đúng sheet ở ô hiện ra bên dưới.
 5. Chọn AI (**Claude CLI** hoặc **Codex CLI**) rồi bấm **Bắt đầu kiểm tra**. Mỗi lượt thường mất vài phút.
-6. Xong thì tắt bằng `Ctrl+C` trong terminal.
+6. Xong thì đóng cửa sổ nhỏ của tool (hoặc `Ctrl+C`).
 
 ## Đọc báo cáo
 
@@ -42,9 +42,22 @@ Tên vị trí trong tài liệu và trong app đôi khi khác nhau: tool nhận
 
 Rule kiểm tra **tất định** chạy tức thì, không tốn token AI. Danh sách đầy đủ: `uv run apk-audit rules list`.
 
-## Cài đặt một lần trên máy của bạn
+## Cài đặt nhanh (không cần terminal)
 
-Ai dùng tool cũng cần đủ các công cụ dưới đây trên **chính máy đó**. Nếu chưa quen terminal, nhờ dev cài giúp lần đầu; từ đó chỉ cần lệnh `serve`.
+1. Tải bản ZIP của tool, giải nén vào một thư mục cố định (ví dụ Documents). **Không xóa hoặc di chuyển thư mục này sau khi cài**, vì biểu tượng trỏ tới nó.
+2. Mở thư mục `installer/`, bấm đúp file theo máy:
+   - Windows: `Cai-dat-Windows.bat`. Nếu SmartScreen chặn: **More info → Run anyway**.
+   - macOS: `Cai-dat-macOS.command`. Lần đầu macOS chặn "không rõ nhà phát triển": **chuột phải → Open → Open**.
+   - Linux: `cai-dat-linux.sh` (chuột phải → *Run as program*, hoặc `bash installer/cai-dat-linux.sh`).
+3. Script tự cài `uv`, tải thư viện, tạo biểu tượng **APK Audit** trên màn hình chính rồi mở web. Không cần quyền quản trị.
+4. Trên web, khung **Thiết lập máy** liệt kê Java 17+, JADX, Claude CLI, Codex CLI. Bấm **Cài tất cả phần bắt buộc** (hoặc **Cài** từng dòng). Java, JADX, Node.js được tải bản portable từ trang chính thức (Adoptium, GitHub JADX, nodejs.org), kiểm SHA256, lưu ở thư mục dữ liệu người dùng (`~/.local/share/apk-audit/tools` trên Linux, `~/Library/Application Support/apk-audit/tools` trên macOS, `%LOCALAPPDATA%\apk-audit\tools` trên Windows). Claude CLI cài bằng trình cài chính thức; Codex CLI cài qua npm (tự cài Node nếu thiếu).
+5. Với AI CLI, bấm **Đăng nhập**: cửa sổ terminal mở ra, làm theo hướng dẫn (trình duyệt hỏi xác nhận tài khoản), xong quay lại bấm **Kiểm tra lại**.
+
+Tạo lại biểu tượng: `uv run apk-audit shortcut`. Mở web và trình duyệt cùng lúc: `uv run apk-audit serve --open`.
+
+## Cài đặt thủ công (dev)
+
+Cách cài bằng terminal, dành cho dev hoặc khi script cài nhanh gặp lỗi.
 
 ### 1. Cần chuẩn bị
 
@@ -59,7 +72,7 @@ Ai dùng tool cũng cần đủ các công cụ dưới đây trên **chính má
 
 - Hạn mức AI tính trên **tài khoản của từng người** (gói đăng ký), không tính theo token tiền. Mỗi lượt đầy đủ tốn đáng kể hạn mức 5 giờ, nên tránh chạy liên tục nhiều app.
 - Chỉ muốn xem ID và cấu hình, không cần AI: dùng `--engine none`, khi đó không cần cài AI CLI.
-- Windows: chưa được kiểm thử; nên dùng WSL2 (Ubuntu) rồi làm theo hướng dẫn Linux.
+- Windows và macOS: script cài nhanh chưa được kiểm thử trên máy thật; báo dev nếu gặp lỗi.
 
 ### 2. Tải tool và chạy thử
 

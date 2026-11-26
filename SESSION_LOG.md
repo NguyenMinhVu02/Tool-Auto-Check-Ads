@@ -2,6 +2,11 @@
 
 ## Trạng thái hiện tại
 
+- Cài đặt 2026-11-26 09:45 (Asia/Ho_Chi_Minh): **Hoàn tất code cài đặt một chạm, chờ thử trên Windows/macOS**. Thêm `installer/` (script cài lần đầu 3 hệ điều hành), `apk-audit shortcut`, `serve --open`, khung **Thiết lập máy** trên web (kiểm tra/cài Java, JADX, Node, Claude, Codex; mở terminal đăng nhập). 251 unittest + test frontend đạt; cài thật Java/JADX/Node/Codex vào thư mục tạm trên Linux đạt. Chưa commit, chưa restart server.
+- Tài liệu 2026-11-02 09:19 (Asia/Ho_Chi_Minh): **Hoàn tất tạo `CLAUDE.md`** (lệnh build/test, kiến trúc pipeline, nguyên tắc audit). Không sửa mã chức năng, không chạy test.
+- Phương án 2026-10-23 10:22 (Asia/Ho_Chi_Minh): **Hoàn tất đề xuất tối ưu bằng chứng và lượt gọi AI**, chưa triển khai. Đọc verification/claim thật của Claude `06ff1746`: ba UNKNOWN không chỉ là lỗi tọa độ/chỉ số; còn thiếu thân runnable, layout, SDK/applicability và claim full2 ngoài phạm vi chưa được phân định. Đề xuất: hợp đồng yêu cầu/checklist và phạm vi rõ trước AI; catalog evidence có ID; repair theo loại lỗi và patch có giới hạn; review độc lập với gói violation/gate/hợp đồng cần thiết; benchmark cố định và ground truth. Giữ UNKNOWN khi thiếu bằng chứng trong phạm vi, không nới verifier để giảm số UNKNOWN.
+- Đánh giá 2026-10-23 09:34 (Asia/Ho_Chi_Minh): **Hoàn tất đánh giá hoạt động/token/thời gian**, không sửa mã chức năng. 241/241 unittest đạt ngoài sandbox (9,742s), frontend build đạt (4,11s); node runner báo 3 file test đạt nhưng có cảnh báo sandbox. Dùng báo cáo live đã lưu, không gọi AI mới. Công cụ phù hợp hỗ trợ kiểm tra có Dev đối chiếu; chưa có ground truth để công bố accuracy. AI chiếm 91–97% thời gian trong các lượt được phân tích. Rủi ro cần sửa: scoped cache chưa theo dõi mọi file cấp sẵn trong prompt/source_slice; PoC tổng hợp cho thấy đổi file không được dẫn chứng/đọc thêm vẫn reuse. Cần benchmark cùng đầu vào/phạm vi/cache và giảm lượt repair/review, không coi A/B slicer cũ là bằng chứng tăng tốc.
+- Rà soát 2026-10-23 09:20 (Asia/Ho_Chi_Minh): **Hoàn tất giải thích chức năng dự án**. Đối chiếu README và mã hiện tại: HEAD `1c6566f`, bộ luật `0.11.1` có 17 rule; Git sạch trước khi ghi nhật ký. Các mốc commit/bộ luật bên dưới là ghi nhận cũ. Chưa chạy lại test, audit AI hoặc xác minh server/remote trong phiên này; việc kiểm chứng độ chính xác bằng APK và tài liệu thật vẫn cần tiếp tục.
 - Cập nhật: 2026-10-22 (Asia/Ho_Chi_Minh). Trạng thái công việc: **Hoàn tất bàn giao, chờ kiểm thử thực tế**.
 - Code: `main` tại 1446c4a đã push (remote HEAD khớp). Bộ luật 0.10.0 (17 rule: 9 AI, 7+ tĩnh), 227/227 unittest, frontend build đạt. Engine: Claude Sonnet 5 low, Codex GPT-6 Sol low; web 6 workers; cross-flow tắt mặc định.
 - Đã có: báo cáo Marketing/Dev, logic từng màn + checklist, rule tĩnh theo manifest/assets/chuỗi, hồ sơ làm rối + cổng chặn báo oan + độ tin cậy, alias tên placement, dẫn chứng theo đoạn dòng + anchor, resume phiên Claude/Codex, cache theo file, chọn sheet XLSX.
@@ -34,6 +39,59 @@
 - XLSX mẫu người dùng: /home/infinity01/Downloads/[PUB INFINITY x INNOVATIVE INSIDE] ADS SCRIPTS.xlsx. Người dùng xác nhận chỉ là mẫu, không cần đúng APK. Đọc26placement/23active/3disabled,2strike/1fill,0activeIDtrống,0unknown. open_resume disabled đúng. Không dùng IDs mẫu để chấm APK IPTV, không cần hỏi thêm file cho kiểm mẫu. Summary không ghi ID ở out/audit-depth-validation/xlsx-input-check.json.
 - Vận hành/Git: Giữ feat/audit-optimization và mọi diff trước; chưa commit/push/restartserver hoặc sửa APK. Cần restart backend trước auditweb mới để nạp code/model. Báo cáo web cũ không tự đổi; pilot3rule ở thư mục riêng.
 - Bước tiếp theo đề xuất: Sửa đóng gói/đường dẫn và context theo rule trước; benchmark tùy chọn 2 workers đã có với cùng đầu vào/model/cache. Sau đó bổ sung tiến độ live cho repair/investigation/review và hủy audit truyền tới CLI. Trước phát hành ổn định cần kiểm full 11 rule với hợp đồng thật, ca APK có kết luận chuẩn và cài/chạy ngoài repo trên máy mới. Chưa triển khai các đề xuất này trong lượt rà soát; runtime/SDK thiếu mã thật vẫn phải giữ UNKNOWN có lý do.
+
+## 2026-11-26 09:45 — Cài đặt một chạm cho người không rành kỹ thuật (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: người dùng mới không phải gõ lệnh: tải ZIP, bấm đúp file cài, có biểu tượng trên màn hình chính; web tự kiểm tra công cụ thiếu và có nút cài.
+- Đã làm: `apk_audit/setup_tools.py` (kiểm tra, cài portable Java Temurin 17/JADX/Node vào `user_data_path/apk-audit/tools` có kiểm SHA256, Claude qua trình cài chính thức, Codex qua npm prefix riêng; `activate()` thêm vào PATH/JAVA_HOME; `SetupJobs` chạy nền một lượt cài, danh sách công cụ cố định; mở terminal đăng nhập). `apk_audit/launcher.py` (tạo shortcut `.lnk`/`.command`/`.desktop`, phát hiện server đang chạy). CLI: `shortcut`, `serve --open`, gọi `activate()` đầu mọi lệnh. Web: `GET /api/setup/status`, `GET /api/setup/jobs/{id}`, `POST /api/setup/install|login/{tool}` (chặn Origin/Host không phải localhost). Engine gọi CLI qua `shutil.which` để Windows chạy được `codex.cmd`. Frontend: `SetupPanel.jsx`, `setupStatus.js` (+ test); panel lên đầu trang khi còn thiếu. README thêm mục Cài đặt nhanh.
+- Kiểm tra: `uv run --extra mcp python -m unittest discover -s tests` 251 đạt; `node --test frontend/src/*.test.js` đạt; `npm run build` đạt. Cài thật trên Linux vào thư mục tạm: JADX 1.5.7, Temurin 17.0.21.1, Node 22.23.5 (SHA256 khớp), Codex qua npm; server thật trả status, từ chối Origin lạ và tên công cụ lạ.
+- Chưa kiểm: script `.bat`/`.command` và shortcut trên Windows/macOS thật; trạng thái đăng nhập Claude dựa vào `claude auth status` (không xác định thì hiện "chưa xác định"); chưa tạo shortcut thật trên Desktop máy này.
+- Bước tiếp theo: thử trên một máy Windows và một máy macOS sạch; đóng gói ZIP phát hành (GitHub Release); cân nhắc nút "Cập nhật tool".
+
+## 2026-11-02 09:19 — Tạo CLAUDE.md (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Tạo `CLAUDE.md` hướng dẫn Claude Code làm việc trong repo (lệnh, kiến trúc).
+- Trạng thái: Hoàn tất.
+- Đã làm: Đọc README, `docs/technical-reference.md`, `pyproject.toml`, `frontend/package.json`, `cli.py`, `pipeline.py`; tóm tắt lệnh chạy/test và luồng unpack → facts → documents → inventory → preflight → rules → agent → cache → report.
+- File thay đổi: `CLAUDE.md` (mới), `SESSION_LOG.md`.
+- Kiểm tra: Không chạy test/build vì không sửa mã chức năng; đã xác nhận tên test mẫu `tests.test_slicer.SlicerTests` tồn tại.
+- Bước tiếp theo: Giữ nguyên các việc còn lại ở mục 2026-10-23 10:22.
+
+## 2026-10-23 10:22 — Đề xuất tối ưu bằng chứng và lượt gọi AI (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Đề xuất phương án cho hai vấn đề bằng chứng không được chấp nhận và token/thời gian qua nhiều lượt xử lý.
+- Trạng thái: Hoàn tất đề xuất; chưa triển khai mã.
+- Đã làm: Đọc schema, verifier, prompt/repair/review và claim/verification thật của ba UNKNOWN Claude; đối chiếu số lần gọi Codex đã lưu.
+- Đính chính: `unverified_claims` của INIT chứa applicability SDK chưa rõ; SPLASH thiếu runnable fail-safe và layout XML; ONBOARDING có blocker full2 ngoài phạm vi chưa phân định. Không thể mặc định các UNKNOWN này chỉ là lỗi định dạng rồi tự chuyển PASS.
+- Phương án: (1) xác định requirement_id, phạm vi và applicability từ hợp đồng/tài liệu có căn cứ; bổ sung layout/helper đích vào gói đọc, không chia mỗi requirement thành một request; (2) catalog evidence ổn định và backend điền file/range, AI chọn evidence_id, bằng chứng mới vẫn phải lấy từ code và kiểm; (3) tách lỗi tham chiếu với thiếu mã/thông tin thật, patch giới hạn cho phần cần sửa rồi merge+verify toàn bộ; (4) giữ review độc lập cho FAIL nhưng thu gói đầu vào về vi phạm, gate/callback, điều kiện, fallback và yêu cầu liên quan, cho phép đọc thêm khi thiếu.
+- Ràng buộc: PASS chỉ khi đủ mọi yêu cầu bắt buộc; blocker trong phạm vi vẫn UNKNOWN. Không tự suy optional/không áp dụng từ việc không tìm thấy, không sửa hoặc đoán semantic/code bằng máy. Các thay đổi schema/catalog cần tăng policy và vô hiệu cache cũ; cache mọi đoạn code cấp sẵn cần theo dõi phụ thuộc đầy đủ.
+- Kiểm tra: Chỉ phân tích chỉ đọc; không chạy AI/test/build mới vì không sửa chức năng. Mốc test/build của phiên 09:34 vẫn là kết quả đã chạy gần nhất.
+- File thay đổi: SESSION_LOG.md.
+- Bước tiếp theo: Khi có yêu cầu triển khai, ưu tiên scope và gói đọc trước, sau đó catalog/patch/review; benchmark cùng APK/docs/model/scope/cache trên bộ ca đã được Dev đối chiếu. Các mục tiêu giảm token/thời gian là tiêu chí thử nghiệm, chưa là kết quả đã đạt.
+
+## 2026-10-23 09:34 — Đánh giá hoạt động, token và thời gian (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Đánh giá chất lượng hoạt động và mức tối ưu token/thời gian hiện tại.
+- Trạng thái: Hoàn tất trong phạm vi đánh giá; các đề xuất chưa triển khai.
+- Đã làm: Đọc pipeline, slicer, agent, scheduler, cache, benchmark và số đo/report đã lưu; chạy kiểm thử và build. Không gọi AI hoặc audit APK mới.
+- Kiểm tra: Trong sandbox 241 test có 15 lỗi do MCP timeout/socket bị chặn. Chạy lại ngoài sandbox: 241/241 đạt trong 9,742s (`/tmp/apk-audit-assessment-tests-unrestricted.log`). Build Vite đạt trong 4,11s (`/tmp/apk-audit-assessment-build.log`), cảnh báo import `falloff` không tồn tại nhưng không dùng và bundle 1,64MB; node runner báo 3 file test đạt nhưng có cảnh báo `Failed to create stream fd` nên không dùng kết quả này để khẳng định số assertion chạy. Git sau build chỉ thay đổi SESSION_LOG.md.
+- Bằng chứng hoạt động: Hai report `06ff1746` (Claude) và `c91c3df3` (Codex) cùng APK, inventory, rulepack và policy: 7PASS/2FAIL/5UNKNOWN trong 206,1s/54 tools so với 4PASS/7FAIL/3UNKNOWN trong 249,8s/75 tools. Bất đồng ở kết luận AI, không có ground truth để chọn bên đúng. Lượt Claude có 4 repair/1 investigation; Codex 1 repair/5 review/3 investigation.
+- Token: Codex `c91c3df3` 4.296.958 input (3.566.720 cached nằm trong input), 58.678 output. Claude `06ff1746`: 90 input mới, 294.985 cache write, 1.737.305 cache read, 57.195 output; cách ghi input hai CLI khác nhau, không cộng cached Codex lần nữa hoặc quy đổi trực tiếp sang chi phí/hạn mức. Source slice, scope tài liệu, static rule, 6 workers, session resume và cache đều đã có trong mã hiện tại.
+- Thời gian: AI/rules chiếm 91,4% (`06ff1746`), 93,0% (`c91c3df3`), 93,1% (`b28b6ced`), 96,5% (`9788a153`). Riêng CROSS_FLOW ở `9788a153` 219s, 1.248.085 input, 3 attempts. Tổng report cuối là 585,7s, không phải 565s (đó là thời gian rules). So slicer cũ không hợp lệ làm A/B do khác scope/cache; cả hai report Short Drama còn cảnh báo tài liệu App ID lệch nên không dùng làm ground truth.
+- Phát hiện cache: `dependency_paths` chỉ thu evidence và sự kiện source_read, không thu đầy đủ file trong source_slice/evidence_bundle/flow_map. PoC tạm tạo A/B cùng cây đường dẫn: A được dẫn chứng, B ở prompt; đổi B nhưng ScopedIndex.find vẫn trả verdict cũ. Đây là tái hiện cơ chế tổng hợp, chưa chứng minh một verdict APK thật đã sai vì cache. Khóa cache thường chỉ có SLICE_VERSION=1, không có hash mã slicer nên đổi thuật toán mà không tăng phiên bản có thể reuse kết quả cũ.
+- File thay đổi: SESSION_LOG.md. Không chỉnh code, cache thực tế hoặc server; không commit/push.
+- Việc còn lại / bước tiếp theo: Ưu tiên tính đủ phụ thuộc cache và phiên bản slicer; đối chiếu thủ công bộ APK có kết luận chuẩn; benchmark cố định APK/docs/model/scope/cache; giảm repair bằng chuẩn hóa bằng chứng, thu gọn payload follow-up và review trong khi giữ cổng kiểm chứng.
+
+## 2026-10-23 09:20 — Giải thích mục đích và trạng thái dự án (Asia/Ho_Chi_Minh)
+
+- Mục tiêu: Cho biết dự án đang làm gì.
+- Trạng thái: Hoàn tất trong phạm vi giải thích.
+- Đã làm: Đọc hướng dẫn, trạng thái/nhật ký gần nhất, README, pipeline, báo cáo, unpack và bộ luật; kiểm tra Git tại máy.
+- Kết quả: Công cụ local kiểm tích hợp quảng cáo Infinity trong APK/XAPK/APKM, đối chiếu ADS SCRIPTS/working file và chuẩn base bằng rule tĩnh kết hợp AI; xuất báo cáo Marketing/Dev. HEAD `1c6566f`, pack `0.11.1`, 17 rule.
+- File thay đổi: `SESSION_LOG.md`; không sửa mã chức năng.
+- Kiểm tra: Git sạch trước khi ghi nhật ký; chỉ đọc mã, không chạy lại test/build/audit AI; không kiểm tra server hoặc remote.
+- Việc còn lại: Độ chính xác kết luận trên app thật cần tiếp tục đối chiếu; phân tích tĩnh không xác nhận quảng cáo hiển thị khi chạy.
+- Bước tiếp theo: Chờ yêu cầu hiện tại tiếp theo của người dùng; không tự khởi chạy audit từ nhật ký.
 
 ## 2026-10-22 (chiều) - Đối chiếu A/B slicer, README chạy local, khớp tên theo ID
 
