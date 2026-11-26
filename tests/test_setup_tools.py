@@ -107,21 +107,22 @@ class SetupToolsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             setup_tools.login("bash")
 
-    @unittest.skipIf(setup_tools.os_name() == "windows", "shortcut file format differs on Windows")
     def test_create_shortcut_writes_launcher_into_desktop(self):
         desktop = self.root / "Desktop"
+        (self.root / "installer").mkdir()
         with mock.patch.object(launcher.Path, "home", return_value=self.root), \
+                mock.patch.object(launcher, "PROJECT_ROOT", self.root), \
+                mock.patch.object(launcher, "os_name", return_value="linux"), \
                 mock.patch.object(launcher.shutil, "which", return_value=None), \
                 mock.patch.object(launcher.subprocess, "run"):
             created = launcher.create_shortcut(desktop, uv="/opt/uv")
         self.assertTrue(created[0].is_file())
         self.assertTrue(str(created[0]).startswith(str(desktop)))
-        content = created[0].read_text(encoding="utf-8")
-        self.assertIn("/opt/uv", content)
-        self.assertIn("serve", content)
-        self.assertIn("--open", content)
-
-        self.assertIn("logo.png", content)
+        self.assertIn("logo.png", created[0].read_text(encoding="utf-8"))
+        starter = (self.root / "installer" / "start-linux.sh").read_text(encoding="utf-8")
+        self.assertIn("/opt/uv", starter)
+        self.assertIn("serve $OPEN", starter)
+        self.assertIn("-eq 75", starter)
 
     def test_create_shortcut_on_mac_builds_app_bundle_with_icon(self):
         desktop = self.root / "Desktop"

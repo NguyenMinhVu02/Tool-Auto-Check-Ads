@@ -20,5 +20,7 @@ uv sync
 echo "[3/3] Đang tạo biểu tượng \"APK Audit\" trên màn hình chính..."
 uv run apk-audit shortcut
 echo "Xong! Đang mở trang web. Lần sau chỉ cần bấm biểu tượng APK Audit."
-echo "Đóng cửa sổ này để tắt tool."
-uv run apk-audit serve --open
+if [ -f installer/start-macos.command ]; then
+  exec bash installer/start-macos.command
+fi
+exec bash installer/start-linux.sh

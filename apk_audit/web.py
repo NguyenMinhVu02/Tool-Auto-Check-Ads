@@ -6,6 +6,7 @@ import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import threading
+import time
 from urllib.parse import unquote, urlsplit
 from uuid import uuid4
 
@@ -399,8 +400,10 @@ class AuditJobs:
             self.update(job_id, state="error", error="Lỗi phân tích ngoài dự kiến; xem log server")
 
 
-def make_handler(jobs, setup_jobs=None):
+def make_handler(jobs, setup_jobs=None, updater=None):
+    from .updater import Updater
     setup_jobs = setup_jobs or setup_tools.SetupJobs()
+    updater = updater or Updater(busy=lambda: jobs.active is not None)
 
     class Handler(BaseHTTPRequestHandler):
         def _send(self, status, body, content_type):
@@ -424,6 +427,14 @@ def make_handler(jobs, setup_jobs=None):
             if route == '/api/engines':
                 setup_tools.activate()
                 self._json(200, detect_engines())
+                return
+            if route == "/api/update/status":
+                force = "force=1" in (urlsplit(self.path).query or "")
+                self._json(200, {**updater.check(force=force), "job": updater.status()})
+                return
+            if route == "/api/version":
+                from .updater import current_version
+                self._json(200, {"version": current_version()})
                 return
             if route == "/api/setup/status":
                 self._json(200, setup_tools.check())
@@ -499,6 +510,18 @@ def make_handler(jobs, setup_jobs=None):
         def do_POST(self):
             route = urlsplit(self.path).path
             parts = route.strip("/").split("/")
+            if route == "/api/update/apply":
+                if not self._local_origin():
+                    self._json(403, {"error": "Chỉ cho phép cập nhật từ chính máy này"})
+                    return
+                try:
+                    updater.start()
+                    self._json(202, {"state": "running"})
+                except ValueError as exc:
+                    self._json(400, {"error": str(exc)})
+                except RuntimeError as exc:
+                    self._json(409, {"error": str(exc)})
+                return
             if len(parts) == 4 and parts[:2] == ["api", "setup"] and parts[2] in {"install", "login"}:
                 if not self._local_origin():
                     self._json(403, {"error": "Chỉ cho phép thao tác cài đặt từ chính máy này"})
@@ -619,11 +642,24 @@ def make_handler(jobs, setup_jobs=None):
 def serve(port=8765, output_root="out/web", rules=None, workers=6):
     jobs = AuditJobs(output_root, rules, workers=workers)
     PassedHistory(Path(output_root) / "cache").seed_from_reports(output_root)
-    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(jobs))
+    from .updater import RESTART_EXIT_CODE, Updater
+    updater = Updater(busy=lambda: jobs.active is not None)
+    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(jobs, updater=updater))
     print(f"apk-audit web: http://127.0.0.1:{server.server_port}", flush=True)
+
+    def stop_after_update():
+        updater.restart_requested.wait()
+        time.sleep(1.5)  # let the browser read the final "restarting" status
+        server.shutdown()
+
+    threading.Thread(target=stop_after_update, daemon=True).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
         server.server_close()
+    if updater.restart_requested.is_set():
+        print("Đã cập nhật xong, đang khởi động lại...", flush=True)
+        return RESTART_EXIT_CODE
+    return 0

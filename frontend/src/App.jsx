@@ -5,6 +5,7 @@ import { useTabIndicator } from './tabIndicator';
 import { PointerField } from './PointerField';
 import { pageFromHash, pages } from './pages';
 import SetupPanel from './SetupPanel';
+import UpdatePanel, { UpdateBanner, useUpdater } from './UpdatePanel';
 import {
   Alert, Button, Card, Collapse, Empty, Layout, List, Progress, Space,
   Checkbox, Select, Statistic, Steps, Table, Tabs, Tag, Typography, Upload, message,
@@ -347,6 +348,7 @@ export default function App() {
   const [setupReady, setSetupReady] = useState(true);
   const [page, setPage] = useState(() => pageFromHash(window.location.hash));
   const showResultsRef = useRef(false);
+  const updater = useUpdater();
   const setupCheckedRef = useRef(false);
   const busyRef = useRef(false);
   const viewedJobRef = useRef(null);
@@ -678,7 +680,7 @@ export default function App() {
         <nav className="top-nav" aria-label="Điều hướng">
           {pages.map((item) => {
             const Icon = { audit: CloudUploadOutlined, history: HistoryOutlined, results: FileSearchOutlined, setup: SettingOutlined }[item.key];
-            const badge = item.key === 'setup' && !setupReady ? <span className="nav-badge warn" title="Còn thiếu công cụ" />
+            const badge = item.key === 'setup' && (!setupReady || (updater.status?.available && !updater.status?.git_checkout)) ? <span className="nav-badge warn" title="Còn thiếu công cụ" />
               : item.key === 'audit' && busy ? <LoadingOutlined className="nav-spin" />
               : item.key === 'results' && report ? <span className="nav-badge ok" title="Đã có báo cáo" /> : null;
             return <a key={item.key} href={`#/${item.key}`} className={page === item.key ? 'active' : ''} aria-current={page === item.key ? 'page' : undefined}
@@ -688,11 +690,13 @@ export default function App() {
         <Tag className="local-tag" color="processing"><span className="live-dot" /> Chạy trên máy của bạn</Tag>
       </header>
       <Content className="main-content">
+        {page !== 'setup' && <UpdateBanner updater={{ ...updater, apply: () => { navigate('setup'); updater.apply(); } }} onOpen={() => navigate('setup')} />}
         {!setupReady && page !== 'setup' && <Alert className="setup-banner" type="warning" showIcon message="Máy còn thiếu công cụ cần để kiểm tra" action={<Button size="small" type="primary" onClick={() => navigate('setup')}>Mở Thiết lập máy</Button>} />}
 
         {page === 'setup' && <>
           <header className="page-header"><div><Text className="eyebrow">THIẾT LẬP MÁY</Text><Title level={2}>Công cụ cần cho APK Audit</Title><Text type="secondary">Kiểm tra máy đã có đủ Java, JADX và AI CLI chưa; thiếu thì bấm Cài.</Text></div></header>
           <SetupPanel onReadyChange={handleSetup} />
+          <UpdatePanel updater={updater} />
         </>}
 
         {page === 'audit' && <>

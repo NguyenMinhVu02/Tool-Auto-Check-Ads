@@ -13,3 +13,5 @@ frontend/node_modules/
 
 installer/start-windows.bat
 installer/start-macos.command
+installer/start-linux.sh
+.update/

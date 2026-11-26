@@ -20,8 +20,7 @@ echo [3/3] Dang tao bieu tuong "APK Audit" tren man hinh chinh...
 uv run apk-audit shortcut
 if errorlevel 1 goto fail
 echo Xong! Dang mo trang web. Lan sau chi can bam bieu tuong APK Audit.
-echo Dong cua so nay de tat tool.
-uv run apk-audit serve --open
+call installer\start-windows.bat
 goto end
 :fail
 echo Cai dat gap loi. Chup man hinh cua so nay gui dev.

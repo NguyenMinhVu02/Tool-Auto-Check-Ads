@@ -127,7 +127,9 @@ def main(argv=None):
                 return 0
             if args["open"]:
                 open_browser_later(url)
-            serve(port=args["port"], output_root=args["out"], rules=args["rules"], workers=args["workers"])
+            code = serve(port=args["port"], output_root=args["out"], rules=args["rules"], workers=args["workers"])
+            if code:
+                return code
         elif command == "shortcut":
             from .launcher import create_shortcut
             for path in create_shortcut(args["desktop"]):

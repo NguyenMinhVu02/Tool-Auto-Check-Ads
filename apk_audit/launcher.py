@@ -11,6 +11,7 @@ import webbrowser
 from pathlib import Path
 
 from .setup_tools import os_name
+from .updater import RESTART_EXIT_CODE
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SHORTCUT_NAME = "APK Audit"
@@ -51,9 +52,21 @@ def desktop_dir():
     return Path.home() / "Desktop"
 
 
-def launch_command(uv):
-    """Shell line that starts (or reopens) the web UI from the project folder."""
-    return [uv, "run", "--project", str(PROJECT_ROOT), "apk-audit", "serve", "--open"]
+def posix_starter(uv):
+    """Start script: reruns the server when it exits with RESTART_EXIT_CODE after an update."""
+    project = str(PROJECT_ROOT)
+    return ("#!/bin/bash\n"
+            f'cd "{project}" || exit 1\n'
+            'echo "APK Audit đang chạy. Đóng cửa sổ này để tắt tool."\n'
+            "OPEN=--open\n"
+            "while true; do\n"
+            f'  "{uv}" run --project "{project}" apk-audit serve $OPEN\n'
+            "  code=$?\n"
+            f"  [ $code -eq {RESTART_EXIT_CODE} ] || break\n"
+            '  echo "Đang khởi động lại sau khi cập nhật..."\n'
+            "  OPEN=\n"
+            "done\n"
+            '[ $code -eq 0 ] || read -r -p "Có lỗi (mã $code). Nhấn Enter để đóng..."\n')
 
 
 def _write_executable(path, content):
@@ -75,7 +88,10 @@ def create_shortcut(desktop=None, uv=None):
             "@echo off\r\nchcp 65001 >nul\r\ntitle APK Audit\r\n"
             f'cd /d "{project}"\r\n'
             "echo APK Audit dang chay. Dong cua so nay de tat tool.\r\n"
-            f'"{uv}" run --project "{project}" apk-audit serve --open\r\n'
+            "set OPEN=--open\r\n"
+            ":loop\r\n"
+            f'"{uv}" run --project "{project}" apk-audit serve %OPEN%\r\n'
+            f"if %errorlevel%=={RESTART_EXIT_CODE} (set OPEN=& echo Dang khoi dong lai sau khi cap nhat...& goto loop)\r\n"
             "if errorlevel 1 pause\r\n", encoding="utf-8")
         link = desktop / f"{SHORTCUT_NAME}.lnk"
         script = (
@@ -91,10 +107,7 @@ def create_shortcut(desktop=None, uv=None):
         # A tiny .app bundle carries the logo; it opens Terminal on the real launcher so the
         # user still sees the "close this window to stop" console.
         starter = PROJECT_ROOT / "installer" / "start-macos.command"
-        _write_executable(starter, "#!/bin/bash\n"
-                          f'cd "{project}" || exit 1\n'
-                          'echo "APK Audit đang chạy. Đóng cửa sổ này để tắt tool."\n'
-                          f'"{uv}" run --project "{project}" apk-audit serve --open\n')
+        _write_executable(starter, posix_starter(uv))
         link = desktop / f"{SHORTCUT_NAME}.app"
         if link.exists():
             shutil.rmtree(link)
@@ -115,9 +128,10 @@ def create_shortcut(desktop=None, uv=None):
                           f'#!/bin/bash\nopen -a Terminal "{starter}"\n')
         created.append(link)
     else:
-        line = " ".join("'" + part.replace("'", "'\\''") + "'" for part in launch_command(uv))
+        starter = PROJECT_ROOT / "installer" / "start-linux.sh"
+        _write_executable(starter, posix_starter(uv))
         entry = ("[Desktop Entry]\nType=Application\nName=APK Audit\nComment=Kiểm tra tích hợp ads trong APK\n"
-                 f"Exec=bash -c \"cd '{project}' && echo 'APK Audit đang chạy. Đóng cửa sổ này để tắt tool.' && {line}\"\n"
+                 f"Exec=bash \"{starter}\"\n"
                  f"Icon={ICON_DIR / 'logo.png'}\nTerminal=true\nCategories=Development;\n")
         link = desktop / "apk-audit.desktop"
         _write_executable(link, entry)
