@@ -58,9 +58,31 @@ def _request(url, accept="application/vnd.github+json"):
 
 def fetch_latest_release():
     # APK_AUDIT_UPDATE_FEED points at a release JSON elsewhere (testing, mirrors).
-    url = os.environ.get("APK_AUDIT_UPDATE_FEED") or f"https://api.github.com/repos/{repo()}/releases/latest"
-    with urllib.request.urlopen(_request(url), timeout=20) as response:
-        return json.loads(response.read().decode("utf-8"))
+    feed = os.environ.get("APK_AUDIT_UPDATE_FEED")
+    url = feed or f"https://api.github.com/repos/{repo()}/releases/latest"
+    try:
+        with urllib.request.urlopen(_request(url), timeout=20) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        # The API allows 60 calls/hour per IP; offices share one IP. github.com pages are not limited.
+        if feed or exc.code not in {403, 429}:
+            raise
+        return fetch_latest_release_page()
+
+
+def fetch_latest_release_page():
+    """Latest release without the API: follow /releases/latest and use the ZIP naming convention."""
+    request = urllib.request.Request(f"https://github.com/{repo()}/releases/latest", headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(request, timeout=20) as response:
+        final = response.geturl()
+    match = re.search(r"/releases/tag/(v?[\w.\-]+)$", final)
+    if not match:
+        raise urllib.error.HTTPError(final, 404, "Chưa có Release", {}, None)
+    tag = match.group(1)
+    name = f"apk-audit-{tag.lstrip('v')}.zip"
+    return {"tag_name": tag, "html_url": final, "body": "Xem ghi chú thay đổi trên trang GitHub Release.",
+            "assets": [{"name": name,
+                        "browser_download_url": f"https://github.com/{repo()}/releases/download/{tag}/{name}"}]}
 
 
 def _zip_asset(release):
@@ -102,7 +124,7 @@ class Updater:
                 result["error"] = "Bản phát hành mới chưa có file ZIP"
         except urllib.error.HTTPError as exc:
             result["error"] = ("Không đọc được bản phát hành (repo riêng tư hoặc chưa có Release)"
-                               if exc.code in {401, 403, 404} else f"GitHub trả lỗi {exc.code}")
+                               if exc.code in {401, 404} else f"GitHub tạm từ chối ({exc.code}), thử lại sau")
         except (OSError, ValueError) as exc:
             result["error"] = f"Không kiểm tra được cập nhật: {exc}"
         with self.lock:

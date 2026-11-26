@@ -102,3 +102,16 @@ class UpdaterTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReleasePageFallbackTests(unittest.TestCase):
+    def test_rate_limited_api_falls_back_to_release_page(self):
+        limited = updater.urllib.error.HTTPError("api", 403, "rate limit", {}, None)
+        page = mock.MagicMock()
+        page.__enter__.return_value.geturl.return_value = "https://github.com/o/r/releases/tag/v0.3.0"
+        with mock.patch.dict(updater.os.environ, {}, clear=False), \
+                mock.patch.object(updater.urllib.request, "urlopen", side_effect=[limited, page]):
+            updater.os.environ.pop("APK_AUDIT_UPDATE_FEED", None)
+            release = updater.fetch_latest_release()
+        self.assertEqual(release["tag_name"], "v0.3.0")
+        self.assertTrue(release["assets"][0]["browser_download_url"].endswith("/v0.3.0/apk-audit-0.3.0.zip"))
