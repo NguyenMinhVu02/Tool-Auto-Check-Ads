@@ -11,8 +11,9 @@ CHECK_BASIS = {
     'screen_class_names': 'AndroidManifest.xml', 'screen_orientation_lock': 'AndroidManifest.xml',
     'remote_config_keys': 'chuỗi trong mã đã giải mã', 'interstitial_interval': 'lời gọi hàm trong mã đã giải mã',
     'language_dev_toggle': 'lời gọi hàm trong mã đã giải mã',
+    'mediation_adapters': 'tên lớp adapter/SDK trong mã đã giải mã',
 }
-CODE_CHECKS = {'remote_config_keys', 'interstitial_interval', 'language_dev_toggle'}
+CODE_CHECKS = {'remote_config_keys', 'interstitial_interval', 'language_dev_toggle', 'mediation_adapters'}
 
 def evaluate_static(rule, facts, documents=None, workspace=None):
     finding = Finding.for_rule(rule, resolved_by="static")

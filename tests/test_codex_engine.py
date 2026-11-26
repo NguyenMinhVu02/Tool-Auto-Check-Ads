@@ -3,6 +3,8 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+
+os.environ['APK_AUDIT_CODEX_MODEL'] = 'gpt-6-sol'  # fake CLIs cannot answer `codex debug models`
 from unittest.mock import patch
 
 from apk_audit.engines import CodexEngine
@@ -121,3 +123,30 @@ print(json.dumps({'type': 'turn.completed', 'usage': {'input_tokens': 3, 'output
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CodexModelSelectionTests(unittest.TestCase):
+    def test_picks_newest_sol_model(self):
+        from apk_audit.engines import pick_codex_model
+        models = ['gpt-6.2-astra', 'gpt-6-sol', 'gpt-6.2-sol', 'gpt-5.6-sol', 'gpt-6.10-sol-mini', 'gpt-6-luna']
+        self.assertEqual(pick_codex_model(models), 'gpt-6.2-sol')
+
+    def test_no_sol_model_lets_cli_choose(self):
+        from apk_audit.engines import pick_codex_model
+        self.assertIsNone(pick_codex_model(['gpt-6-luna']))
+        self.assertIsNone(pick_codex_model([]))
+
+    def test_engine_name_tracks_selected_model(self):
+        engine = CodexEngine(model='gpt-7-sol')
+        self.assertEqual(engine.name, 'codex:gpt-7-sol:low')
+
+    def test_reads_model_list_from_cli(self):
+        from apk_audit import engines
+        with tempfile.TemporaryDirectory() as temp:
+            fake = Path(temp) / 'codex'
+            fake.write_text("#!/usr/bin/env python3\nimport json\nprint(json.dumps({'models':[{'slug':'gpt-6.3-sol','visibility':'list'},{'slug':'gpt-hidden-sol','visibility':'hide'}]}))\n")
+            fake.chmod(0o755)
+            engines._codex_models_cache.update(at=0.0, models=None)
+            with patch.dict(os.environ, {'PATH': f"{temp}:{os.environ['PATH']}"}):
+                self.assertEqual(engines.codex_models(), ['gpt-6.3-sol'])
+            engines._codex_models_cache.update(at=0.0, models=None)

@@ -2,18 +2,21 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { findingText } from './findingText';
 import { unknownExplanation } from './findingExplanation';
 import { useTabIndicator } from './tabIndicator';
-import { PointerField, TiltGem } from './PointerField';
+import { PointerField } from './PointerField';
+import { pageFromHash, pages } from './pages';
+import SetupPanel from './SetupPanel';
+import UpdatePanel, { UpdateBanner, useUpdater } from './UpdatePanel';
 import {
   Alert, Button, Card, Collapse, Empty, Layout, List, Progress, Space,
   Checkbox, Select, Statistic, Steps, Table, Tabs, Tag, Typography, Upload, message,
 } from 'antd';
 import {
-  AppstoreOutlined, CheckCircleOutlined, CloudUploadOutlined,
-  DownloadOutlined, FileSearchOutlined, FileTextOutlined, FolderOpenOutlined,
-  InfoCircleOutlined, LoadingOutlined, SafetyCertificateOutlined,
+  CheckCircleOutlined, CloudUploadOutlined, DownloadOutlined, FileSearchOutlined,
+  FileTextOutlined, FolderOpenOutlined, HistoryOutlined, InfoCircleOutlined,
+  LoadingOutlined, SafetyCertificateOutlined, SettingOutlined,
 } from '@ant-design/icons';
 
-const { Sider, Content } = Layout;
+const { Content } = Layout;
 const { Dragger } = Upload;
 const { Title, Text, Paragraph } = Typography;
 const jobStorageKey = 'apk-audit-active-job';
@@ -184,10 +187,16 @@ function MarketingSummary({ data, jobId }) {
   const problems = data.id_problems || [];
   const copyProblems = () => navigator.clipboard.writeText(idProblemText(data))
     .then(() => message.success('Đã copy danh sách ID lỗi'), () => message.error('Không copy được, hãy tải CSV'));
+  const copyFrom = (path, done) => fetch(`/api/jobs/${jobId}/${path}`)
+    .then((response) => { if (!response.ok) throw new Error(); return response.text(); })
+    .then((text) => navigator.clipboard.writeText(text))
+    .then(() => message.success(done), () => message.error('Không copy được, hãy thử lại'));
   return (
     <Card className="marketing-card" title="Tóm tắt cho Marketing · 4 màn đầu" style={{ marginBottom: 16 }}
       extra={<Space wrap>
         <Button size="small" onClick={copyProblems}>Copy danh sách ID lỗi</Button>
+        <Button size="small" type="primary" onClick={() => copyFrom('sheet.tsv?only_fails=1', 'Đã copy, mở Google Sheet và bấm Ctrl+V')} title="Các mục chưa đạt, đúng cột ID · Function · Test Scenario Group · Actual · … · Link Bug">Copy cho Google Sheet</Button>
+        <Button size="small" onClick={() => copyFrom('summary.md', 'Đã copy tóm tắt gửi đối tác')}>Copy tóm tắt gửi đối tác</Button>
         <Button size="small" href={`/api/jobs/${jobId}/ids.csv`} icon={<DownloadOutlined />}>Tải CSV</Button>
         <Button size="small" href={`/api/jobs/${jobId}/report.html`} target="_blank" icon={<DownloadOutlined />}>Báo cáo HTML</Button>
       </Space>}>
@@ -336,6 +345,11 @@ export default function App() {
   const [selectedEngine, setSelectedEngine] = useState(null);
   const [enginesLoading, setEnginesLoading] = useState(true);
   const [engineError, setEngineError] = useState('');
+  const [setupReady, setSetupReady] = useState(true);
+  const [page, setPage] = useState(() => pageFromHash(window.location.hash));
+  const showResultsRef = useRef(false);
+  const updater = useUpdater();
+  const setupCheckedRef = useRef(false);
   const busyRef = useRef(false);
   const viewedJobRef = useRef(null);
   const timerRef = useRef(null);
@@ -357,6 +371,28 @@ export default function App() {
   }, []);
 
   useEffect(() => { refreshEngines(); }, [refreshEngines]);
+  const navigate = useCallback((key) => {
+    setPage(key);
+    if (window.location.hash !== `#/${key}`) window.history.replaceState(null, '', `#/${key}`);
+    window.scrollTo({ top: 0 });
+  }, []);
+  useEffect(() => {
+    const onHash = () => setPage(pageFromHash(window.location.hash));
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+  const handleSetup = useCallback((data) => {
+    setSetupReady(Boolean(data.ready));
+    refreshEngines();
+  }, [refreshEngines]);
+  // Check the machine once on load; a machine missing tools opens the setup page first.
+  useEffect(() => {
+    fetch('/api/setup/status').then((response) => response.json()).then((data) => {
+      setSetupReady(Boolean(data.ready));
+      if (!data.ready && !setupCheckedRef.current && !window.location.hash) navigate('setup');
+      setupCheckedRef.current = true;
+    }).catch(() => {});
+  }, [navigate]);
 
   const changeBusy = useCallback((value) => {
     busyRef.current = value;
@@ -414,6 +450,10 @@ export default function App() {
       if (viewedJobRef.current !== id) return;
       setReport(result);
       setStage('done');
+      if (showResultsRef.current) {
+        showResultsRef.current = false;
+        navigate('results');
+      }
       setNotice(`Hoàn tất: ${next.filename}`);
       setError(false);
       sessionStorage.setItem(jobStorageKey, id);
@@ -509,6 +549,7 @@ export default function App() {
   }
 
   async function beginAudit() {
+    showResultsRef.current = true;
     if (busyRef.current || !apk || enginesLoading || ads?.loading || working?.loading || (ads && working && [ads, working].some((item) => item.sheets.length > 1 && !item.sheet)) || !engines.some((item) => item.id === selectedEngine && item.installed)) return;
     changeBusy(true);
     viewedJobRef.current = null;
@@ -542,6 +583,7 @@ export default function App() {
 
   function openJob(item) {
     if (busyRef.current) return;
+    showResultsRef.current = true;
     clearTimeout(timerRef.current);
     setReport(null);
     setJob(null);
@@ -624,28 +666,42 @@ export default function App() {
     'claude:claude-sonnet-5-5:medium': 'Claude Sonnet 5.5 · medium (báo cáo cũ)',
     'codex:gpt-6-luna': 'Codex GPT-6 Luna (báo cáo cũ)',
     'claude:default': 'Claude (model mặc định cũ)',
+    'claude:sonnet:low': 'Claude Sonnet (mới nhất) · low',
   };
-  const engineLabel = reportEngineLabels[displayedEngine] || engines.find((item) => item.id === displayedEngine)?.label || displayedEngine || 'AI CLI';
+  const autoCodex = /^codex:(.+):low$/.exec(displayedEngine || '');
+  const engineLabel = reportEngineLabels[displayedEngine] || (autoCodex ? `Codex ${autoCodex[1]} · low` : null) || engines.find((item) => item.id === displayedEngine)?.label || displayedEngine || 'AI CLI';
 
   return (
     <>
     <PointerField />
     <Layout className="app-layout">
-      <Sider className="sidebar" width={248} breakpoint="lg" collapsedWidth={0} trigger={null}>
-        <a href="#overview" className="brand"><span className="brand-icon"><SafetyCertificateOutlined /></span><span>APK Audit<small>LOCAL WORKSPACE</small></span></a>
-        <Text className="sidebar-caption">WORKSPACE</Text>
-        <nav className="side-nav" aria-label="Điều hướng">
-          <a href="#overview"><AppstoreOutlined /> Tổng quan</a>
-          <a href="#upload"><CloudUploadOutlined /> Tải ứng dụng</a>
-          <a href="#results"><FileSearchOutlined /> Kết quả kiểm tra</a>
+      <header className="topbar">
+        <a href="#/audit" className="brand" onClick={(event) => { event.preventDefault(); navigate('audit'); }}><img className="brand-logo" src="/logo.png" alt="" width="36" height="36" /><span>APK Audit<small>LOCAL WORKSPACE</small></span></a>
+        <nav className="top-nav" aria-label="Điều hướng">
+          {pages.map((item) => {
+            const Icon = { audit: CloudUploadOutlined, history: HistoryOutlined, results: FileSearchOutlined, setup: SettingOutlined }[item.key];
+            const badge = item.key === 'setup' && (!setupReady || (updater.status?.available && !updater.status?.git_checkout)) ? <span className="nav-badge warn" title="Còn thiếu công cụ" />
+              : item.key === 'audit' && busy ? <LoadingOutlined className="nav-spin" />
+              : item.key === 'results' && report ? <span className="nav-badge ok" title="Đã có báo cáo" /> : null;
+            return <a key={item.key} href={`#/${item.key}`} className={page === item.key ? 'active' : ''} aria-current={page === item.key ? 'page' : undefined}
+              onClick={(event) => { event.preventDefault(); navigate(item.key); }}><Icon /> <span>{item.label}</span>{badge}</a>;
+          })}
         </nav>
-        <TiltGem />
-        <div className="sidebar-foot"><span className="live-dot" /> Chạy trên máy của bạn<Text>Dữ liệu lưu ở localhost</Text></div>
-      </Sider>
-      <Content className="main-content" id="overview">
+        <Tag className="local-tag" color="processing"><span className="live-dot" /> Chạy trên máy của bạn</Tag>
+      </header>
+      <Content className="main-content">
+        {page !== 'setup' && <UpdateBanner updater={{ ...updater, apply: () => { navigate('setup'); updater.apply(); } }} onOpen={() => navigate('setup')} />}
+        {!setupReady && page !== 'setup' && <Alert className="setup-banner" type="warning" showIcon message="Máy còn thiếu công cụ cần để kiểm tra" action={<Button size="small" type="primary" onClick={() => navigate('setup')}>Mở Thiết lập máy</Button>} />}
+
+        {page === 'setup' && <>
+          <header className="page-header"><div><Text className="eyebrow">THIẾT LẬP MÁY</Text><Title level={2}>Công cụ cần cho APK Audit</Title><Text type="secondary">Kiểm tra máy đã có đủ Java, JADX và AI CLI chưa; thiếu thì bấm Cài.</Text></div></header>
+          <SetupPanel onReadyChange={handleSetup} />
+          <UpdatePanel updater={updater} />
+        </>}
+
+        {page === 'audit' && <>
         <header className="page-header">
-          <div><Text className="eyebrow">DASHBOARD / TỔNG QUAN</Text><Title level={2}>Kiểm tra tích hợp Ads</Title><Text type="secondary">Kiểm tra logic quảng cáo trong ứng dụng Android bằng Codex hoặc Claude CLI.</Text></div>
-          <Tag className="local-tag" color="processing"><span className="live-dot" /> Local mode</Tag>
+          <div><Text className="eyebrow">KIỂM TRA MỚI</Text><Title level={2}>Kiểm tra tích hợp Ads</Title><Text type="secondary">Kiểm tra logic quảng cáo trong ứng dụng Android bằng Codex hoặc Claude CLI.</Text></div>
         </header>
 
         <Card className="upload-card" id="upload">
@@ -669,13 +725,15 @@ export default function App() {
           <div className="engine-field">
             <Text strong>AI dùng để audit</Text>
             <Space wrap>
-              <Select id="engine-select" aria-label="AI dùng để audit" style={{ width: 290 }} placeholder="Chưa tìm thấy CLI" value={selectedEngine || undefined} loading={enginesLoading} disabled={busy || enginesLoading}
-                onChange={setSelectedEngine} options={engines.map((item) => ({ value: item.id, label: `${item.label}${item.installed ? '' : ' — chưa cài'}`, disabled: !item.installed }))} />
+              {engines.length > 1 ? <Select id="engine-select" aria-label="AI dùng để audit" style={{ width: 320 }} value={selectedEngine || undefined} loading={enginesLoading} disabled={busy || enginesLoading}
+                onChange={setSelectedEngine} options={engines.map((item) => ({ value: item.id, label: item.label }))} />
+                : engines.length === 1 ? <Tag className="engine-tag" color="blue">{engines[0].label}</Tag>
+                : <Text type="secondary">{enginesLoading ? 'Đang tìm AI CLI...' : 'Chưa có AI CLI'}</Text>}
               <Button onClick={refreshEngines} loading={enginesLoading} disabled={busy}>Phát hiện lại</Button>
             </Space>
-            <Text type="secondary">CLI cần được đăng nhập sẵn. Model cố định theo từng lựa chọn{engines.length ? `: ${engines.map((item) => item.label).join(' · ')}` : ''}.</Text>
+            <Text type="secondary">CLI cần được đăng nhập sẵn. Tool tự chọn model phù hợp, tiết kiệm (mức suy nghĩ low) trong số model CLI đang hỗ trợ.</Text>
             {engineError && <Alert type="error" showIcon message={engineError} />}
-            {!enginesLoading && !engineError && !selectedEngine && <Alert type="warning" showIcon message="Cài và đăng nhập Codex CLI hoặc Claude CLI, sau đó khởi động lại server nếu PATH thay đổi và bấm Phát hiện lại." />}
+            {!enginesLoading && !engineError && !selectedEngine && <Alert type="warning" showIcon message="Chưa có Claude CLI hoặc Codex CLI." action={<Button size="small" type="primary" onClick={() => navigate('setup')}>Mở Thiết lập máy</Button>} />}
           </div>
           <Checkbox className="cross-flow-option" checked={fullScope} disabled={busy} onChange={(event) => setFullScope(event.target.checked)}><b>Kiểm đầy đủ cho dev</b><br /><Text type="secondary">Thêm 2 rule: <i>Load/observe</i> (quảng cáo native có được theo dõi liên tục và ẩn khi rỗng/mất mạng) và <i>Banner reload</i>. Mặc định tắt vì phần này chủ yếu dev cần; tốn thêm khoảng 20% token. Không tick vẫn kiểm đủ khởi tạo, Remote/consent/fallback, ID và 4 màn đầu.</Text></Checkbox>
           <Checkbox className="cross-flow-option" checked={crossFlow} disabled={busy} onChange={(event) => setCrossFlow(event.target.checked)}><b>Rà lỗi chéo giữa các luồng</b><br /><Text type="secondary">Thêm một lượt AI tìm lỗi chỉ xảy ra khi các màn tác động lẫn nhau (ví dụ quảng cáo màn trước vẫn đang tải khi đã sang màn sau). Chậm hơn khoảng 5 phút, tốn thêm token và hay cho kết quả "cần dev xem lại". Nên tick khi chốt bản build, không cần cho kiểm nhanh.</Text></Checkbox>
@@ -697,14 +755,6 @@ export default function App() {
           </div>}
         </Card>
 
-        <Card title="Lịch sử kiểm tra" extra={<Button onClick={refreshHistory}>Làm mới</Button>}>
-          {historyError && <Alert type="warning" showIcon message={historyError} />}
-          <List dataSource={history.slice(0, 10)} locale={{ emptyText: 'Chưa có lượt kiểm tra nào được lưu.' }} renderItem={(item) => <List.Item actions={[
-            <Button key="open" disabled={busy} onClick={() => openJob(item)}>{item.state === 'done' ? 'Mở báo cáo' : 'Xem trạng thái'}</Button>,
-            ...(item.resumable ? [<Button key="resume" disabled={busy} onClick={() => resumeJob(item)}>Tiếp tục</Button>] : []),
-          ]}>
-            <List.Item.Meta title={item.filename} description={<Space wrap><Tag color={item.state === 'done' ? 'success' : item.state === 'error' ? 'error' : 'processing'}>{item.interrupted ? 'Bị gián đoạn' : item.state === 'awaiting_confirmation' ? 'Chờ xác nhận tài liệu' : item.state === 'done' ? 'Hoàn tất' : item.state === 'error' ? 'Có lỗi' : 'Đang chạy'}</Tag><Text type="secondary">{item.created_at ? new Date(item.created_at).toLocaleString('vi-VN') : ''}</Text></Space>} />
-          </List.Item>} />
           {job?.state === 'awaiting_confirmation' && job.preflight && <Alert className="preflight-alert" type="warning" showIcon
             message="Tài liệu có thể không thuộc app này — chưa chạy AI"
             description={<Space direction="vertical" size={6} style={{ width: '100%' }}>
@@ -716,9 +766,24 @@ export default function App() {
               </Space>
             </Space>} />}
           {job?.resumable && <Alert type="info" showIcon message="Lượt kiểm tra bị gián đoạn" description="Bấm Tiếp tục để chạy lại các bước cần thiết và dùng kết quả đã hoàn tất còn cache hợp lệ." action={<Button disabled={busy} onClick={() => resumeJob(job)}>Tiếp tục</Button>} />}
+        {stage === 'done' && report && <Alert type="success" showIcon message="Đã có báo cáo" action={<Button type="primary" onClick={() => navigate('results')}>Xem kết quả</Button>} />}
+        </>}
+
+        {page === 'history' && <>
+        <header className="page-header"><div><Text className="eyebrow">LỊCH SỬ</Text><Title level={2}>Các lượt kiểm tra đã lưu</Title><Text type="secondary">Mở lại báo cáo cũ hoặc tiếp tục lượt bị gián đoạn.</Text></div></header>
+        <Card title="Lịch sử kiểm tra" extra={<Button onClick={refreshHistory}>Làm mới</Button>}>
+          {historyError && <Alert type="warning" showIcon message={historyError} />}
+          <List dataSource={history.slice(0, 10)} locale={{ emptyText: 'Chưa có lượt kiểm tra nào được lưu.' }} renderItem={(item) => <List.Item actions={[
+            <Button key="open" disabled={busy} onClick={() => openJob(item)}>{item.state === 'done' ? 'Mở báo cáo' : 'Xem trạng thái'}</Button>,
+            ...(item.resumable ? [<Button key="resume" disabled={busy} onClick={() => resumeJob(item)}>Tiếp tục</Button>] : []),
+          ]}>
+            <List.Item.Meta title={item.filename} description={<Space wrap><Tag color={item.state === 'done' ? 'success' : item.state === 'error' ? 'error' : 'processing'}>{item.interrupted ? 'Bị gián đoạn' : item.state === 'awaiting_confirmation' ? 'Chờ xác nhận tài liệu' : item.state === 'done' ? 'Hoàn tất' : item.state === 'error' ? 'Có lỗi' : 'Đang chạy'}</Tag><Text type="secondary">{item.created_at ? new Date(item.created_at).toLocaleString('vi-VN') : ''}</Text></Space>} />
+          </List.Item>} />
         </Card>
 
-        <section className="results-section" id="results">
+        </>}
+
+        {page === 'results' && <section className="results-section">
           <div className="results-header"><div><Text className="eyebrow">KẾT QUẢ</Text><Title level={3}>Tổng quan kiểm tra</Title></div>{report && <Button href={`/api/jobs/${job.id}/report`} icon={<DownloadOutlined />}>Tải report.json</Button>}</div>
           <Alert className="ai-notice" type="info" showIcon icon={<InfoCircleOutlined />} message={ruleTotal ? `${engineLabel} đánh giá ${ruleTotal} rule ads` : `${engineLabel} đọc mã và đánh giá các rule ads`} description="PASS và FAIL cần bằng chứng file/dòng hợp lệ. Khi thiếu dữ liệu hoặc không thể kết nối AI, kết quả là Chưa đủ căn cứ (UNKNOWN), chưa phải lỗi APK được xác nhận. Nội dung mã và tài liệu được gửi tới nhà cung cấp AI đã chọn, sử dụng quota của tài khoản CLI." />
           {report ? <Tabs className="report-tabs" defaultActiveKey="marketing" items={[
@@ -809,7 +874,7 @@ export default function App() {
             {report ? <List className="findings-list" split={false} dataSource={report.findings || []} locale={{ emptyText: 'Không có luật nào trong báo cáo.' }} renderItem={(item, index) => <Finding item={item} index={index} />} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Chọn APK và bấm Bắt đầu kiểm tra để xem báo cáo." />}
           </Card>
           </>}
-        </section>
+        </section>}
         <footer><Space><CheckCircleOutlined /> APK Audit · Local workspace</Space></footer>
       </Content>
     </Layout>

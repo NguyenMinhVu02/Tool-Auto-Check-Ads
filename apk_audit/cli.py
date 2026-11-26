@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import sys
 from .config import doctor
+from .setup_tools import activate as activate_tools
 from .errors import AuditError
 from .facts import build_facts
 from .pipeline import run, prepare
@@ -16,7 +17,7 @@ def parser():
     audit.add_argument("target")
     audit.add_argument("--rules", type=Path)
     audit.add_argument("--out", type=Path)
-    audit.add_argument("--engine", choices=["none","claude","codex"], default="codex", help="codex: gpt-6-sol / low (mặc định); claude: Sonnet 5.5 / medium; none: tắt AI")
+    audit.add_argument("--engine", choices=["none","claude","codex"], help="AI dùng để audit; mặc định là CLI đã cài (ưu tiên claude). claude: Sonnet mới nhất / low; codex: model Sol mới nhất CLI hỗ trợ / low; none: tắt AI")
     audit.add_argument("--static-only", action="store_true")
     audit.add_argument("--only")
     audit.add_argument("--max-tool-calls", type=int, default=400)
@@ -56,6 +57,9 @@ def parser():
     web.add_argument("--out", type=Path, default=Path("out/web"))
     web.add_argument("--rules", type=Path)
     web.add_argument("--workers", type=int, choices=range(1, MAX_WORKERS + 1), default=6, metavar="1-10", help="Số rule chạy đồng thời (mặc định 6)")
+    web.add_argument("--open", action="store_true", help="Mở trình duyệt; nếu server đã chạy thì chỉ mở trình duyệt")
+    shortcut = sub.add_parser("shortcut", help="Tạo biểu tượng APK Audit trên màn hình chính")
+    shortcut.add_argument("--desktop", type=Path, help="Thư mục Desktop (mặc định tự tìm)")
     bench = sub.add_parser("benchmark", help="Đo cold/warm audit hoặc bộ ca claim tổng hợp")
     bench.add_argument("target", nargs="?")
     bench.add_argument("--quality", action="store_true", help="Chạy ca tổng hợp offline, không gọi AI")
@@ -71,11 +75,12 @@ def parser():
 
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
-    commands = {"audit","facts","mcp","rules","doctor","ask","serve","benchmark"}
+    commands = {"audit","facts","mcp","rules","doctor","ask","serve","benchmark","shortcut"}
     if argv and argv[0] not in commands and argv[0] not in {"-h","--help"}:
         argv.insert(0,"audit")
     args = vars(parser().parse_args(argv))
     command = args.pop("command")
+    activate_tools()
     try:
         if command == "doctor":
             print(json.dumps(doctor(), indent=2, ensure_ascii=False))
@@ -113,11 +118,31 @@ def main(argv=None):
             raise AuditError("ask chưa nối adapter AI; dùng apk-audit mcp --workspace với MCP client.", 6)
         elif command == "serve":
             from .web import serve
-            serve(port=args["port"], output_root=args["out"], rules=args["rules"], workers=args["workers"])
+            from .launcher import open_browser_later, server_running
+            url = f"http://127.0.0.1:{args['port']}/"
+            if args["open"] and server_running(args["port"]):
+                print(f"APK Audit đã chạy sẵn, mở {url}")
+                import webbrowser
+                webbrowser.open(url)
+                return 0
+            if args["open"]:
+                open_browser_later(url)
+            code = serve(port=args["port"], output_root=args["out"], rules=args["rules"], workers=args["workers"])
+            if code:
+                return code
+        elif command == "shortcut":
+            from .launcher import create_shortcut
+            for path in create_shortcut(args["desktop"]):
+                print(f"Đã tạo: {path}")
         else:
             quiet = args.pop("quiet")
             if args.pop("static_only"):
                 args["engine"] = "none"
+            if args["engine"] is None:
+                from .engines import detect_engines
+                args["engine"] = detect_engines()["default"] or "none"
+                if args["engine"] == "none":
+                    print("Không tìm thấy Claude CLI hoặc Codex CLI: chỉ chạy kiểm tra tĩnh.", file=sys.stderr)
             result = run(**args)
             output = Path(result["output"])
             if not quiet:

@@ -14,7 +14,7 @@ GROUPS = (
     ('welcome', 'Welcome back / App Open', ('ADS_WELCOME_RESUME',)),
     ('config', 'Cấu hình và khởi tạo', ('ADS_INIT_ORDER', 'ADS_REMOTE_FALLBACK', 'ADS_ID_SOURCE_AND_COVERAGE',
                                         'ADS_CONFIG_FLAGS', 'ADS_DEBUG_TEST_IDS', 'ADS_SCREEN_ORIENTATION', 'ADS_REMOTE_KEYS', 'ADS_INTERSTITIAL_INTERVAL',
-                                        'ADS_SCREEN_NAMES')),
+                                        'ADS_SCREEN_NAMES', 'ADS_MEDIATION_ADAPTERS')),
     ('flow', 'Load, hiển thị, event, banner', ('ADS_LOAD_OBSERVE_GATES', 'ADS_FIREBASE_EVENTS', 'ADS_BANNER_RELOAD')),
     ('cross', 'Lỗi chéo giữa các luồng', ('ADS_CROSS_FLOW_BUGS',)),
 )

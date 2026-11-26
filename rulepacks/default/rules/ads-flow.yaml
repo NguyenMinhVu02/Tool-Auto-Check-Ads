@@ -308,3 +308,20 @@
       Language: [LanguageActivity]
       Onboarding: [OnBoardingActivity, OnboardingActivity]
       Welcome: [WelcomeActivity]
+
+- id: ADS_MEDIATION_ADAPTERS
+  title: Mạng mediation đủ adapter và SDK
+  mode: static
+  check: mediation_adapters
+  area: init
+  severity: medium
+  params:
+    # Package paths under sources/ (from KOG APK Tester's mediation table).
+    networks:
+      mintegral: {name: Mintegral, adapter: [com/google/ads/mediation/mintegral], sdk: [com/mbridge/msdk]}
+      applovin: {name: AppLovin, adapter: [com/google/ads/mediation/applovin], sdk: [com/applovin/sdk]}
+      pangle: {name: Pangle, adapter: [com/google/ads/mediation/pangle], sdk: [com/bytedance/sdk/openadsdk]}
+      meta: {name: Meta Audience Network, adapter: [com/google/ads/mediation/facebook], sdk: [com/facebook/ads]}
+      ironsource: {name: IronSource (LevelPlay), adapter: [com/google/ads/mediation/ironsource], sdk: [com/ironsource/mediationsdk]}
+      unity: {name: Unity Ads, adapter: [com/google/ads/mediation/unity], sdk: [com/unity3d/ads]}
+      vungle: {name: Liftoff (Vungle), adapter: [com/google/ads/mediation/vungle], sdk: [com/vungle/ads, com/vungle/warren]}

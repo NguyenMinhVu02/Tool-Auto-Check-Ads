@@ -262,7 +262,7 @@ class WebTests(unittest.TestCase):
 
     def test_bundled_vietnamese_fonts_are_served_and_csp_allows_canvas_favicon(self):
         for subset in ("latin", "latin-ext", "vietnamese"):
-            response = self.request(f"/fonts/BeVietnamPro-{subset}-500.woff2")
+            response = self.request(f"/fonts/Nunito-{subset}-500.woff2")
             self.assertEqual((response.status, response.headers["Content-Type"]), (200, "font/woff2"))
             self.assertGreater(len(response.read()), 1000)
         policy = self.request("/").headers["Content-Security-Policy"]

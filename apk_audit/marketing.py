@@ -25,6 +25,7 @@ CONFIG_CHECKS = (
     ('ADS_INTERSTITIAL_INTERVAL', 'Khoảng cách giữa hai quảng cáo toàn màn hình'),
     ('ADS_SCREEN_NAMES', 'Tên 4 màn đầu theo quy định'),
     ('ADS_SCREEN_ORIENTATION', 'Chặn xoay màn hình ở 4 màn đầu'),
+    ('ADS_MEDIATION_ADAPTERS', 'Mạng mediation đủ adapter và SDK'),
 )
 REQUIREMENT_ICONS = {'ok': '✅', 'issue': '❌', 'unknown': '❔', 'na': '➖'}
 VERDICTS = {status: (STATUS_LEVELS[status], label) for status, label in STATUS_LABELS.items()}

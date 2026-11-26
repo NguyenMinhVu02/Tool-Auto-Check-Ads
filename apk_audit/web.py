@@ -6,6 +6,7 @@ import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import threading
+import time
 from urllib.parse import unquote, urlsplit
 from uuid import uuid4
 
@@ -17,6 +18,7 @@ from .marketing import build_marketing_summary
 from .report_html import ids_csv, render_html
 from .errors import AuditError
 from .engines import detect_engines
+from . import setup_tools
 from .execution import MAX_WORKERS, valid_workers
 from .pipeline import run
 from .utils import write_json
@@ -398,7 +400,11 @@ class AuditJobs:
             self.update(job_id, state="error", error="Lỗi phân tích ngoài dự kiến; xem log server")
 
 
-def make_handler(jobs):
+def make_handler(jobs, setup_jobs=None, updater=None):
+    from .updater import Updater
+    setup_jobs = setup_jobs or setup_tools.SetupJobs()
+    updater = updater or Updater(busy=lambda: jobs.active is not None)
+
     class Handler(BaseHTTPRequestHandler):
         def _send(self, status, body, content_type):
             self.send_response(status)
@@ -419,12 +425,32 @@ def make_handler(jobs):
                 self._json(200, {"jobs": jobs.list_jobs()})
                 return
             if route == '/api/engines':
+                setup_tools.activate()
                 self._json(200, detect_engines())
                 return
-            static = {"/": ("index.html", "text/html"), "/app.css": ("app.css", "text/css"), "/app.js": ("app.js", "text/javascript")}
+            if route == "/api/update/status":
+                force = "force=1" in (urlsplit(self.path).query or "")
+                self._json(200, {**updater.check(force=force), "job": updater.status()})
+                return
+            if route == "/api/version":
+                from .updater import current_version
+                self._json(200, {"version": current_version()})
+                return
+            if route == "/api/setup/status":
+                self._json(200, setup_tools.check())
+                return
+            if route.startswith("/api/setup/jobs/"):
+                job = setup_jobs.get(route.rsplit("/", 1)[-1])
+                if job is None:
+                    self._json(404, {"error": "Không tìm thấy lượt cài đặt"})
+                else:
+                    self._json(200, job)
+                return
+            static = {"/": ("index.html", "text/html"), "/app.css": ("app.css", "text/css"), "/app.js": ("app.js", "text/javascript"),
+                      "/logo.png": ("logo.png", "image/png"), "/favicon.png": ("favicon.png", "image/png")}
             for subset in ("latin", "latin-ext", "vietnamese"):
                 for weight in (400, 500, 600, 700):
-                    static[f"/fonts/BeVietnamPro-{subset}-{weight}.woff2"] = (f"fonts/BeVietnamPro-{subset}-{weight}.woff2", "font/woff2")
+                    static[f"/fonts/Nunito-{subset}-{weight}.woff2"] = (f"fonts/Nunito-{subset}-{weight}.woff2", "font/woff2")
             if route in static:
                 filename, mime = static[route]
                 self._send(200, (ASSETS / filename).read_bytes(), mime + ("; charset=utf-8" if mime.startswith("text/") else ""))
@@ -446,6 +472,21 @@ def make_handler(jobs):
                         return
                     self._send(200, report, "application/json; charset=utf-8")
                     return
+                if parts[3] in {"sheet.tsv", "summary.md"} and job["state"] == "done":
+                    from urllib.parse import parse_qs
+                    from .sheet_export import partner_summary, sheet_tsv
+                    query = parse_qs(urlsplit(self.path).query)
+                    try:
+                        report = jobs.load_report(parts[2])
+                    except (ValueError, OSError, KeyError):
+                        self._json(400, {"error": "Báo cáo không còn hợp lệ hoặc đã bị di chuyển"})
+                        return
+                    if parts[3] == "sheet.tsv":
+                        text = sheet_tsv(report, only_fails=query.get("only_fails", ["0"])[0] == "1")
+                    else:
+                        text = partner_summary(report)
+                    self._send(200, text.encode("utf-8"), "text/plain; charset=utf-8")
+                    return
                 if parts[3] in {"report.html", "ids.csv"} and job["state"] == "done":
                     try:
                         report = jobs.load_report(parts[2])
@@ -459,9 +500,45 @@ def make_handler(jobs):
                     return
             self._json(404, {"error": "Đường dẫn không tồn tại"})
 
+        def _local_origin(self):
+            origin = self.headers.get("Origin")
+            host = (self.headers.get("Host") or "").split(":")[0]
+            if host not in {"127.0.0.1", "localhost"}:
+                return False
+            return origin is None or urlsplit(origin).hostname in {"127.0.0.1", "localhost"}
+
         def do_POST(self):
             route = urlsplit(self.path).path
             parts = route.strip("/").split("/")
+            if route == "/api/update/apply":
+                if not self._local_origin():
+                    self._json(403, {"error": "Chỉ cho phép cập nhật từ chính máy này"})
+                    return
+                try:
+                    updater.start()
+                    self._json(202, {"state": "running"})
+                except ValueError as exc:
+                    self._json(400, {"error": str(exc)})
+                except RuntimeError as exc:
+                    self._json(409, {"error": str(exc)})
+                return
+            if len(parts) == 4 and parts[:2] == ["api", "setup"] and parts[2] in {"install", "login"}:
+                if not self._local_origin():
+                    self._json(403, {"error": "Chỉ cho phép thao tác cài đặt từ chính máy này"})
+                    return
+                try:
+                    if parts[2] == "install":
+                        self._json(202, {"id": setup_jobs.start(parts[3])})
+                    else:
+                        setup_tools.login(parts[3])
+                        self._json(200, {"ok": True})
+                except ValueError as exc:
+                    self._json(400, {"error": str(exc)})
+                except RuntimeError as exc:
+                    self._json(409, {"error": str(exc)})
+                except OSError as exc:
+                    self._json(500, {"error": str(exc)})
+                return
             if len(parts) == 4 and parts[:2] == ["api", "jobs"] and parts[3] in {"confirm", "cancel"}:
                 try:
                     if parts[3] == "confirm":
@@ -565,11 +642,24 @@ def make_handler(jobs):
 def serve(port=8765, output_root="out/web", rules=None, workers=6):
     jobs = AuditJobs(output_root, rules, workers=workers)
     PassedHistory(Path(output_root) / "cache").seed_from_reports(output_root)
-    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(jobs))
+    from .updater import RESTART_EXIT_CODE, Updater
+    updater = Updater(busy=lambda: jobs.active is not None)
+    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(jobs, updater=updater))
     print(f"apk-audit web: http://127.0.0.1:{server.server_port}", flush=True)
+
+    def stop_after_update():
+        updater.restart_requested.wait()
+        time.sleep(1.5)  # let the browser read the final "restarting" status
+        server.shutdown()
+
+    threading.Thread(target=stop_after_update, daemon=True).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
         server.server_close()
+    if updater.restart_requested.is_set():
+        print("Đã cập nhật xong, đang khởi động lại...", flush=True)
+        return RESTART_EXIT_CODE
+    return 0

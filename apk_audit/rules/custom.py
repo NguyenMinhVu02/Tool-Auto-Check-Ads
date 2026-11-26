@@ -423,6 +423,68 @@ def screen_orientation_lock(rule, facts, documents, workspace):
                                  'và quảng cáo có thể bị tải lại, hiển thị lỗi hoặc tính lượt hiển thị sai.'}
 
 
-CUSTOM_CHECKS = {'screen_orientation_lock': screen_orientation_lock, 'debug_test_ids': debug_test_ids, 'ad_config_flags': ad_config_flags, 'language_dev_toggle': language_dev_toggle,
+def mediation_adapters(rule, facts, documents, workspace):
+    """Each mediation network needs both the AdMob adapter and the network SDK (idea from KOG APK Tester).
+
+    Adapter classes keep their names (AdMob instantiates them by class name), so they are reliable
+    markers. An adapter without its SDK never fills; an SDK without an adapter may be a direct
+    integration, so it is only flagged for review.
+    """
+    sources = Path(workspace or '') / 'sources'
+    if not sources.is_dir():
+        return {'status': 'UNKNOWN', 'reason': 'missing_fact', 'reasoning': 'Không có mã đã giải mã để kiểm mediation.'}
+
+    def present(paths):
+        for item in paths:
+            target = sources / item
+            if target.is_dir() and any(target.rglob('*.java')):
+                return item
+            if target.with_suffix('.java').is_file():
+                return item + '.java'
+        return None
+
+    networks = rule.params.get('networks', {})
+    status, ready, adapter_only, sdk_only = {}, [], [], []
+    for key, spec in networks.items():
+        adapter = present(spec.get('adapter', []))
+        sdk = present(spec.get('sdk', []))
+        name = spec.get('name', key)
+        status[name] = {'adapter': adapter, 'sdk': sdk}
+        if adapter and sdk:
+            ready.append(name)
+        elif adapter:
+            adapter_only.append(name)
+        elif sdk:
+            sdk_only.append(name)
+    expected = {'rule': 'mỗi mạng mediation có cả adapter AdMob và SDK của mạng'}
+    actual = {'ready': ready, 'adapter_without_sdk': adapter_only, 'sdk_without_adapter': sdk_only, 'networks': status}
+    if not (ready or adapter_only or sdk_only):
+        return {'status': 'SKIPPED', 'reason': 'not_applicable', 'expected': expected, 'actual': actual,
+                'reasoning': 'Không thấy adapter hay SDK mediation nào: app chỉ dùng AdMob, không áp dụng.',
+                'marketing_summary': 'App không dùng mạng mediation (chỉ AdMob).'}
+    evidence = [_evidence('sources/' + status[n]['adapter'], 1, 'adapter ' + n)
+                for n in adapter_only if status[n]['adapter'] and status[n]['adapter'].endswith('.java')]
+    profile = code_profile(workspace, app_roots(facts))
+    if adapter_only and absence_is_conclusive(profile, 'name'):
+        names = ', '.join(adapter_only)
+        return {'status': 'FAIL', 'expected': expected, 'actual': actual, 'evidence': evidence,
+                'reasoning': f'Kết luận: có adapter nhưng thiếu SDK của mạng: {names}.\n'
+                             'Cần sửa: thêm dependency SDK tương ứng (đúng phiên bản adapter yêu cầu).',
+                'marketing_summary': f'Mạng {names} đã gắn adapter nhưng thiếu SDK, nên sẽ không bao giờ trả quảng cáo qua mạng này.'}
+    if adapter_only or sdk_only:
+        parts = []
+        if adapter_only:
+            parts.append('có adapter nhưng không thấy SDK (mã bị làm rối, chưa chắc thiếu): ' + ', '.join(adapter_only))
+        if sdk_only:
+            parts.append('có SDK nhưng không có adapter AdMob (có thể tích hợp trực tiếp, cần dev xác nhận): ' + ', '.join(sdk_only))
+        return {'status': 'UNKNOWN', 'reason': 'needs_review', 'expected': expected, 'actual': actual, 'evidence': evidence,
+                'reasoning': 'Cần xem lại: ' + '; '.join(parts) + '.',
+                'marketing_summary': 'Cấu hình mediation có điểm cần dev xác nhận: ' + '; '.join(parts) + '.'}
+    return {'status': 'PASS', 'expected': expected, 'actual': actual,
+            'reasoning': 'Kết luận: mọi mạng mediation đều đủ adapter và SDK: ' + ', '.join(ready) + '.',
+            'marketing_summary': 'Các mạng mediation (' + ', '.join(ready) + ') đã đủ adapter và SDK.'}
+
+
+CUSTOM_CHECKS = {'mediation_adapters': mediation_adapters, 'screen_orientation_lock': screen_orientation_lock, 'debug_test_ids': debug_test_ids, 'ad_config_flags': ad_config_flags, 'language_dev_toggle': language_dev_toggle,
                  'remote_config_keys': remote_config_keys, 'interstitial_interval': interstitial_interval,
                  'screen_class_names': screen_class_names}

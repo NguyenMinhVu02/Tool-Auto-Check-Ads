@@ -4,8 +4,8 @@ import { ease, falloff } from './pointerMath.js';
 
 const SPACING = 34;
 const RADIUS = 190;
-const BASE = new THREE.Color('#7f9fdc');
-const HOT = new THREE.Color('#2767d8');
+const BASE = new THREE.Color('#3d5a8f');
+const HOT = new THREE.Color('#4c8dff');
 
 const POINT_VERT = `
 uniform vec2 uMouse; uniform float uTime; uniform float uPixel; uniform float uRadius; uniform float uPower;

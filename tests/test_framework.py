@@ -36,7 +36,7 @@ class FrameworkTests(unittest.TestCase):
         return Rule(id='EXAMPLE', title='Example', mode='agent', question='Inspect', verdict={'pass_when':'yes','fail_when':'no','unknown_when':'unclear'})
 
     def test_empty_pack_report_is_explicit(self):
-        result = run(self.ws, rules=self.pack, out=self.root / 'out')
+        result = run(self.ws, rules=self.pack, out=self.root / 'out', engine='none')
         self.assertEqual(result['summary']['total'], 0)
         self.assertIn('no_rules', result['warnings'])
         self.assertTrue((self.root / 'out/report.md').exists())
@@ -93,7 +93,7 @@ class FrameworkTests(unittest.TestCase):
   check: manifest_meta
   params: {key: sample, equals_doc: ads_scripts.value}
 ''')
-        result = run(self.ws, rules=self.pack, out=self.root / 'out')
+        result = run(self.ws, rules=self.pack, out=self.root / 'out', engine='none')
         self.assertEqual([f['status'] for f in result['findings']], ['PASS', 'SKIPPED'])
 
     def test_evidence_guardrails(self):

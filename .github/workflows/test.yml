@@ -1,0 +1,23 @@
+name: Test
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Run tests
+        run: |
+          set -o pipefail
+          uv run --extra mcp python -m unittest discover -s tests 2>&1 | tee test.log
+      - name: Report failing tests
+        if: failure()
+        run: |
+          grep -E "^(FAIL|ERROR):" test.log | head -20 | while read -r line; do echo "::error::$line"; done
+          awk '/^(FAIL|ERROR):/{p=1} p' test.log | grep -E "Error|assert|Exception|File \"/home/runner" | head -30 | while read -r line; do echo "::error::$line"; done
+          tail -5 test.log | while read -r line; do echo "::error::$line"; done
