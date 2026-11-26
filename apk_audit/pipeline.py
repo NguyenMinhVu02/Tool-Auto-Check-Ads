@@ -27,6 +27,7 @@ from .dev_view import build_dev_view
 from .passed_history import PassedHistory
 from .flow_map import build_flow_map
 from .marketing import build_marketing_summary
+from .load_dedup import find_duplicate_loads
 from .fetch import fetch
 from .playstore import resolve
 from .report import write_report
@@ -368,6 +369,7 @@ def run(target, *, rules=None, out=None, engine="codex", only=None, cache_dir=No
     metrics["tool_budget"] = {"configured":max_tool_calls,"observed":used,
         "overrun":max(0,used-max_tool_calls),"enforcement":"reservation plus observed CLI stop; not a pre-execution tool gateway"}
     marketing = build_marketing_summary(documents,facts,inventory,findings)
+    marketing["duplicate_loads"] = find_duplicate_loads(findings, workspace)
     report = {"schema_version":2,"package":facts["source"].get("package"),"version_name":facts["source"].get("version_name"),
         "apk_sha256":facts["source"].get("sha256"),"rulepack":{"name":pack.name,"version":pack.version,"fingerprint":pack.fingerprint},
         "engine":adapter.name,"docs_provided":{k:k in documents for k in ("ads_scripts","checklist")},"summary":summary,

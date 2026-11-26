@@ -126,12 +126,17 @@ if __name__ == "__main__":
 
 
 class CodexModelSelectionTests(unittest.TestCase):
-    def test_picks_newest_sol_model(self):
+    def test_picks_newest_terra_model(self):
+        from apk_audit.engines import pick_codex_model
+        models = ['gpt-6.2-astra', 'gpt-6.2-sol', 'gpt-5.6-terra', 'gpt-6.1-terra', 'gpt-6.10-terra-mini', 'gpt-6-luna']
+        self.assertEqual(pick_codex_model(models), 'gpt-6.1-terra')
+
+    def test_falls_back_to_newest_sol_without_terra(self):
         from apk_audit.engines import pick_codex_model
         models = ['gpt-6.2-astra', 'gpt-6-sol', 'gpt-6.2-sol', 'gpt-5.6-sol', 'gpt-6.10-sol-mini', 'gpt-6-luna']
         self.assertEqual(pick_codex_model(models), 'gpt-6.2-sol')
 
-    def test_no_sol_model_lets_cli_choose(self):
+    def test_no_known_tier_lets_cli_choose(self):
         from apk_audit.engines import pick_codex_model
         self.assertIsNone(pick_codex_model(['gpt-6-luna']))
         self.assertIsNone(pick_codex_model([]))

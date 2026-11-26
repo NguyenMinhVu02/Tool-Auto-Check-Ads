@@ -104,7 +104,7 @@ def rule_view(finding, id_problem_count=0):
     if status == 'PASS' or fixes.lower().startswith(('không xác định', 'không có', 'chưa xác định')):
         fixes = ''
     if finding.get('rule_id') == 'ADS_ID_SOURCE_AND_COVERAGE' and id_problem_count and status == 'FAIL':
-        fixes = f'{id_problem_count} ID sai/thiếu, danh sách đầy đủ ở tab Marketing.'
+        fixes = f'{id_problem_count} ID sai/thiếu, danh sách đầy đủ ở tab Tester.'
     view = {
         'rule_id': finding.get('rule_id'), 'title': finding.get('title'), 'status': status,
         'status_label': STATUS_LABELS.get(status, status), 'level': STATUS_LEVELS.get(status, 'check'),

@@ -13,7 +13,7 @@ import re
 
 from .utils import read_text
 
-SLICE_VERSION = 1
+SLICE_VERSION = 2
 SKIP_METHODS = {'if', 'for', 'while', 'switch', 'catch', 'synchronized', 'return', 'new', 'else', 'try', 'do'}
 SIGNATURE = re.compile(
     r'^\s*(?:@\w+(?:\([^)]*\))?\s+)*(?:(?:public|private|protected|static|final|synchronized|abstract|native)\s+)*'
@@ -21,22 +21,27 @@ SIGNATURE = re.compile(
 AD_PATTERN = re.compile(
     r'\b(?:load\w*|show\w*|observe|postValue|getShouldDisplay\w*|AppOpenAd|InterstitialAd|NativeAd|AdView|MobileAds|'
     r'ERainAd\w*|FirebaseRemoteConfig|fetchAndActivate|setDefaultsAsync|ConsentInformation|UserMessagingPlatform|'
-    r'ConsentHandler|isEnable|enable_ua_check|getId|fromAssets|fromJson)\b')
+    r'ConsentHandler|ITGAdConsent|loadAndShowConsent|requestConsent\w*|onConsent\w*|isConfirmConsent|isUserGlobal|'
+    r'canRequestAds|requestConsentInfoUpdate|isEnable|enable_ua_check|getId|fromAssets|fromJson)\b')
 LIFECYCLE = {'onCreate', 'onResume', 'onStart', 'onViewCreated', 'onCreateView', 'onPause', 'attachBaseContext'}
 REMOTE_LITERALS = ('ad_remote_config', 'on_show_dialog_consent', 'delay_button_done_language',
                    'time_delay_show_language_done_button', 'ad_config.json', 'ad_config_debug.json', 'fetchAndActivate',
                    'ConsentInformation', 'UserMessagingPlatform', 'enable_ua_check')
+# Consent lives in Splash: event literals and the GDPR module calls survive R8 and point at the handler.
+CONSENT_LITERALS = ('load_consent', 'display_consent', 'agree_consent', 'refuse_consent', 'consent_error',
+                    'ITGAdConsent', 'loadAndShowConsent', 'requestConsentInfoUpdate')
 SCREENS = {'splash': ('splash',), 'language': ('language',), 'onboarding': ('onboarding',), 'welcome': ('welcome',)}
 SCREEN_PLACEMENTS = {'splash': ('splash',), 'language': ('language',), 'onboarding': ('onboarding',),
                      'welcome': ('welcome', 'resume')}
 AREA_BUDGET = {'init': 14000, 'remote_config': 30000, 'config': 24000, 'splash': 26000, 'language': 24000,
                'onboarding': 26000, 'welcome': 22000}
+AREA_BUDGET['splash'] = 30000  # +consent handler
 # Third-party code is noise for these rules (the app's own and obfuscated app packages stay in).
 LIBRARY_PREFIXES = tuple('sources/' + p for p in (
     'android/', 'androidx/', 'kotlin/', 'kotlinx/', 'com/google/', 'com/facebook/', 'com/applovin/', 'com/adjust/',
     'com/bytedance/', 'com/vungle/', 'com/mbridge/', 'com/unity3d/', 'com/ironsource/', 'com/squareup/', 'okhttp3/',
     'retrofit2/', 'org/', 'dagger/', 'javax/', 'com/amazon/', 'com/fyber/', 'com/inmobi/', 'com/chartboost/',
-    'com/yandex/', 'com/bumptech/', 'com/airbnb/', 'com/github/', 'com/ads/', 'com/itg/devconfig/', 'io/'))
+    'com/yandex/', 'com/bumptech/', 'com/airbnb/', 'com/github/', 'com/ads/', 'com/itg/devconfig/', 'com/itg/iaumodule/', 'io/'))
 MAX_BLOCK_LINES = 110
 MAX_HOP_LINES = 70
 
@@ -145,7 +150,7 @@ class Slicer:
     def hits(self):
         """{file: set(literals)} from ONE pass over every source file."""
         if self._hits is None:
-            needles = set(REMOTE_LITERALS) | {f'"{n}"' for n in self.placements} | set(self.getters) | {'OPEN_RESUME'}
+            needles = set(REMOTE_LITERALS) | set(CONSENT_LITERALS) | {f'"{n}"' for n in self.placements} | set(self.getters) | {'OPEN_RESUME'}
             self._hits = {}
             for path in self.files:
                 if self.rel(path).startswith(LIBRARY_PREFIXES):
@@ -206,7 +211,8 @@ class Slicer:
                                and any(frag in f.lower() for frag in fragments) for f in found)]
             siblings = [s for p in screen for s in p.parent.glob('*.java')
                         if s != p and any(f in s.stem.lower() for f in SCREENS[area]) and len(self.lines(s)) <= 260]
-            return [(p, 20) for p in screen] + [(p, 8) for p in siblings] + [(p, 0) for p in literal]
+            consent = [(p, 6) for p in self.files_with(CONSENT_LITERALS)] if area == 'splash' else []
+            return [(p, 20) for p in screen] + [(p, 8) for p in siblings] + consent + [(p, 0) for p in literal]
         return []
 
     # -- extraction -------------------------------------------------------------------

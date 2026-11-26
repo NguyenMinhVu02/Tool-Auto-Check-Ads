@@ -17,7 +17,7 @@ def parser():
     audit.add_argument("target")
     audit.add_argument("--rules", type=Path)
     audit.add_argument("--out", type=Path)
-    audit.add_argument("--engine", choices=["none","claude","codex"], help="AI dùng để audit; mặc định là CLI đã cài (ưu tiên claude). claude: Sonnet mới nhất / low; codex: model Sol mới nhất CLI hỗ trợ / low; none: tắt AI")
+    audit.add_argument("--engine", choices=["none","claude","codex"], help="AI dùng để audit; mặc định là CLI đã cài (ưu tiên claude). claude: Sonnet mới nhất / low; codex: model Terra mới nhất CLI hỗ trợ (không có thì Sol) / low; none: tắt AI")
     audit.add_argument("--static-only", action="store_true")
     audit.add_argument("--only")
     audit.add_argument("--max-tool-calls", type=int, default=400)

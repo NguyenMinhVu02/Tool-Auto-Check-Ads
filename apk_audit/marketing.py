@@ -21,7 +21,7 @@ CONFIG_CHECKS = (
     ('ADS_CONFIG_FLAGS', 'Cờ bật quảng cáo (isEnable) và kiểm tra UA trong ad_config'),
     ('ADS_LANGUAGE_DEV_TOGGLE', 'Dev setting ở màn Language (Unlimited ads để test)'),
     ('ADS_DEBUG_TEST_IDS', 'ID quảng cáo test ở bản debug'),
-    ('ADS_REMOTE_KEYS', 'Cấu hình điều khiển từ xa (Remote Config)'),
+    ('ADS_REMOTE_KEYS', 'Cấu hình điều khiển từ xa (Remote Config) và consent'),
     ('ADS_INTERSTITIAL_INTERVAL', 'Khoảng cách giữa hai quảng cáo toàn màn hình'),
     ('ADS_SCREEN_NAMES', 'Tên 4 màn đầu theo quy định'),
     ('ADS_SCREEN_ORIENTATION', 'Chặn xoay màn hình ở 4 màn đầu'),
@@ -159,7 +159,7 @@ def build_marketing_summary(documents, facts, inventory, findings):
 
 
 def marketing_markdown(summary):
-    lines = ['## Tóm tắt cho Marketing (các màn đầu)', '']
+    lines = ['## Tóm tắt cho Tester (các màn đầu)', '']
     if not summary['documents_available']:
         lines += ['> Chưa có ADS SCRIPTS nên chưa đối chiếu được ID.', '']
     if summary.get('publisher_note'):

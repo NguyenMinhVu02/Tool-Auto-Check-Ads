@@ -40,7 +40,7 @@ Tool chạy **trên máy của bạn**. APK, tài liệu và kết quả không 
 | ❔ Cần dev xem lại | Chưa đủ căn cứ. **Không có nghĩa app lỗi** |
 | ➖ Không áp dụng | Tài liệu xác định không dùng phần này |
 
-- **Tab Marketing**: ID sai/thiếu theo từng màn và logic từng màn. Có nút **Copy cho Google Sheet** (dán thẳng vào bảng bug đối tác), **Copy tóm tắt gửi đối tác**, **Tải CSV**, **Báo cáo HTML**.
+- **Tab Tester**: ID sai/thiếu theo từng màn và logic từng màn. Có nút **Copy cho Google Sheet** (dán thẳng vào bảng bug đối tác), **Copy tóm tắt gửi đối tác**, **Tải CSV**, **Báo cáo HTML**.
 - **Tab Dev**: kết luận từng rule, việc cần sửa, vị trí `file:dòng`, bằng chứng.
 
 > Kết quả dựa trên **đọc code**, chưa chạy app thật. Kết quả ❌ nên được dev xác nhận trước khi sửa.
@@ -64,7 +64,7 @@ Web tự kiểm tra bản mới khi mở. Có bản mới thì hiện thông bá
 
 ## Lưu ý
 
-- Tool **tự chọn model AI** tiết kiệm và phù hợp (Claude Sonnet mới nhất, hoặc Codex Sol mới nhất; mức suy nghĩ low). Máy chỉ có một AI CLI thì dùng luôn cái đó.
+- Tool **tự chọn model AI** tiết kiệm và phù hợp (Claude Sonnet mới nhất, hoặc Codex Terra mới nhất; mức suy nghĩ low). Máy chỉ có một AI CLI thì dùng luôn cái đó.
 - Mỗi lượt kiểm tra dùng hạn mức gói AI của bạn. Chạy lại cùng APK hoặc bản build mới có code không đổi sẽ dùng lại kết quả cũ, rẻ hơn nhiều.
 - ADS SCRIPTS và working file phải **cùng một app**; nếu lệch, tool dừng và hỏi trước khi tốn hạn mức AI.
 - APK bị làm rối (R8) có thể ra nhiều ❔ hơn: tool không kết luận lỗi chỉ vì không thấy tên hàm.

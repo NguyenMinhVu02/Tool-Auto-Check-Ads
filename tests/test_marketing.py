@@ -35,7 +35,7 @@ class MarketingSummaryTests(unittest.TestCase):
         self.assertIn('cần dev xem lại', welcome['explanation'])
         self.assertIn('Nghi lỗi.', welcome['explanation'])
         text = '\n'.join(marketing_markdown(result))
-        self.assertIn('Tóm tắt cho Marketing', text)
+        self.assertIn('Tóm tắt cho Tester', text)
         self.assertIn('❌', text)
 
     def test_screen_logic_and_requirements_reach_summary_and_markdown(self):

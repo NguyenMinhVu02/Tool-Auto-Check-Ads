@@ -285,3 +285,93 @@ class SheetExportTests(unittest.TestCase):
         self.assertIn('Đạt **1/2 tiêu chí**', text)
         self.assertIn('[R1]', text)
         self.assertNotIn('[R2]', text)
+
+
+class ConsentModuleTests(unittest.TestCase):
+    PARAMS = {'required': ['ad_remote_config'], 'optional': [],
+              'consent': {'module': ['com/itg/iaumodule', 'com/google/android/ump'],
+                          'events': ['load_consent', 'agree_consent']}}
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        app = self.root / 'sources' / 'com' / 'demo'
+        app.mkdir(parents=True)
+        for index in range(30):
+            (app / f'ReadableClassName{index}.java').write_text('package com.demo;\nclass X {}\n')
+        (app / 'Remote.java').write_text('package com.demo;\nclass Remote {\n  String k = "ad_remote_config";\n}\n')
+
+    def run_rule(self):
+        rule = Rule('ADS_REMOTE_KEYS', 'Keys', 'static', check='remote_config_keys', params=self.PARAMS)
+        return evaluate_static(rule, {}, {}, workspace=self.root)
+
+    def test_missing_consent_module_fails(self):
+        finding = self.run_rule()
+        self.assertEqual(finding.status, 'FAIL')
+        self.assertIn('consent', finding.reasoning)
+
+    def test_module_and_events_pass(self):
+        module = self.root / 'sources' / 'com' / 'itg' / 'iaumodule'
+        module.mkdir(parents=True)
+        (module / 'ITGAdConsent.java').write_text('package com.itg.iaumodule;\nclass ITGAdConsent {}\n')
+        (self.root / 'sources' / 'com' / 'demo' / 'Track.java').write_text(
+            'package com.demo;\nclass Track {\n  String a = "new_load_consent_1";\n  String b = "new_agree_consent_1";\n}\n')
+        finding = self.run_rule()
+        self.assertEqual(finding.status, 'PASS')
+        self.assertEqual(finding.actual['consent']['modules'], ['com/itg/iaumodule'])
+        self.assertEqual(finding.actual['consent']['events'], ['load_consent', 'agree_consent'])
+
+    def test_events_without_module_folder_still_pass(self):
+        (self.root / 'sources' / 'com' / 'demo' / 'Track.java').write_text(
+            'package com.demo;\nclass Track {\n  String a = "load_consent_2";\n}\n')
+        finding = self.run_rule()
+        self.assertEqual(finding.status, 'PASS')
+        self.assertIn('agree_consent', finding.reasoning)
+
+    def test_rule_without_consent_params_ignores_consent(self):
+        rule = Rule('ADS_REMOTE_KEYS', 'Keys', 'static', check='remote_config_keys',
+                    params={'required': ['ad_remote_config'], 'optional': []})
+        self.assertEqual(evaluate_static(rule, {}, {}, workspace=self.root).status, 'PASS')
+
+
+class DuplicateLoadTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        src = self.root / 'sources' / 'app'
+        src.mkdir(parents=True)
+        (src / 'Splash.java').write_text('class Splash {\n  void a() {\n    ads.loadNativeLanguage(this);\n  }\n}\n')
+        (src / 'Language.java').write_text('class Language {\n  void onResume() {\n    ads.loadNativeLanguage(this);\n'
+                                           '    ads.loadNativeClick(this);\n  }\n}\n')
+
+    def load(self, slot, file, line, anchor, trigger='enter', guarded=False):
+        return {'slot': slot, 'file': f'sources/app/{file}', 'line': line, 'anchor': anchor, 'trigger': trigger, 'guarded': guarded}
+
+    def findings(self, splash, language):
+        return [{'rule_id': 'ADS_SPLASH_PLACEMENT', 'screen_report': {'loads': splash}},
+                {'rule_id': 'ADS_LANGUAGE_PLACEMENT', 'screen_report': {'loads': language}}]
+
+    def test_slot_loaded_on_two_screens_is_reported(self):
+        from apk_audit.load_dedup import find_duplicate_loads
+        result = find_duplicate_loads(self.findings(
+            [self.load('native_language_1', 'Splash.java', 3, 'ads.loadNativeLanguage(this);')],
+            [self.load('native_language_1', 'Language.java', 3, 'ads.loadNativeLanguage(this);')]), self.root)
+        self.assertEqual([(i['slot'], i['kind']) for i in result['issues']], [('native_language_1', 'cross_screen')])
+
+    def test_unguarded_resume_reload_is_reported_and_guarded_is_not(self):
+        from apk_audit.load_dedup import find_duplicate_loads
+        unguarded = find_duplicate_loads(self.findings([], [
+            self.load('native_language_1_click', 'Language.java', 4, 'ads.loadNativeClick(this);', 'resume')]), self.root)
+        self.assertEqual(unguarded['issues'][0]['kind'], 'reload_on_resume')
+        guarded = find_duplicate_loads(self.findings([], [
+            self.load('native_language_1_click', 'Language.java', 4, 'ads.loadNativeClick(this);', 'resume', True)]), self.root)
+        self.assertEqual(guarded['issues'], [])
+
+    def test_loads_with_wrong_anchor_are_ignored(self):
+        from apk_audit.load_dedup import find_duplicate_loads
+        result = find_duplicate_loads(self.findings(
+            [self.load('native_language_1', 'Splash.java', 3, 'ads.loadNativeLanguage(this);')],
+            [self.load('native_language_1', 'Language.java', 3, 'ads.somethingElse();')]), self.root)
+        self.assertEqual(result['issues'], [])

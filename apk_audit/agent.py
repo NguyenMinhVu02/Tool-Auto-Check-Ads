@@ -6,7 +6,7 @@ from .engine_common import SLICE_MARK, report_activity, verdict_schema
 from .utils import safe_path, read_text
 
 
-PROMPT_POLICY_VERSION = 'claims-review-15-build-type'
+PROMPT_POLICY_VERSION = 'claims-review-16-screen-loads'
 AUDIT_PROMPT = (
     'Lần đường đi mã từ nguồn cấu hình/ID qua load, callback thành công/lỗi, gate, observer, '
     'render/show và nhánh điều hướng khi phù hợp. Kiểm cả disabled, purchase, offline, timeout. '
@@ -61,7 +61,14 @@ AUDIT_PROMPT = (
     'Không đủ căn cứ trả UNKNOWN kèm gợi ý file/dòng. Trả đúng một JSON theo schema. '
     'Viết reasoning bằng tiếng Việt với các mục cần thiết: Kết luận:, Cần sửa:, Đã đúng:, Chưa xác minh:. '
     'Kết luận tối đa hai câu, các ý ngắn, giữ class/hàm/key và giới hạn quan trọng; toàn bộ reasoning tối đa khoảng 8 dòng. '
-    'screen_report: chỉ điền khi đầu vào có checklist, ngược lại load="" show="" requirements=[]. '
+    'screen_report: chỉ điền khi đầu vào có checklist, ngược lại load="" show="" requirements=[] loads=[]. '
+    'loads: liệt kê MỌI lời gọi load quảng cáo mà màn này (Activity/Fragment của màn, kể cả helper nó gọi) thực hiện, '
+    'từ mã đã đọc, không đọc thêm chỉ để điền: slot = tên placement trong config (ví dụ native_language_1_click), '
+    'file + line + anchor = dòng gọi load chép nguyên văn, trigger = enter (khi vào màn/onCreate), resume '
+    '(onResume/onStart/onRestart/onWindowFocusChanged), click, callback (trong callback/observer), other; '
+    'guarded = true nếu có điều kiện chặn tải lại (cờ đã tải/đang tải, ad cũ còn dùng được, chỉ lần đầu). '
+    'Preload cho màn sau tính là load của màn đang gọi. Không chắc slot nào thì bỏ qua lời gọi đó. '
+
     'load và show: 1-2 câu tiếng Việt dễ hiểu mô tả logic HIỆN TẠI của app trên màn này (khi nào xin/preload quảng cáo, '
     'khi nào hiển thị, khi lỗi/offline/hết thời gian thì làm gì), không tên class/hàm/file. requirements: đúng một '
     'phần tử cho mỗi mục checklist, index theo thứ tự từ 0, status ok|issue|unknown|na (na khi hợp đồng không có mục này), '
@@ -197,8 +204,15 @@ def _screen_report(raw, checklist, status):
         if not verified and state in {'ok', 'issue'}:
             state = 'unknown'
         requirements.append({'text': text, 'status': state, 'note': str(item.get('note') or '')[:300]})
+    loads = []
+    for item in (raw.get('loads') or [])[:30]:
+        if isinstance(item, dict) and item.get('slot') and item.get('file') and type(item.get('line')) is int:
+            loads.append({'slot': str(item['slot'])[:80], 'file': str(item['file'])[:300], 'line': item['line'],
+                          'anchor': str(item.get('anchor') or '')[:300],
+                          'trigger': item.get('trigger') if item.get('trigger') in {'enter', 'resume', 'click', 'callback', 'other'} else 'other',
+                          'guarded': item.get('guarded') is True})
     return {'load': str(raw.get('load') or '')[:500], 'show': str(raw.get('show') or '')[:500],
-            'verified': verified, 'requirements': requirements}
+            'verified': verified, 'requirements': requirements, 'loads': loads}
 
 
 def _normalize(line):
